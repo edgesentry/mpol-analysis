@@ -97,6 +97,8 @@ Neo4j holds the ownership graph. Cypher + GDS plugin enable BFS path queries and
 - `Company {id, name, country}`
 - `Country {code, name}`
 - `VesselName {name, date_from, date_to}`
+- `Address {address_id, street, city, country}` — registered address (P.O. box or physical)
+- `Person {person_id, name, nationality}` — directors, nominees, beneficial owners
 
 **Relationship types:**
 - `(Vessel)-[:OWNED_BY {since, until}]->(Company)`
@@ -105,6 +107,9 @@ Neo4j holds the ownership graph. Cypher + GDS plugin enable BFS path queries and
 - `(Company)-[:CONTROLLED_BY]->(Company)` — beneficial ownership layers
 - `(Vessel)-[:ALIAS {date}]->(VesselName)`
 - `(Company)-[:SANCTIONED_BY {list, date}]->(SanctionsRegime)`
+- `(Company)-[:REGISTERED_AT]->(Address)` — enables shared-address clustering
+- `(Company)-[:DIRECTED_BY {since, until}]->(Person)` — nominee/director network
+- `(Vessel)-[:STS_CONTACT {timestamp, lat, lon, duration_h}]->(Vessel)` — co-location events recorded as graph edges
 
 **Key GDS queries:**
 ```cypher
@@ -152,6 +157,8 @@ Computed by Neo4j GDS.
 | `sanctions_distance` | Min BFS hops from vessel to any sanctioned entity (0 = vessel itself sanctioned) |
 | `cluster_sanctions_ratio` | Fraction of vessels in same Neo4j community that are sanctioned |
 | `shared_manager_risk` | Max sanctions_distance among all vessels sharing the same manager |
+| `shared_address_centrality` | Number of distinct vessels sharing the same registered address as any company in this vessel's ownership chain |
+| `sts_hub_degree` | Number of distinct vessels this vessel has been co-located with (STS_CONTACT degree) — identifies laundering hubs |
 
 ### Trade Flow Mismatch Features
 
