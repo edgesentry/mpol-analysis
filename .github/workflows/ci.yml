@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (including dev)
+        run: uv sync --all-extras
+
+      - name: Run tests
+        run: uv run pytest tests/ -v
+
+  license_check:
+    name: OSS License Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Install pip-licenses
+        run: uv pip install pip-licenses
+
+      - name: Check licenses (deny copyleft)
+        # Fail if any installed package carries a copyleft license.
+        # Permissive licenses (MIT, Apache-2.0, BSD-*, ISC, PSF) are allowed.
+        # Pattern covers: GPL (any version), LGPL, AGPL, EUPL, and similar copyleft families.
+        run: |
+          uv run pip-licenses --format=csv > /tmp/licenses.csv
+          python3 - <<'EOF'
+          import csv, sys
+
+          BLOCKED = [
+              "gpl",
+              "agpl",
+              "lgpl",
+              "affero",
+              "eupl",
+              "gnu general public",
+              "gnu lesser general",
+              "copyleft",
+          ]
+
+          violations = []
+          with open("/tmp/licenses.csv") as f:
+              for row in csv.DictReader(f):
+                  name = row.get("Name", "")
+                  version = row.get("Version", "")
+                  license_str = (row.get("License") or "").lower()
+                  if any(p in license_str for p in BLOCKED):
+                      violations.append(f"  {name} {version}: {row.get('License')}")
+
+          if violations:
+              print("Copyleft licenses detected — not permitted in this project:")
+              print("\n".join(violations))
+              sys.exit(1)
+
+          print("License check passed — all packages use permissive licenses.")
+          EOF
+
+      - name: Print full license report
+        if: always()
+        run: uv run pip-licenses --format=plain
