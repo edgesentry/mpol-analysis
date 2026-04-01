@@ -36,6 +36,7 @@
 - Identity volatility features: `flag_changes_2y`, `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
 - Ownership graph features (Neo4j GDS BFS): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
+- GEBCO bathymetric mask: H3 hexagon set for the 200m-depth boundary; used to filter STS candidates to plausible draught zones (`src/features/bathymetric_mask.py`)
 
 **Acceptance:** `vessel_features` table in DuckDB has one row per MMSI with no null values for core features; STS candidate count matches independently verified events from open-source maritime incident reports.
 
@@ -136,6 +137,44 @@ B4 ──► B5 (VDES transmission)
 B5 ──► B6 (port dashboard)
 B6 ──► A4 (confirmed labels loop back to improve scoring)
 ```
+
+---
+
+## Phase C — Post-Submission Enhancements
+
+> These items are out of scope for the Phase A proposal submission (deadline: 29 April 2026). They represent validated improvements to be prioritised if a trial contract is awarded.
+
+### C1 · Dashboard Migration: FastAPI + HTMX
+
+The Phase A Streamlit dashboard (`src/viz/dashboard.py`) is optimised for development speed. For a multi-user port operations deployment, replace it with:
+
+- **FastAPI** as the API layer — existing `src/ingest/`, `src/score/` modules become endpoints with no rewrite
+- **HTMX** for partial updates — the ranked watchlist table and map refresh independently; no full-page reload on each interaction
+- **Server-Sent Events (SSE)** replacing Streamlit's WebSocket toast for the `confidence > 0.75` alert — one-directional, HTTP-native, load-balancer compatible
+- **MapLibre GL JS** consuming a `/api/vessels/geojson` endpoint for the vessel position layer
+
+This is a stateless, Docker-deployable architecture that scales horizontally without the per-session memory overhead of Streamlit.
+
+**Migration path:** Streamlit dashboard ships with the Phase A prototype. FastAPI + HTMX replaces it in C1 without changing any scoring or ingestion code.
+
+### C2 · Geopolitical Context Layer (GDELT + RAG)
+
+SHAP `top_signals` explain *which features* drove a flag but not *why those features matter now*. A RAG layer adds geopolitical context:
+
+- Daily GDELT event CSV ingested and indexed in a local vector store (e.g. ChromaDB)
+- For each high-confidence candidate, retrieve relevant GDELT events (sanction announcements, port bans, incident reports) by IMO / flag state / ownership country
+- Local LLM (Ollama) generates a one-paragraph analyst brief: "Vessel flagged due to 3 ownership changes in 6 months; last change coincides with OFAC designation of managing company on [date]"
+
+This keeps the stack fully offline-capable (no cloud LLM dependency) and satisfies the Cap Vista explainability requirement at the human-analyst level.
+
+### C3 · Causal Sanction-Response Model
+
+Quantify the causal link between sanction events and observable AIS behaviour:
+
+- **Instrument:** sanction announcement date × affected flag state / entity
+- **Outcome:** AIS gap frequency in the area of interest for vessels connected to that entity (within 2 hops in Neo4j)
+- **Method:** DoWhy `LinearDML` or difference-in-differences with vessel-type fixed effects
+- **Output:** Per-sanction-regime estimated effect size and confidence interval; feeds into the `graph_risk_score` weight calibration
 
 ---
 

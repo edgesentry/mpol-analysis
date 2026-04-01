@@ -45,6 +45,22 @@ For the area of interest (SG + Malacca Strait), aisstream.io with a bounding box
 |---|---|---|---|
 | [UN Comtrade+](https://comtradeplus.un.org) | Bilateral trade by HS code, port, period | REST API → JSON | Free (500 req/day) |
 
+### Geospatial Reference Data
+
+| Source | Data | Format | Cost |
+|---|---|---|---|
+| [GEBCO](https://www.gebco.net/) | Global bathymetric grid (water depth) | NetCDF / GeoTIFF | Free download |
+
+GEBCO is used to build a **200m-depth boundary mask** as an H3 hexagon set. STS candidate detection filters to events within this mask (shallow draught tankers cannot operate in deeper open ocean), reducing false positives from legitimate vessel interactions.
+
+### Geopolitical Event Data
+
+| Source | Data | Format | Cost |
+|---|---|---|---|
+| [GDELT Project](https://www.gdeltproject.org/) | Global news events: sanctions, conflicts, corporate actions | CSV (daily) | Free |
+
+GDELT event records (EventCode, Actor1, Actor2, GoldsteinScale) are ingested as a time-series alongside AIS data. The primary use is correlating sanction announcement dates with AIS gap spikes in the area of interest — providing geopolitical context for anomaly scoring rather than acting as a primary detection signal.
+
 ---
 
 ## Key Algorithms
@@ -98,6 +114,25 @@ RETURN min(totalCost) AS sanctions_distance
 
 Community detection (Louvain) identifies ownership clusters; `cluster_sanctions_ratio` is computed per cluster.
 
+```cypher
+// Hub vessel detection: STS contact degree (vessels acting as laundering intermediaries)
+MATCH (v:Vessel)-[:STS_CONTACT]->(other:Vessel)
+RETURN v.mmsi, count(DISTINCT other) AS sts_hub_degree
+ORDER BY sts_hub_degree DESC
+LIMIT 20
+```
+
+```cypher
+// Shared-address clustering: addresses with >5 distinct vessels in their ownership chain
+MATCH (addr:Address)<-[:REGISTERED_AT]-(c:Company)<-[:OWNED_BY|MANAGED_BY]-(v:Vessel)
+WITH addr, count(DISTINCT v) AS vessel_count
+WHERE vessel_count > 5
+MATCH (addr)<-[:REGISTERED_AT]-(c2:Company)<-[:OWNED_BY|MANAGED_BY]-(v2:Vessel)
+RETURN addr.address_id, addr.city, addr.country, vessel_count,
+       collect(DISTINCT v2.mmsi) AS flagged_mmsi_list
+ORDER BY vessel_count DESC
+```
+
 ### HDBSCAN Normal Behavior Baseline
 
 HDBSCAN clusters vessels by their behavioral feature vector (gap frequency, speed variance, route entropy, loitering ratio), stratified by `ship_type`. Clusters with high internal consistency represent well-understood normal MPOL patterns (e.g. regular container feeders on fixed schedules). Vessels assigned to noise (`cluster = -1`) receive a baseline anomaly weight of 1.0.
@@ -135,6 +170,8 @@ Trained on the subset of vessels with `sanctions_distance ≥ 3` (proxy for "cle
 | `name_changes_2y` | `i32` | Name changes in 2 years |
 | `owner_changes_2y` | `i32` | Ownership changes |
 | `sanctions_distance` | `i32` | BFS hops to nearest sanctioned entity |
+| `shared_address_centrality` | `i32` | Vessels sharing the same registered address in ownership chain |
+| `sts_hub_degree` | `i32` | Distinct vessels contacted in STS co-location events |
 
 ### Example `top_signals` field
 
