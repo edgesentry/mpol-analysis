@@ -113,7 +113,7 @@ The screening pipeline has identified a Priority 1 candidate. A patrol vessel is
    - edgesentry-app displays the target on chart with live AIS overlay
 
 3. **Physical investigation proceeds**
-   - See [plan-field-investigation.md](../plan-field-investigation.md) for the full workflow implemented in edgesentry-rs / edgesentry-app
+   - See [plan-field-investigation.md](field-investigation.md) for the full workflow implemented in edgesentry-rs / edgesentry-app
 
 4. **Evidence report flows back**
    - Signed `AuditRecord` from edgesentry-audit is received at the shore VDES station

@@ -211,3 +211,4 @@ data/raw/           # downloaded AIS, sanctions, registry raw files — can be l
 data/processed/     # DuckDB files, Parquet outputs, Neo4j database
 site/               # MkDocs build output
 .env                # API keys (aisstream.io, Equasis)
+_inputs/
