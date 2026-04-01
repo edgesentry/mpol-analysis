@@ -25,7 +25,7 @@ theme:
     - content.action.edit
 
 nav:
-  - Introduction: introduction.md
+  - Home: index.md
   - Background: background.md
   - Architecture: architecture.md
   - Technical Solution: technical-solution.md
