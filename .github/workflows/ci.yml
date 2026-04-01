@@ -98,4 +98,4 @@ jobs:
 
       - name: Print full license report
         if: always()
-        run: uv run pip-licenses --format=columns
+        run: uv run pip-licenses --format=plain
