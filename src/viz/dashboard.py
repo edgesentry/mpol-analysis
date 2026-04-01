@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import polars as pl
 import pydeck as pdk
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
+DEFAULT_VALIDATION_PATH = os.getenv("VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json")
 
 
 @st.cache_data(show_spinner=False)
@@ -20,6 +22,17 @@ def load_watchlist(path: str) -> pl.DataFrame:
     if not os.path.exists(path):
         return pl.DataFrame()
     return pl.read_parquet(path)
+
+
+@st.cache_data(show_spinner=False)
+def load_validation_metrics(path: str) -> dict | None:
+    candidate = Path(path)
+    if not candidate.exists():
+        return None
+    try:
+        return json.loads(candidate.read_text())
+    except Exception:
+        return None
 
 
 def _color_for_confidence(value: float) -> list[int]:
@@ -45,6 +58,8 @@ def main() -> None:
         st.warning("candidate_watchlist.parquet not found or empty. Run src/score/watchlist.py first.")
         return
 
+    metrics = load_validation_metrics(DEFAULT_VALIDATION_PATH)
+
     with st.sidebar:
         st.header("Filters")
         min_confidence = st.slider("Minimum confidence", 0.0, 1.0, 0.4, 0.05)
@@ -60,6 +75,14 @@ def main() -> None:
     col1.metric("Candidates", filtered.height)
     col2.metric("High confidence", filtered.filter(pl.col("confidence") >= 0.75).height)
     col3.metric("Avg confidence", f"{filtered['confidence'].mean():.2f}")
+
+    if metrics:
+        st.subheader("Validation")
+        v1, v2, v3 = st.columns(3)
+        v1.metric("Precision@50", f"{metrics.get('precision_at_50', 0.0):.2f}")
+        v2.metric("Recall@200", f"{metrics.get('recall_at_200', 0.0):.2f}")
+        auroc = metrics.get("auroc")
+        v3.metric("AUROC", "N/A" if auroc is None else f"{auroc:.2f}")
 
     left, right = st.columns([3, 2])
 
@@ -109,3 +132,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
