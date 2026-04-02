@@ -6,7 +6,7 @@ Agent instructions for working in this repository.
 
 A shadow fleet candidate screening pipeline. Ingests public AIS, sanctions, vessel registry, and trade flow data → produces a ranked watchlist of candidate shadow fleet vessels with SHAP-explained confidence scores.
 
-For context on the problem and full architecture, read [`docs/introduction.md`](docs/introduction.md) and [`docs/architecture.md`](docs/architecture.md).
+For context on the problem and full architecture, read [`docs/index.md`](docs/index.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ## Repo Layout
 
@@ -32,36 +32,23 @@ pyproject.toml
 - **Implementation steps (A1–A5):** [`docs/roadmap.md`](docs/roadmap.md)
 - **Field investigation design (edgesentry OSS):** [`docs/field-investigation.md`](docs/field-investigation.md)
 
-## Stack
-
-| Concern | Tool |
-|---|---|
-| Analytical queries | DuckDB (`duckdb` Python package) |
-| DataFrame transforms | Polars (lazy API preferred) |
-| Ownership graph | Neo4j Community Edition (Docker) + `neo4j` Python driver + GDS plugin |
-| ML | scikit-learn: `HDBSCAN`, `IsolationForest` |
-| Explainability | `shap`: `TreeExplainer` on `IsolationForest` |
-| Dashboard | Streamlit |
-| HTTP / WebSocket | `httpx`, `websockets` |
-| Packaging | `uv` + `pyproject.toml` |
-
 ## Procedures
 
 ### Run the full screening pipeline
 
 ```bash
-uv run python src/ingest/schema.py          # initialise DuckDB schema
-uv run python src/ingest/marine_cadastre.py # load historical AIS
-uv run python src/ingest/sanctions.py       # load sanctions entities
-uv run python src/ingest/vessel_registry.py # load Equasis + ITU MMSI → Neo4j
-uv run python src/features/ais_behavior.py  # compute AIS behavioral features
-uv run python src/features/identity.py      # identity volatility features
+uv run python src/ingest/schema.py             # initialise DuckDB schema
+uv run python src/ingest/marine_cadastre.py    # load historical AIS
+uv run python src/ingest/sanctions.py          # load sanctions entities
+uv run python src/ingest/vessel_registry.py    # load Equasis + ITU MMSI → Neo4j
+uv run python src/features/ais_behavior.py     # compute AIS behavioral features
+uv run python src/features/identity.py         # identity volatility features
 uv run python src/features/ownership_graph.py  # Neo4j BFS graph features
 uv run python src/features/trade_mismatch.py   # trade flow mismatch features
-uv run python src/score/mpol_baseline.py    # HDBSCAN baseline
-uv run python src/score/anomaly.py          # Isolation Forest scoring
-uv run python src/score/composite.py        # composite score + SHAP
-uv run python src/score/watchlist.py        # output candidate_watchlist.parquet
+uv run python src/score/mpol_baseline.py       # HDBSCAN baseline
+uv run python src/score/anomaly.py             # Isolation Forest scoring
+uv run python src/score/composite.py           # composite score + SHAP
+uv run python src/score/watchlist.py           # output candidate_watchlist.parquet
 ```
 
 ### Run the dashboard

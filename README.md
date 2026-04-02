@@ -16,26 +16,13 @@ Full documentation is in [`docs/`](docs/):
 
 | Document | Contents |
 |---|---|
-| [Introduction](docs/introduction.md) | What it does, how it fits the full system, Cap Vista alignment |
+| [Introduction](docs/index.md) | What it does, how it fits the full system, Cap Vista alignment |
 | [Background](docs/background.md) | Shadow fleet problem, geography, evasion techniques, prior art |
 | [Architecture](docs/architecture.md) | Pipeline diagram, data storage design, feature and scoring design |
 | [Technical Solution](docs/technical-solution.md) | Tech stack, data sources, algorithms, output schema |
 | [Scenarios](docs/scenarios.md) | End-to-end workflows: morning brief, investigation, streaming, patrol handoff |
 | [Roadmap](docs/roadmap.md) | Phase A (screening) + Phase B (field investigation in edgesentry OSS) |
 | [Field Investigation](docs/field-investigation.md) | Physical vessel measurement, evidence capture, VDES reporting (edgesentry-rs/app) |
-
-## Tech Stack
-
-| Layer | Tool |
-|---|---|
-| Analytical store | DuckDB |
-| Feature engineering | Polars |
-| Ownership graph | Neo4j Community (Docker) + GDS plugin |
-| ML / scoring | scikit-learn (HDBSCAN, Isolation Forest) |
-| Explainability | SHAP |
-| Dashboard | Streamlit |
-| Language | Python 3.12 |
-| Packaging | uv |
 
 ## Scope
 

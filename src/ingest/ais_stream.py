@@ -181,11 +181,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--flush-interval", type=float, default=DEFAULT_FLUSH_INTERVAL,
                         help="Max seconds between flushes")
+    parser.add_argument(
+        "--bbox",
+        type=float, nargs=4,
+        metavar=("LAT_MIN", "LON_MIN", "LAT_MAX", "LON_MAX"),
+        help="Bounding box override, e.g. --bbox 25 120 50 150 for seas near Japan",
+    )
     args = parser.parse_args()
 
     api_key = os.getenv("AISSTREAM_API_KEY")
     if not api_key:
         raise SystemExit("AISSTREAM_API_KEY not set — add it to .env or the environment")
 
-    asyncio.run(stream(args.db, api_key=api_key, batch_size=args.batch_size,
+    bbox = [[args.bbox[0], args.bbox[1]], [args.bbox[2], args.bbox[3]]] if args.bbox else BBOX
+    asyncio.run(stream(api_key, db_path=args.db, bbox=bbox, batch_size=args.batch_size,
                        flush_interval=args.flush_interval))
