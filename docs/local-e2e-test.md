@@ -164,7 +164,7 @@ cat data/processed/validation_metrics.json
 docker compose run --rm pipeline uv run pytest tests/ -v
 ```
 
-Expected: **79 passed**, 3 warnings (sklearn FutureWarning, harmless).
+Expected: **87 passed**, 3 warnings (sklearn FutureWarning, harmless).
 
 ---
 

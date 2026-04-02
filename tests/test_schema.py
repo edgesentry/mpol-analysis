@@ -13,6 +13,7 @@ def test_all_tables_created(tmp_db):
         "trade_flow",
         "vessel_features",
         "analyst_briefs",
+        "chat_cache",
     }
 
 

@@ -18,7 +18,12 @@ def _seed_scoring_data(db_path: str) -> None:
                 ('111111111', 'IMO111', 'ALPHA', 'IR', 82),
                 ('222222222', 'IMO222', 'BRAVO', 'SG', 82),
                 ('333333333', 'IMO333', 'CHARLIE', 'PA', 82),
-                ('444444444', 'IMO444', 'DELTA', 'SG', 70)
+                ('444444444', 'IMO444', 'DELTA', 'SG', 70),
+                -- Realistic shadow fleet candidates
+                ('273456782', 'IMO9234567', 'PETROVSKY ZVEZDA', 'RU', 82),
+                ('613115678', 'IMO9345612', 'SARI NOUR', 'CM', 82),
+                ('352123456', 'IMO9456781', 'OCEAN VOYAGER', 'PA', 82),
+                ('538009876', 'IMO9678901', 'VERA SUNSET', 'MH', 82)
             """
         )
         con.execute(
@@ -28,7 +33,15 @@ def _seed_scoring_data(db_path: str) -> None:
                 ('111111111', '2026-03-01 00:00:00+00', 1.20, 103.80, 0.8, 1, 82),
                 ('222222222', '2026-03-01 00:00:00+00', 1.30, 103.90, 12.0, 5, 82),
                 ('333333333', '2026-03-01 00:00:00+00', 1.40, 104.00, 9.0, 5, 82),
-                ('444444444', '2026-03-01 00:00:00+00', 1.50, 104.10, 7.0, 5, 70)
+                ('444444444', '2026-03-01 00:00:00+00', 1.50, 104.10, 7.0, 5, 70),
+                -- PETROVSKY ZVEZDA: at anchor in Strait of Hormuz approaches; AIS went dark for 22h before reappearing here
+                ('273456782', '2026-03-15 00:00:00+00', 26.50, 55.50, 0.5, 1, 82),
+                -- SARI NOUR: loitering off Kharg Island; previously reported near Bandar Abbas loading terminal
+                ('613115678', '2026-03-20 00:00:00+00', 29.10, 50.30, 0.3, 1, 82),
+                -- OCEAN VOYAGER: stationary off Ceuta; matched position of another tanker for 4h (STS candidate)
+                ('352123456', '2026-03-10 00:00:00+00', 35.90, -5.50, 0.5, 0, 82),
+                -- VERA SUNSET: transiting Gulf of Oman, declared Fujairah as next port
+                ('538009876', '2026-03-25 00:00:00+00', 25.10, 56.40, 6.5, 5, 82)
             """
         )
         con.execute(
@@ -45,7 +58,19 @@ def _seed_scoring_data(db_path: str) -> None:
                 ('111111111', 12, 18.0, 4, 3, 0.10, 22.0, 3, 2, 2, 1.0, 4, 1, 0.50, 1, 8, 4, 1.0, 100000.0),
                 ('222222222', 1, 1.0, 0, 0, 0.90, 1.0, 0, 0, 0, 0.0, 1, 5, 0.00, 5, 0, 0, 0.0, 0.0),
                 ('333333333', 2, 2.5, 0, 1, 0.70, 2.0, 0, 1, 0, 0.1, 2, 4, 0.10, 4, 1, 1, 0.0, 1000.0),
-                ('444444444', 0, 0.5, 0, 0, 0.95, 0.5, 0, 0, 0, 0.0, 1, 6, 0.00, 6, 0, 0, 0.0, 0.0)
+                ('444444444', 0, 0.5, 0, 0, 0.95, 0.5, 0, 0, 0, 0.0, 1, 6, 0.00, 6, 0, 0, 0.0, 0.0),
+                -- PETROVSKY ZVEZDA: 14 AIS gaps in 30d (max 22h), reflagged twice in 2y, 1 hop from sanctioned entity,
+                --   60% of co-owned fleet is OFAC-listed, confirmed route-cargo mismatch on Iran crude export route
+                ('273456782', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 1, 0.60, 1, 3, 3, 1.0, 50000.0),
+                -- SARI NOUR: 8 AIS gaps, 3 GPS position jumps (>50-knot implied speed), reflagged IR→CM in 2024,
+                --   route-cargo mismatch: operates Kharg Island routes with no Comtrade crude import record
+                ('613115678', 8, 14.0, 3, 1, 0.08, 35.0, 1, 2, 1, 0.85, 4, 2, 0.45, 2, 2, 2, 1.0, 75000.0),
+                -- OCEAN VOYAGER: low AIS gaps but 6 distinct STS partners, shares a Piraeus address with 5 other vessels
+                --   of which 40% are under OFAC designation; route-cargo mismatch on Ceuta dark transfer corridor
+                ('352123456', 3, 7.5, 0, 5, 0.45, 15.0, 0, 0, 1, 0.30, 3, 3, 0.40, 3, 5, 6, 1.0, 120000.0),
+                -- VERA SUNSET: clean AIS but 5-layer ownership chain; renamed once; beneficial owner 2 hops from
+                --   a designated entity; 25% of co-managed fleet sanctioned
+                ('538009876', 1, 3.0, 0, 0, 0.75, 3.0, 0, 1, 2, 0.20, 5, 2, 0.25, 2, 2, 1, 0.0, 8000.0)
             """
         )
     finally:
@@ -56,11 +81,11 @@ def test_baseline_and_anomaly_scores(tmp_db):
     _seed_scoring_data(tmp_db)
 
     baseline = build_mpol_baseline(tmp_db)
-    assert baseline.height == 4
+    assert baseline.height == 8
 
     features = load_feature_frame(tmp_db)
     anomaly_df, _, _ = score_anomalies(features, baseline)
-    assert anomaly_df.height == 4
+    assert anomaly_df.height == 8
     assert anomaly_df["anomaly_score"].min() >= 0.0
     assert anomaly_df["anomaly_score"].max() <= 1.0
 
@@ -69,7 +94,7 @@ def test_composite_and_watchlist_output(tmp_db, tmp_path):
     _seed_scoring_data(tmp_db)
 
     composite = compute_composite_scores(tmp_db)
-    assert composite.height == 4
+    assert composite.height == 8
     assert composite["confidence"].is_sorted(descending=True)
 
     first_signals = json.loads(composite.row(0, named=True)["top_signals"])
