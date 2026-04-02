@@ -31,6 +31,11 @@ nav:
   - Technical Solution: technical-solution.md
   - Scenarios: scenarios.md
   - Roadmap: roadmap.md
+  - Analytics:
+    - Overview: analytics-overview.md
+    - Feature Engineering: feature-engineering.md
+    - Scoring Model: scoring-model.md
+    - Pipeline Operations: pipeline-operations.md
   - Field Investigation: field-investigation.md
   - Local E2E Test: local-e2e-test.md
   - Deployment: deployment.md
