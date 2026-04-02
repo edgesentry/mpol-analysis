@@ -187,13 +187,7 @@ Open `http://localhost:8000`. Verify:
 - KPI bar shows candidate count, high-confidence count, avg confidence, and validation metrics
 - Sidebar filters (minimum confidence, vessel type, top N) → click **Apply**
 
-### Streamlit dashboard (development fallback)
-
-```bash
-uv run streamlit run src/viz/dashboard.py
-```
-
-Open `http://localhost:8501`. The Streamlit dashboard is the Phase A prototype — use it for quick single-user iteration. The FastAPI dashboard (`src/api/`) is the production path (see [deployment.md](deployment.md)).
+The FastAPI dashboard (`src/api/`) is the only dashboard. See [deployment.md](deployment.md) for full deployment options.
 
 ---
 

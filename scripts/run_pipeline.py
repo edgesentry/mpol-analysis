@@ -458,15 +458,14 @@ def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
 
     env = {"WATCHLIST_OUTPUT_PATH": p.watchlist_path}
     print()
-    print("      http://localhost:8501")
+    print("      http://localhost:8000")
     merged_env = {**os.environ, **env}
     try:
         subprocess.run(
-            [sys.executable, "-m", "streamlit", "run", "src/viz/dashboard.py"],
+            [sys.executable, "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
             env=merged_env,
         )
     except KeyboardInterrupt:
-        # Treat Ctrl+C as a normal, user-requested cancellation of the dashboard.
         print(_dim("Dashboard interrupted by user."))
     return True
 

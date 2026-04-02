@@ -68,7 +68,8 @@ uv run python src/score/watchlist.py           # output candidate_watchlist.parq
 ### Run the dashboard
 
 ```bash
-uv run streamlit run src/viz/dashboard.py
+uv run uvicorn src.api.main:app --reload
+# open http://localhost:8000
 ```
 
 ### Run tests

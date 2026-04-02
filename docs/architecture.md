@@ -63,7 +63,7 @@
 │  OUTPUT                                                         │
 │                                                                 │
 │  data/processed/candidate_watchlist.parquet                     │
-│  Streamlit dashboard  (src/viz/dashboard.py)                    │
+│  FastAPI + HTMX dashboard  (src/api/)  → http://localhost:8000  │
 └─────────────────────────────────────────────────────────────────┘
                            │
                            ▼  handoff

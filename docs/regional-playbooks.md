@@ -137,7 +137,8 @@ Launch the dashboard pointed at the Japan Sea DB:
 
 ```bash
 WATCHLIST_OUTPUT_PATH=data/processed/japansea_watchlist.parquet \
-  uv run streamlit run src/viz/dashboard.py
+  uv run uvicorn src.api.main:app --reload
+  # open http://localhost:8000
 ```
 
 ### Workarounds
@@ -246,7 +247,8 @@ Launch pointed at the Gulf DB:
 
 ```bash
 WATCHLIST_OUTPUT_PATH=data/processed/gulf_watchlist.parquet \
-  uv run streamlit run src/viz/dashboard.py
+  uv run uvicorn src.api.main:app --reload
+  # open http://localhost:8000
 ```
 
 ### Workarounds
@@ -358,7 +360,8 @@ Launch the dashboard pointed at the Europe DB:
 
 ```bash
 WATCHLIST_OUTPUT_PATH=data/processed/europe_watchlist.parquet \
-  uv run streamlit run src/viz/dashboard.py
+  uv run uvicorn src.api.main:app --reload
+  # open http://localhost:8000
 ```
 
 ### Workarounds
@@ -501,7 +504,8 @@ Launch the dashboard:
 
 ```bash
 WATCHLIST_OUTPUT_PATH=data/processed/middleeast_watchlist.parquet \
-  uv run streamlit run src/viz/dashboard.py
+  uv run uvicorn src.api.main:app --reload
+  # open http://localhost:8000
 ```
 
 ### Workarounds
