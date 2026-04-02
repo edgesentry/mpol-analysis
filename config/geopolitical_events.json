@@ -1,0 +1,43 @@
+{
+  "events": [
+    {
+      "name": "Red Sea / Cape of Good Hope rerouting",
+      "description": "Commercial vessels rerouting via Cape of Good Hope to avoid Houthi missile and drone attacks on shipping in the Red Sea and Gulf of Aden since November 2023. Vessels transiting the Cape corridor show elevated AIS gaps and route deviations that are NOT indicative of sanctions evasion.",
+      "active_from": "2023-11-01",
+      "active_to": "2026-12-31",
+      "corridors": [
+        {
+          "lat_min": -40,
+          "lat_max": -25,
+          "lon_min": 10,
+          "lon_max": 40,
+          "note": "Cape of Good Hope / South Atlantic rerouting corridor"
+        },
+        {
+          "lat_min": 10,
+          "lat_max": 30,
+          "lon_min": 32,
+          "lon_max": 50,
+          "note": "Red Sea / Gulf of Aden (reduced traffic, not shadow fleet)"
+        }
+      ],
+      "down_weight": 0.5
+    },
+    {
+      "name": "Taiwan Strait tension — GPS spoofing zone",
+      "description": "Widespread GPS spoofing reported in the Taiwan Strait and South China Sea since 2024. Position jumps in this area may reflect electronic warfare rather than vessel evasion.",
+      "active_from": "2024-01-01",
+      "active_to": "2026-12-31",
+      "corridors": [
+        {
+          "lat_min": 22,
+          "lat_max": 28,
+          "lon_min": 118,
+          "lon_max": 122,
+          "note": "Taiwan Strait GPS spoofing corridor"
+        }
+      ],
+      "down_weight": 0.7
+    }
+  ]
+}

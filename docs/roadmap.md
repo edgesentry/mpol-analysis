@@ -103,10 +103,22 @@
 - Sequence monotonicity: replay and deletion detectable
 - `edgesentry-audit::IngestService` on shore side: re-verify signature + hash chain on receipt
 
-### B5 · VDES Secure Reporting
+### B5 · VDES Secure Reporting — Two-Phase On-Demand Transfer
 
+**Phase B5a — Lightweight triage report (sent immediately):**
+- JSON summary with key detections, watchlist confidence, and signed hash
+- Asset manifest listing S3 keys and BLAKE3 hashes for all captured media
 - VDES ASM frame serialisation of signed `AuditRecord` (fragmentation + ARQ)
 - Transmit on ASM channels 24/84 (ship-to-shore, ~40nm)
+
+**Phase B5b — On-demand asset retrieval:**
+- Shore station reviews triage report; sends `FETCH_ASSETS` request specifying S3 keys
+- Patrol vessel queues and transmits requested assets on demand
+- Avoids blocking VDES channel when multiple patrol vessels report simultaneously
+- Shore analysts can escalate/clear from triage JSON alone without waiting for full evidence bundle
+
+**Why two phases:** Full evidence bundle (LiDAR scans, HD photos) blocks VDES for 30–130 seconds per report. On-demand transfer reserves scarce bandwidth for cases that genuinely need high-resolution evidence.
+
 - VDES-SAT fallback for extended range (global)
 - Shore VDES gateway: reassemble → ingest → S3 Object Lock (WORM)
 
@@ -117,6 +129,7 @@
 - Real-time display of patrol evidence reports as they arrive via VDES
 - Candidate watchlist rows annotated with investigation outcome (`confirmed`, `cleared`, `inconclusive`)
 - Integration loop: confirmed vessels feed back into Phase A as positive labels to improve scoring
+- `cleared` outcome writes MMSI to `cleared_vessels` DuckDB table; Phase A re-training uses cleared MMSIs as hard negatives (see C7 Improvement 3)
 
 ---
 
@@ -171,6 +184,22 @@ Quantify the causal link between sanction events and observable AIS behaviour:
 - **Outcome:** AIS gap frequency for vessels connected within 2 hops in Neo4j in the 30-day post-announcement window
 - **Method:** Difference-in-Differences (DiD) with vessel-type and route-corridor fixed effects; OLS with HC3 heteroskedasticity-robust standard errors (`src/score/causal_sanction.py`)
 - **Output:** Per-sanction-regime ATT estimate + 95% CI written to `data/processed/causal_effects.parquet`; `calibrate_graph_weight()` derives a `graph_risk_score` weight in [0.20, 0.65] that is passed as `--w-graph` to `src/score/composite.py`
+
+### C7 · Cap Vista Pre-Submission Enhancements *(Done — [#26](https://github.com/edgesentry/arktrace/issues/26))*
+
+Four targeted improvements identified during pre-submission review:
+
+**1 — Bunker barge exclusion from HDBSCAN baseline (`src/score/mpol_baseline.py`)**
+AIS ship_type codes 51–59 (pilot, SAR, tug, fire-fighting, law enforcement) and 31–32 are excluded from the HDBSCAN training partition by default.  These service craft operate at low SOG and high loitering hours in busy port areas (e.g. Singapore Strait); including them compressed anomaly scores for genuine shadow-fleet STS events.  They are still scored by the Isolation Forest. Controlled by `--no-exclude-service-vessels` flag.  Exclusion list documented in `docs/regional-playbooks.md` Persona 1.
+
+**2 — Geopolitical rerouting filter (`src/score/composite.py`)**
+`--geopolitical-event-filter PATH` accepts a JSON file declaring active rerouting corridors.  Vessels whose last known position falls within a corridor during the declared window have their `anomaly_score` down-weighted before `confidence` is computed.  A sample file (`config/geopolitical_events.json`) covers the Red Sea / Cape of Good Hope rerouting since late 2023.  Passed through `scripts/run_pipeline.py` via `--geopolitical-event-filter`.
+
+**3 — Cleared-vessel feedback loop (`src/ingest/schema.py`, `src/score/mpol_baseline.py`, `src/score/anomaly.py`)**
+New `cleared_vessels` DuckDB table records MMSIs from Phase B investigations with outcome `cleared`.  `build_mpol_baseline()` and `fit_isolation_forest()` load cleared MMSIs and use them as hard negatives: `baseline_noise_score = 0.0` always (HDBSCAN), and always included in the IsolationForest clean-training subset.  Data flow edge: `B6 (cleared) ──► A4 (negative labels)`.
+
+**4 — VDES two-phase on-demand transfer (roadmap B5, implemented in `edgesentry-rs`)**
+Documented in B5 above.  Splits evidence transmission into a lightweight triage JSON (sent immediately) and on-demand asset retrieval (shore-triggered).  Avoids blocking VDES channel for 30–130 seconds per report when multiple patrol vessels are active simultaneously.
 
 ---
 

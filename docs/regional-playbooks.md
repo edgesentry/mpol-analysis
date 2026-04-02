@@ -50,6 +50,24 @@ uv run python src/features/ais_behavior.py --window 30
 
 Default weights are tuned for this region (`0.4 × anomaly + 0.4 × graph + 0.2 × identity`). No changes needed.
 
+**A4 — Bunker barge exclusion (Singapore-specific)**
+
+Singapore waters contain a large population of legitimate service craft: bunker barges (AIS type 51–54), pilot tenders (type 51), and harbour tugs (types 31–32). These vessels loiter at low SOG near anchorages and refuelling points — the same behavioural signature as shadow-fleet STS transfers. Without exclusion, including them in the HDBSCAN training baseline compresses anomaly scores for genuine dark-vessel events.
+
+The exclusion is **on by default**. No configuration needed for Singapore. To verify:
+
+```bash
+# Service vessel types excluded from HDBSCAN training (still scored by Isolation Forest):
+# 31, 32 (tug/supply), 51-59 (pilot, SAR, fire-fighting, law enforcement, medical)
+uv run python src/score/mpol_baseline.py --db data/processed/singapore.duckdb
+```
+
+To revert to legacy behaviour (not recommended for Singapore):
+
+```bash
+uv run python src/score/mpol_baseline.py --no-exclude-service-vessels
+```
+
 **A5 / Dashboard — Filters to apply**
 
 | Filter | Value | Reason |

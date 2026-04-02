@@ -88,6 +88,15 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS cleared_vessels (
+                mmsi                VARCHAR PRIMARY KEY,
+                cleared_at          TIMESTAMPTZ DEFAULT now(),
+                cleared_by          VARCHAR,
+                investigation_id    VARCHAR,
+                notes               TEXT
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                       VARCHAR PRIMARY KEY,
                 ais_gap_count_30d          INTEGER,
