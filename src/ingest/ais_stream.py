@@ -77,7 +77,9 @@ def _parse_position_report(msg: dict[str, Any]) -> dict[str, Any] | None:
         "sog": float(report.get("Sog") or 0),
         "cog": float(report.get("Cog") or 0),
         "nav_status": int(report.get("NavigationalStatus") or 0),
-        "ship_type": int(report.get("Type") or 0),
+        # PositionReport (NMEA 1/2/3) does not carry ship type; aisstream.io
+        # backfills it in MetaData.ShipType from cached Static/Voyage messages.
+        "ship_type": int(meta.get("ShipType") or report.get("Type") or 0),
     }
 
 

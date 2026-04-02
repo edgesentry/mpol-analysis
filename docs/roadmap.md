@@ -6,7 +6,7 @@
 
 **Goal:** Running pipeline that ingests historical and live AIS for the area of interest.
 
-- `pyproject.toml` with full dependency set (DuckDB, Polars, Neo4j driver, scikit-learn, SHAP, Streamlit)
+- `pyproject.toml` with full dependency set (DuckDB, Polars, Neo4j driver, scikit-learn, SHAP, FastAPI, uvicorn)
 - DuckDB schema initialisation (`src/ingest/schema.py`)
 - Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag (annual files); see [regional-playbooks.md](regional-playbooks.md) for non-US historical backfill options
 - aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
@@ -52,7 +52,7 @@
 - Isolation Forest anomaly score (`src/score/anomaly.py`)
 - Composite score + SHAP attribution (`src/score/composite.py`)
 - Output `candidate_watchlist.parquet` (`src/score/watchlist.py`)
-- Streamlit dashboard with map + ranked table + filters (`src/viz/dashboard.py`)
+- FastAPI + HTMX dashboard with map + ranked table + filters (`src/api/`) → http://localhost:8000
 
 **Acceptance:** Precision@50 ≥ 0.6 (≥ 30 of top-50 candidates are OFAC-listed vessels); SHAP explanations are human-readable and match analyst intuition on manually inspected cases.
 
@@ -124,18 +124,15 @@
 
 Work on Phase C items has begun in parallel with Phase A/B ahead of the 29 April 2026 Cap Vista submission. Items marked **In Progress** have open GitHub issues.
 
-### C1 · Dashboard Migration: FastAPI + HTMX *(In Progress — [#15](https://github.com/edgesentry/mpol-analysis/issues/15))*
+### C1 · Dashboard Migration: FastAPI + HTMX *(Done — [#15](https://github.com/edgesentry/mpol-analysis/issues/15))*
 
-The Phase A Streamlit dashboard (`src/viz/dashboard.py`) is optimised for development speed. For a multi-user port operations deployment, replace it with:
+Replaced the Phase A Streamlit prototype with a production-grade FastAPI + HTMX dashboard (`src/api/`):
 
-- **FastAPI** as the API layer — existing `src/ingest/`, `src/score/` modules become endpoints with no rewrite
-- **HTMX** for partial updates — the ranked watchlist table and map refresh independently; no full-page reload on each interaction
-- **Server-Sent Events (SSE)** replacing Streamlit's WebSocket toast for the `confidence > 0.75` alert — one-directional, HTTP-native, load-balancer compatible
-- **MapLibre GL JS** consuming a `/api/vessels/geojson` endpoint for the vessel position layer
-
-This is a stateless, Docker-deployable architecture that scales horizontally without the per-session memory overhead of Streamlit.
-
-**Migration path:** Streamlit dashboard ships with the Phase A prototype. FastAPI + HTMX replaces it in C1 without changing any scoring or ingestion code.
+- **FastAPI** as the API layer — existing `src/ingest/`, `src/score/` modules are endpoints with no rewrite
+- **HTMX** for partial updates — ranked watchlist table and map refresh independently; no full-page reload on filter changes
+- **Server-Sent Events (SSE)** via `/alerts/sse` for `confidence > 0.75` alerts — one-directional, HTTP-native, load-balancer compatible
+- **MapLibre GL JS** consuming `/api/vessels/geojson` for the vessel position layer
+- `streamlit` and `pydeck` removed from dependencies
 
 ### C2 · Geopolitical Context Layer (GDELT + RAG)
 

@@ -8,7 +8,7 @@ At the start of each watch, a duty officer at the port maritime security centre 
 
 ### Workflow
 
-1. **Open dashboard** (`streamlit run src/viz/dashboard.py`)
+1. **Open dashboard** (`uvicorn src.api.main:app --reload` → http://localhost:8000)
    - Map shows all vessels in the area of interest, colour-coded by confidence score (green < 0.4, yellow 0.4–0.7, red > 0.7)
    - Ranked table on the right shows top candidates with confidence score and top signals
 
@@ -74,7 +74,7 @@ The pipeline runs as a persistent process, ingesting live AIS from aisstream.io 
 
 4. `src/score/composite.py` re-scores updated vessels and writes to `candidate_watchlist.parquet`
 
-5. If any vessel's confidence score crosses 0.75 (configurable), a Streamlit toast notification is shown and an optional webhook fires (e.g. to a Slack channel or MQTT topic)
+5. If any vessel's confidence score crosses 0.75 (configurable), a Server-Sent Events alert fires via the FastAPI `/alerts/sse` endpoint and an optional webhook fires (e.g. to a Slack channel or MQTT topic)
 
 6. At the start of each watch (every 6 hours), a full re-score of all vessels in the area runs to catch vessels that were dark and have reappeared
 
