@@ -6,7 +6,8 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  PUBLIC DATA SOURCES                                            │
 │                                                                 │
-│  AIS (aisstream.io WebSocket, Marine Cadastre Parquet)          │
+│  AIS (aisstream.io WebSocket with --bbox override;              │
+│       Marine Cadastre Parquet for US waters only)               │
 │  Sanctions (OFAC SDN, EU, UN, OpenSanctions CC0)                │
 │  Vessel registry (Equasis, ITU MMSI)                            │
 │  Trade flow (UN Comtrade API)                                   │
@@ -78,11 +79,11 @@
 
 ### DuckDB (`data/processed/mpol.duckdb`)
 
-DuckDB is the primary analytical store. It runs in-process with no server and queries Parquet files directly.
+DuckDB is the primary analytical store. It runs in-process with no server and queries Parquet files directly. Multi-region deployments use separate DuckDB files per region (e.g. `data/processed/europe.duckdb`) — every script accepts a `--db` flag to target the correct file. See [regional-playbooks.md](regional-playbooks.md) for per-region paths and bbox values.
 
 | Table | Key columns | Source |
 |---|---|---|
-| `ais_positions` | `mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type` | Marine Cadastre Parquet + aisstream.io |
+| `ais_positions` | `mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type` | aisstream.io (all regions); Marine Cadastre Parquet (US waters only) |
 | `sanctions_entities` | `entity_id, name, mmsi, imo, flag, type, list_source` | OFAC, EU, UN, OpenSanctions |
 | `trade_flow` | `reporter, partner, hs_code, period, trade_value_usd, route_key` | UN Comtrade |
 | `vessel_meta` | `mmsi, imo, name, flag, ship_type, gross_tonnage` | Equasis + ITU MMSI |
@@ -189,7 +190,7 @@ confidence = 0.4 × anomaly_score
            + 0.2 × identity_volatility_score
 ```
 
-Weights are configurable. The default emphasises behavioral and graph signals equally, with identity as a tiebreaker.
+Default weights emphasise behavioral and graph signals equally, with identity as a tiebreaker. Per-region weight tuning is documented in [regional-playbooks.md](regional-playbooks.md) — currently requires a direct edit to `src/score/composite.py:185` (no CLI flag yet).
 
 ### Explainability (SHAP)
 

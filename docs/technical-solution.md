@@ -26,7 +26,7 @@
 | [Marine Cadastre](https://marinecadastre.gov/ais/) | Historical US waters AIS, 2015–present | CSV / Parquet | Free download |
 | [AIS Hub](https://www.aishub.net) | Near-real-time aggregated AIS | NMEA / JSON | Free tier available |
 
-For the area of interest (SG + Malacca Strait), aisstream.io with a bounding box filter covers the required 1,600nm radius. Historical backfill uses Marine Cadastre for vessels that transited US-monitored zones plus supplementary data from AIS Hub.
+aisstream.io supports all regions via the `--bbox lat_min lon_min lat_max lon_max` flag. The default bbox is the Singapore / Malacca Strait (`−5 92 22 122`). For other regions, pass `--bbox` with the appropriate coordinates and `--db` to write to a region-specific DuckDB file. Marine Cadastre is used only for US coastal regions (Gulf of Mexico, US West Coast). For non-US historical backfill (Japan Sea, Europe, Middle East), use AISHub or MarineTraffic CSV exports loaded via `load_csv_to_duckdb()` with a custom bbox. See [regional-playbooks.md](regional-playbooks.md) for per-region configuration.
 
 ### Sanctions & Registry Data
 

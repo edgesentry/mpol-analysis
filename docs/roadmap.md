@@ -11,7 +11,7 @@
 - Marine Cadastre bulk Parquet download + DuckDB load (`src/ingest/marine_cadastre.py`)
 - aisstream.io WebSocket ingestion with bounding box filter (`src/ingest/ais_stream.py`)
 
-**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the Malacca Strait / SG area with no duplicate MMSI/timestamp rows.
+**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](regional-playbooks.md) for other regions) with no duplicate MMSI/timestamp rows.
 
 ---
 

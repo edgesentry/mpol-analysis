@@ -13,7 +13,7 @@ At the start of each watch, a duty officer at the port maritime security centre 
    - Ranked table on the right shows top candidates with confidence score and top signals
 
 2. **Filter by area or vessel type**
-   - Officer filters to vessels currently within 50nm of the Singapore Strait
+   - Officer filters to vessels currently within 50nm of the relevant chokepoint (Singapore Strait for Persona 1, Strait of Hormuz for Persona 5, Baltic exits for Persona 4 — see [regional-playbooks.md](regional-playbooks.md))
    - Narrows to tankers and bulk carriers (highest STS transfer risk)
 
 3. **Inspect a candidate**
