@@ -326,7 +326,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 9
+TOTAL_STEPS = 10
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -349,8 +349,38 @@ def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
     return False
 
 
+def step_marine_cadastre(p: RegionPreset, non_interactive: bool, years: list[int]) -> bool:
+    if not years:
+        return True
+
+    lat_min, lon_min, lat_max, lon_max = p.bbox
+    bbox_args = ["--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max)]
+    year_args = []
+    for y in years:
+        year_args += ["--year", str(y)]
+
+    _step(2, TOTAL_STEPS, f"Loading Marine Cadastre ({', '.join(str(y) for y in years)})...")
+    result = _run(
+        [sys.executable, "-m", "src.ingest.marine_cadastre",
+         "--db", p.db_path,
+         "--raw-dir", "data/raw/marine_cadastre",
+         *year_args,
+         *bbox_args],
+    )
+    if result.returncode == 0:
+        count_line = next(
+            (l for l in result.stdout.splitlines() if "total" in l.lower()), ""
+        )
+        _ok(count_line.strip() if count_line else "")
+        return True
+    _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
+    if non_interactive:
+        return False
+    return _ask_retry_skip("Marine Cadastre") == "skip"
+
+
 def step_neo4j(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(2, TOTAL_STEPS, "Starting Neo4j...")
+    _step(3, TOTAL_STEPS, "Starting Neo4j...")
 
     # When NEO4J_URI points to a non-localhost host (e.g. docker-compose service
     # name "neo4j"), assume it is externally managed and already healthy.
@@ -379,12 +409,12 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
     lat_min, lon_min, lat_max, lon_max = p.bbox
 
     if non_interactive and stream_duration == 0:
-        _step(3, TOTAL_STEPS, "Streaming AIS...")
+        _step(4, TOTAL_STEPS, "Streaming AIS...")
         print(_dim("(skipped — pass --stream-duration N to collect N seconds of live AIS)"))
         return True
 
     duration_note = f"stopping after {stream_duration}s" if stream_duration else "Ctrl-C to stop"
-    _step(3, TOTAL_STEPS, f"Streaming AIS ({duration_note})...")
+    _step(4, TOTAL_STEPS, f"Streaming AIS ({duration_note})...")
     print()
     print(f"      bbox {p.bbox}  flush every 60s")
 
@@ -429,7 +459,7 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
 
 
 def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(4, TOTAL_STEPS, "Loading sanctions...")
+    _step(5, TOTAL_STEPS, "Loading sanctions...")
     result = _run([sys.executable, "-m", "src.ingest.sanctions", "--db", p.db_path])
     if result.returncode == 0:
         # Extract entity count from stdout if available
@@ -451,7 +481,7 @@ def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(5, TOTAL_STEPS, "Building ownership graph...")
+    _step(6, TOTAL_STEPS, "Building ownership graph...")
     # vessel_registry populates Neo4j from DuckDB vessel_meta
     reg = _run([sys.executable, "-m", "src.ingest.vessel_registry", "--db", p.db_path])
     if reg.returncode != 0:
@@ -475,7 +505,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
-    _step(6, TOTAL_STEPS, "Computing features...")
+    _step(7, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         ([sys.executable, "-m", "src.features.ais_behavior",
@@ -505,7 +535,7 @@ def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = Fal
 
 
 def step_score(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(7, TOTAL_STEPS, "Scoring...")
+    _step(8, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         ([sys.executable, "-m", "src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
@@ -537,7 +567,7 @@ def step_score(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
-    _step(8, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    _step(9, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
         count_line = next(
@@ -552,7 +582,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
 
 
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(9, TOTAL_STEPS, "Launching dashboard...")
+    _step(10, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -611,6 +641,17 @@ def main() -> None:
         help="Inject realistic dummy vessels (PETROVSKY ZVEZDA, SARI NOUR, OCEAN VOYAGER, "
              "VERA SUNSET) into the DB after feature engineering so they appear on the dashboard",
     )
+    parser.add_argument(
+        "--marine-cadastre-year",
+        type=int,
+        action="append",
+        dest="marine_cadastre_years",
+        metavar="YEAR",
+        default=None,
+        help="Load a Marine Cadastre historical year before the live pipeline runs "
+             "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
+             "Uses the region bbox automatically. Useful for the gulf region.",
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -635,9 +676,11 @@ def main() -> None:
     stream_duration: int = args.stream_duration
     gdelt_days: int = args.gdelt_days
     seed_dummy: bool = args.seed_dummy
+    marine_cadastre_years: list[int] = args.marine_cadastre_years or []
 
     steps = [
         step_schema,
+        lambda p, ni: step_marine_cadastre(p, ni, marine_cadastre_years),
         step_neo4j,
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,

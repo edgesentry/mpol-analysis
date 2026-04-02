@@ -217,16 +217,38 @@ def _parse_range(s: str) -> list[int]:
     return [int(x) for x in s.split(",")]
 
 
-if __name__ == "__main__":
+def _parse_bbox(values: list[float]) -> dict:
+    lat_min, lon_min, lat_max, lon_max = values
+    return {"lat_min": lat_min, "lat_max": lat_max, "lon_min": lon_min, "lon_max": lon_max}
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Load Marine Cadastre AIS data into DuckDB")
     parser.add_argument("--year", type=int, required=True, action="append", dest="years",
                         help="Year to download (repeat for multiple, e.g. --year 2022 --year 2023)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--raw-dir", default=DEFAULT_RAW_DIR, help="Raw download directory")
+    parser.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        metavar=("LAT_MIN", "LON_MIN", "LAT_MAX", "LON_MAX"),
+        default=None,
+        help=(
+            "Bounding box filter as four floats: lat_min lon_min lat_max lon_max. "
+            "Defaults to the Singapore / Malacca Strait preset. "
+            "Example (US Gulf): --bbox 8 -98 32 -60"
+        ),
+    )
     args = parser.parse_args()
 
+    bbox = _parse_bbox(args.bbox) if args.bbox else BBOX
     init_schema(args.db)
     total = 0
     for year in args.years:
-        total += load_year(year, args.db, args.raw_dir)
+        total += load_year(year, args.db, args.raw_dir, bbox)
     print(f"\nTotal rows inserted: {total}")
+
+
+if __name__ == "__main__":
+    main()
