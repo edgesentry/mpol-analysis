@@ -141,6 +141,78 @@ def _run(cmd: list[str], env: Optional[dict] = None) -> subprocess.CompletedProc
     return subprocess.run(cmd, env=merged_env, capture_output=True, text=True)
 
 
+_DUMMY_MMSIS = ("273456782", "613115678", "352123456", "538009876")
+
+
+def _seed_dummy_vessels(db_path: str) -> None:
+    """Patch the 4 realistic dummy vessels into vessel_meta, ais_positions, and vessel_features.
+
+    Called after build_matrix (which does DELETE + re-insert on vessel_features) so the
+    dummy rows survive into the scoring step and appear on the dashboard.
+    """
+    import duckdb
+
+    mmsi_list = ", ".join(f"'{m}'" for m in _DUMMY_MMSIS)
+    con = duckdb.connect(db_path)
+    try:
+        # vessel_meta ── upsert by delete + insert
+        con.execute(f"DELETE FROM vessel_meta WHERE mmsi IN ({mmsi_list})")
+        con.execute(
+            """
+            INSERT INTO vessel_meta (mmsi, imo, name, flag, ship_type) VALUES
+                ('273456782', 'IMO9234567', 'PETROVSKY ZVEZDA', 'RU', 82),
+                ('613115678', 'IMO9345612', 'SARI NOUR',        'CM', 82),
+                ('352123456', 'IMO9456781', 'OCEAN VOYAGER',    'PA', 82),
+                ('538009876', 'IMO9678901', 'VERA SUNSET',      'MH', 82)
+            """
+        )
+
+        # ais_positions ── one position each for last_lat/last_lon/last_seen in watchlist
+        con.execute(f"DELETE FROM ais_positions WHERE mmsi IN ({mmsi_list})")
+        con.execute(
+            """
+            INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) VALUES
+                -- PETROVSKY ZVEZDA: at anchor in Strait of Hormuz approaches; AIS went dark 22h before this fix
+                ('273456782', '2026-03-15 00:00:00+00', 26.50,  55.50,  0.5, 1, 82),
+                -- SARI NOUR: loitering off Kharg Island; previously near Bandar Abbas loading terminal
+                ('613115678', '2026-03-20 00:00:00+00', 29.10,  50.30,  0.3, 1, 82),
+                -- OCEAN VOYAGER: stationary off Ceuta; matched position of another tanker 4h (STS candidate)
+                ('352123456', '2026-03-10 00:00:00+00', 35.90,  -5.50,  0.5, 0, 82),
+                -- VERA SUNSET: transiting Gulf of Oman, declared Fujairah as next port
+                ('538009876', '2026-03-25 00:00:00+00', 25.10,  56.40,  6.5, 5, 82)
+            """
+        )
+
+        # vessel_features ── patch after build_matrix's DELETE wipes the table
+        con.execute(f"DELETE FROM vessel_features WHERE mmsi IN ({mmsi_list})")
+        con.execute(
+            """
+            INSERT INTO vessel_features (
+                mmsi, ais_gap_count_30d, ais_gap_max_hours, position_jump_count,
+                sts_candidate_count, port_call_ratio, loitering_hours_30d,
+                flag_changes_2y, name_changes_2y, owner_changes_2y,
+                high_risk_flag_ratio, ownership_depth, sanctions_distance,
+                cluster_sanctions_ratio, shared_manager_risk, shared_address_centrality,
+                sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value
+            ) VALUES
+                -- PETROVSKY ZVEZDA: 14 AIS gaps (max 22h), reflagged RU twice, 1 hop from OFAC entity,
+                --   60% of co-owned fleet OFAC-listed, confirmed route-cargo mismatch on Iran crude corridor
+                ('273456782', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 1, 0.60, 1, 3, 3, 1.0, 50000.0),
+                -- SARI NOUR: 8 AIS gaps, 3 GPS position jumps (>50-knot implied speed), reflagged IR→CM,
+                --   no Comtrade crude import record despite trading Kharg Island routes
+                ('613115678',  8, 14.0, 3, 1, 0.08, 35.0, 1, 2, 1, 0.85, 4, 2, 0.45, 2, 2, 2, 1.0, 75000.0),
+                -- OCEAN VOYAGER: 6 distinct STS partners, shares Piraeus address with 5 vessels
+                --   (40% OFAC-designated), route-cargo mismatch on Ceuta dark transfer corridor
+                ('352123456',  3,  7.5, 0, 5, 0.45, 15.0, 0, 0, 1, 0.30, 3, 3, 0.40, 3, 5, 6, 1.0, 120000.0),
+                -- VERA SUNSET: 5-layer ownership chain, beneficial owner 2 hops from designated entity,
+                --   renamed once in 2y, 25% of co-managed fleet sanctioned
+                ('538009876',  1,  3.0, 0, 0, 0.75,  3.0, 0, 1, 2, 0.20, 5, 2, 0.25, 2, 2, 1, 0.0,  8000.0)
+            """
+        )
+    finally:
+        con.close()
+
+
 def _ais_row_count(db_path: str) -> int:
     """Return the number of rows in ais_positions for a given DB, or 0 on error."""
     try:
@@ -402,7 +474,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
     return _ask_retry_skip("ownership_graph") == "skip"
 
 
-def step_features(p: RegionPreset, non_interactive: bool) -> bool:
+def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
     _step(6, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
@@ -422,6 +494,12 @@ def step_features(p: RegionPreset, non_interactive: bool) -> bool:
                 return False
             if _ask_retry_skip(label) == "skip":
                 continue
+
+    if seed_dummy:
+        # build_matrix does DELETE FROM vessel_features before inserting, so we patch
+        # the dummy vessels in here, after build_matrix, so scoring picks them up.
+        _seed_dummy_vessels(p.db_path)
+
     _ok()
     return True
 
@@ -439,7 +517,7 @@ def step_score(p: RegionPreset, non_interactive: bool) -> bool:
           "--w-identity", str(p.w_identity)], "composite"),
         ([sys.executable, "-m", "src.score.watchlist",
           "--db", p.db_path,
-          "--output", p.watchlist_path], "watchlist"),
+          "--output", os.getenv("WATCHLIST_OUTPUT_PATH", p.watchlist_path)], "watchlist"),
     ]
     precision_line = ""
     for cmd, label in cmds:
@@ -526,6 +604,13 @@ def main() -> None:
         metavar="DAYS",
         help="Number of days of GDELT events to ingest for geopolitical context (default: 3)",
     )
+    parser.add_argument(
+        "--seed-dummy",
+        action="store_true",
+        default=False,
+        help="Inject realistic dummy vessels (PETROVSKY ZVEZDA, SARI NOUR, OCEAN VOYAGER, "
+             "VERA SUNSET) into the DB after feature engineering so they appear on the dashboard",
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -549,6 +634,7 @@ def main() -> None:
 
     stream_duration: int = args.stream_duration
     gdelt_days: int = args.gdelt_days
+    seed_dummy: bool = args.seed_dummy
 
     steps = [
         step_schema,
@@ -556,7 +642,7 @@ def main() -> None:
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
         step_ownership_graph,
-        step_features,
+        lambda p, ni: step_features(p, ni, seed_dummy),
         step_score,
         lambda p, ni: step_gdelt(p, ni, gdelt_days),
         step_dashboard,
