@@ -553,7 +553,11 @@ def _calibrate_graph_weight(db_path: str, preset_w_graph: float) -> float:
         return preset_w_graph
 
 
-def step_score(p: RegionPreset, non_interactive: bool) -> bool:
+def step_score(
+    p: RegionPreset,
+    non_interactive: bool,
+    geo_filter_path: str | None = None,
+) -> bool:
     _step(8, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
 
@@ -567,14 +571,20 @@ def step_score(p: RegionPreset, non_interactive: bool) -> bool:
     # Guard against floating-point drift
     w_anomaly = round(1.0 - w_graph - w_identity, 4)
 
+    composite_cmd = [
+        sys.executable, "-m", "src.score.composite",
+        "--db", p.db_path,
+        "--w-anomaly", str(w_anomaly),
+        "--w-graph", str(w_graph),
+        "--w-identity", str(w_identity),
+    ]
+    if geo_filter_path:
+        composite_cmd += ["--geopolitical-event-filter", geo_filter_path]
+
     cmds = [
         ([sys.executable, "-m", "src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
         ([sys.executable, "-m", "src.score.anomaly", "--db", p.db_path], "anomaly"),
-        ([sys.executable, "-m", "src.score.composite",
-          "--db", p.db_path,
-          "--w-anomaly", str(w_anomaly),
-          "--w-graph", str(w_graph),
-          "--w-identity", str(w_identity)], "composite"),
+        (composite_cmd, "composite"),
         ([sys.executable, "-m", "src.score.watchlist",
           "--db", p.db_path,
           "--output", os.getenv("WATCHLIST_OUTPUT_PATH", p.watchlist_path)], "watchlist"),
@@ -682,6 +692,18 @@ def main() -> None:
              "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
              "Uses the region bbox automatically. Useful for the gulf region.",
     )
+    parser.add_argument(
+        "--geopolitical-event-filter",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a JSON file declaring geopolitical rerouting events. "
+            "Vessels in active corridors have their anomaly_score down-weighted "
+            "to reduce false positives from legitimate commercial rerouting "
+            "(e.g. Cape of Good Hope diversion since 2024). "
+            "See config/geopolitical_events.json for the sample format."
+        ),
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -707,6 +729,7 @@ def main() -> None:
     gdelt_days: int = args.gdelt_days
     seed_dummy: bool = args.seed_dummy
     marine_cadastre_years: list[int] = args.marine_cadastre_years or []
+    geo_filter_path: str | None = args.geopolitical_event_filter
 
     steps = [
         step_schema,
@@ -716,7 +739,7 @@ def main() -> None:
         step_sanctions,
         step_ownership_graph,
         lambda p, ni: step_features(p, ni, seed_dummy),
-        step_score,
+        lambda p, ni: step_score(p, ni, geo_filter_path),
         lambda p, ni: step_gdelt(p, ni, gdelt_days),
         step_dashboard,
     ]

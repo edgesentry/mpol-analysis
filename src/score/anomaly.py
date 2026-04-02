@@ -13,7 +13,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
 from src.score.mpol_baseline import DEFAULT_OUTPUT_PATH as DEFAULT_BASELINE_PATH
-from src.score.mpol_baseline import build_mpol_baseline
+from src.score.mpol_baseline import build_mpol_baseline, load_cleared_mmsis
 
 load_dotenv()
 
@@ -52,12 +52,35 @@ def load_feature_frame(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
         con.close()
 
 
-def fit_isolation_forest(feature_df: pl.DataFrame) -> tuple[StandardScaler, IsolationForest]:
+def fit_isolation_forest(
+    feature_df: pl.DataFrame,
+    cleared_mmsis: frozenset[str] | None = None,
+) -> tuple[StandardScaler, IsolationForest]:
+    """Train Isolation Forest on the clean vessel population.
+
+    Parameters
+    ----------
+    feature_df:
+        Full feature frame for all vessels.
+    cleared_mmsis:
+        MMSIs of vessels confirmed normal by Phase B physical inspection.
+        These are always included in the training set regardless of
+        sanctions_distance, anchoring the "known normal" region.
+    """
     matrix = feature_df.select(ANOMALY_FEATURE_COLUMNS).fill_null(0).to_numpy()
     if matrix.shape[0] == 0:
         raise ValueError("Cannot train anomaly model on empty feature set")
 
+    # Base clean set: vessels with no graph proximity to sanctions
     clean_subset = feature_df.filter(pl.col("sanctions_distance") >= 3)
+
+    # Add cleared vessels as hard negatives even if their sanctions_distance < 3
+    if cleared_mmsis:
+        cleared_df = feature_df.filter(pl.col("mmsi").is_in(list(cleared_mmsis)))
+        if not cleared_df.is_empty():
+            combined = pl.concat([clean_subset, cleared_df]).unique(subset=["mmsi"])
+            clean_subset = combined
+
     train_df = clean_subset if clean_subset.height >= 4 else feature_df
     train_matrix = train_df.select(ANOMALY_FEATURE_COLUMNS).fill_null(0).to_numpy()
 
@@ -76,6 +99,7 @@ def fit_isolation_forest(feature_df: pl.DataFrame) -> tuple[StandardScaler, Isol
 def score_anomalies(
     feature_df: pl.DataFrame,
     baseline_df: pl.DataFrame | None = None,
+    db_path: str = DEFAULT_DB_PATH,
 ) -> tuple[pl.DataFrame, StandardScaler, IsolationForest]:
     if feature_df.is_empty():
         empty = pl.DataFrame(schema={
@@ -88,9 +112,10 @@ def score_anomalies(
         return empty, StandardScaler(), IsolationForest(random_state=42)
 
     if baseline_df is None:
-        baseline_df = build_mpol_baseline(DEFAULT_DB_PATH)
+        baseline_df = build_mpol_baseline(db_path)
 
-    scaler, model = fit_isolation_forest(feature_df)
+    cleared = load_cleared_mmsis(db_path)
+    scaler, model = fit_isolation_forest(feature_df, cleared_mmsis=cleared)
     matrix = feature_df.select(ANOMALY_FEATURE_COLUMNS).fill_null(0).to_numpy()
     scaled = scaler.transform(matrix)
 

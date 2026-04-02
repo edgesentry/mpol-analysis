@@ -10,6 +10,33 @@ the C3 causal sanction-response model::
     w_graph = calibrate_graph_weight(effects)
 
 See ``src/score/causal_sanction.py`` and ``docs/roadmap.md`` Phase C, C3.
+
+Geopolitical rerouting filter (Improvement 2)
+---------------------------------------------
+Pass ``--geopolitical-event-filter events.json`` to down-weight the anomaly
+score for vessels whose last known position falls within a declared rerouting
+corridor during an active date window.  This reduces false positives caused
+by legitimate commercial rerouting (e.g. Cape of Good Hope diversion since
+2024 due to Houthi Red Sea attacks).
+
+The JSON file format::
+
+    {
+      "events": [
+        {
+          "name": "Red Sea / Cape of Good Hope rerouting",
+          "active_from": "2023-11-01",
+          "active_to": "2026-12-31",
+          "corridors": [
+            {"lat_min": -40, "lon_min": 10, "lat_max": -25, "lon_max": 40}
+          ],
+          "down_weight": 0.5
+        }
+      ]
+    }
+
+``down_weight`` is a multiplier applied to ``anomaly_score`` for matching
+vessels (e.g. 0.5 halves their anomaly contribution).
 """
 
 from __future__ import annotations
@@ -17,6 +44,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from dataclasses import dataclass, field
+from datetime import date
 
 import duckdb
 import numpy as np
@@ -43,6 +72,101 @@ FEATURE_VALUE_COLUMNS = [
     "shared_address_centrality",
     "sts_hub_degree",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Geopolitical rerouting filter
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _GeoCorridorBbox:
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+
+    def contains(self, lat: float, lon: float) -> bool:
+        return self.lat_min <= lat <= self.lat_max and self.lon_min <= lon <= self.lon_max
+
+
+@dataclass
+class GeoEvent:
+    """A declared geopolitical rerouting event."""
+    name: str
+    active_from: date
+    active_to: date
+    corridors: list[_GeoCorridorBbox] = field(default_factory=list)
+    down_weight: float = 0.5   # multiplier on anomaly_score for affected vessels
+
+    def is_active(self, reference_date: date | None = None) -> bool:
+        ref = reference_date or date.today()
+        return self.active_from <= ref <= self.active_to
+
+    def vessel_in_corridor(self, lat: float | None, lon: float | None) -> bool:
+        if lat is None or lon is None:
+            return False
+        return any(c.contains(lat, lon) for c in self.corridors)
+
+
+def load_geopolitical_filter(json_path: str) -> list[GeoEvent]:
+    """Load a geopolitical event filter from a JSON file.
+
+    See module docstring for the expected JSON schema.
+    """
+    with open(json_path) as fh:
+        data = json.load(fh)
+
+    events: list[GeoEvent] = []
+    for ev in data.get("events", []):
+        corridors = [
+            _GeoCorridorBbox(
+                lat_min=c["lat_min"],
+                lat_max=c["lat_max"],
+                lon_min=c["lon_min"],
+                lon_max=c["lon_max"],
+            )
+            for c in ev.get("corridors", [])
+        ]
+        events.append(GeoEvent(
+            name=ev["name"],
+            active_from=date.fromisoformat(ev["active_from"]),
+            active_to=date.fromisoformat(ev["active_to"]),
+            corridors=corridors,
+            down_weight=float(ev.get("down_weight", 0.5)),
+        ))
+    return events
+
+
+def apply_geopolitical_filter(
+    scored_df: pl.DataFrame,
+    events: list[GeoEvent],
+    reference_date: date | None = None,
+) -> pl.DataFrame:
+    """Down-weight ``anomaly_score`` for vessels in active rerouting corridors.
+
+    Vessels whose last known position falls within an active corridor have their
+    ``anomaly_score`` multiplied by ``event.down_weight`` before the composite
+    ``confidence`` is recalculated.  ``last_lat`` and ``last_lon`` must be
+    present in *scored_df*.
+    """
+    active = [e for e in events if e.is_active(reference_date)]
+    if not active:
+        return scored_df
+
+    anomaly_scores = scored_df["anomaly_score"].to_list()
+    lats = scored_df["last_lat"].to_list()
+    lons = scored_df["last_lon"].to_list()
+
+    for i, (lat, lon) in enumerate(zip(lats, lons)):
+        for ev in active:
+            if ev.vessel_in_corridor(lat, lon):
+                anomaly_scores[i] = float(anomaly_scores[i]) * ev.down_weight
+                break  # apply the most relevant active event only
+
+    return scored_df.with_columns(
+        pl.Series("anomaly_score", anomaly_scores, dtype=pl.Float32)
+    )
 
 
 def load_watchlist_context(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
@@ -181,6 +305,7 @@ def compute_composite_scores(
     w_anomaly: float = 0.4,
     w_graph: float = 0.4,
     w_identity: float = 0.2,
+    geo_filter_path: str | None = None,
 ) -> pl.DataFrame:
     feature_df = load_feature_frame(db_path)
     context_df = load_watchlist_context(db_path)
@@ -188,7 +313,7 @@ def compute_composite_scores(
         return pl.DataFrame()
 
     baseline_df = build_mpol_baseline(db_path)
-    anomaly_df, scaler, model = score_anomalies(feature_df, baseline_df)
+    anomaly_df, scaler, model = score_anomalies(feature_df, baseline_df, db_path)
     scaled = scaler.transform(feature_df.select(ANOMALY_FEATURE_COLUMNS).fill_null(0).to_numpy())
     top_signals = _compute_top_signals(feature_df, model, scaled)
 
@@ -197,6 +322,11 @@ def compute_composite_scores(
         _compute_identity_score(context_df),
         top_signals,
     ])
+
+    # Apply geopolitical rerouting filter before computing confidence
+    if geo_filter_path:
+        geo_events = load_geopolitical_filter(geo_filter_path)
+        scored = apply_geopolitical_filter(scored, geo_events)
 
     scored = scored.with_columns([
         (w_anomaly * pl.col("anomaly_score") + w_graph * pl.col("graph_risk_score") + w_identity * pl.col("identity_score"))
@@ -249,9 +379,25 @@ def main() -> None:
                         help="Weight for graph risk score (default: 0.4)")
     parser.add_argument("--w-identity", type=float, default=0.2,
                         help="Weight for identity score (default: 0.2)")
+    parser.add_argument(
+        "--geopolitical-event-filter",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a JSON file declaring geopolitical rerouting events. "
+            "Vessels in active corridors have their anomaly_score down-weighted "
+            "to reduce false positives from legitimate commercial rerouting."
+        ),
+    )
     args = parser.parse_args()
 
-    df = compute_composite_scores(args.db, args.w_anomaly, args.w_graph, args.w_identity)
+    df = compute_composite_scores(
+        args.db,
+        args.w_anomaly,
+        args.w_graph,
+        args.w_identity,
+        geo_filter_path=args.geopolitical_event_filter,
+    )
     write_composite_scores(df, args.output)
     print(f"Composite rows written: {df.height}")
 
