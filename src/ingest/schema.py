@@ -78,6 +78,16 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS chat_cache (
+                cache_key           VARCHAR PRIMARY KEY,
+                mmsi                VARCHAR,
+                question_hash       VARCHAR NOT NULL,
+                watchlist_version   VARCHAR NOT NULL,
+                response            TEXT NOT NULL,
+                created_at          TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                       VARCHAR PRIMARY KEY,
                 ais_gap_count_30d          INTEGER,

@@ -329,6 +329,7 @@
 <header>
   <h1>&#9760; Shadow Fleet Watchlist</h1>
   <span style="color:#718096;font-size:0.75rem;">MPOL &middot; Maritime Pattern of Life</span>
+  <button class="apply-btn" style="width:auto;padding:0.35rem 0.9rem;font-size:0.8rem;margin-left:auto;" onclick="openFleetChat()">Fleet Chat</button>
 </header>
 
 <!-- KPI bar -->
@@ -590,14 +591,12 @@ function loadVesselTypes() {
 }
 
 // ── Chat panel ─────────────────────────────────────────────────────────────
-let currentChatMmsi = null;
-let chatHistory = [];    // [{role, content}, ...]
+let currentChatMmsi = null;   // null = fleet / cross-vessel mode
+let chatHistory = [];          // [{role, content}, ...]
 let chatStreaming = false;
 
 function openAnalystBrief(mmsi, vesselName) {
-  // Close any open map popup
   document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
-
   currentChatMmsi = mmsi;
   chatHistory = [];
   document.getElementById('chat-vessel-label').textContent = `${vesselName} (MMSI ${mmsi})`;
@@ -605,14 +604,25 @@ function openAnalystBrief(mmsi, vesselName) {
   document.getElementById('chat-panel').classList.add('active');
   document.getElementById('chat-input').focus();
 
-  // Stream the initial brief as the first assistant message
-  streamChatResponse([{ role: 'user', content: `Generate an analyst brief for this vessel.` }], true);
+  // Stream initial brief via existing cached GET endpoint
+  _streamBriefInitial(mmsi);
+}
+
+function openFleetChat() {
+  currentChatMmsi = null;
+  chatHistory = [];
+  document.getElementById('chat-vessel-label').textContent = 'Fleet Chat (cross-vessel)';
+  document.getElementById('chat-messages').innerHTML = '';
+  document.getElementById('chat-input').placeholder = 'Ask a cross-vessel question…';
+  document.getElementById('chat-panel').classList.add('active');
+  document.getElementById('chat-input').focus();
 }
 
 function closeChatPanel() {
   document.getElementById('chat-panel').classList.remove('active');
   currentChatMmsi = null;
   chatHistory = [];
+  document.getElementById('chat-input').placeholder = 'Ask a follow-up question…';
 }
 
 function appendChatMessage(role, text) {
@@ -632,77 +642,78 @@ function appendChatMessage(role, text) {
   return bubble;
 }
 
-async function streamChatResponse(messages, isInitialBrief) {
+async function _streamSse(resp, bubble) {
+  let fullText = '';
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const raw = decoder.decode(value, { stream: true });
+    for (const line of raw.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const chunk = line.slice(6);
+      if (chunk === '[DONE]') break;
+      fullText += chunk;
+      bubble.textContent = fullText;
+      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+    }
+  }
+  return fullText;
+}
+
+async function _streamBriefInitial(mmsi) {
   if (chatStreaming) return;
   chatStreaming = true;
   document.getElementById('chat-send-btn').disabled = true;
-
-  // For the initial brief, use the streaming GET endpoint directly
-  const endpoint = isInitialBrief
-    ? `/api/briefs/${currentChatMmsi}`
-    : `/api/briefs/${currentChatMmsi}/chat`;
-
   const bubble = appendChatMessage('assistant', '');
-  let fullText = '';
-
   try {
-    let resp;
-    if (isInitialBrief) {
-      resp = await fetch(endpoint);
-    } else {
-      resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
-      });
-    }
-
+    const resp = await fetch(`/api/briefs/${mmsi}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const raw = decoder.decode(value, { stream: true });
-      for (const line of raw.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = line.slice(6);
-        if (chunk === '[DONE]') break;
-        fullText += chunk;
-        bubble.textContent = fullText;
-        document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
-      }
-    }
+    const fullText = await _streamSse(resp, bubble);
+    if (fullText) chatHistory.push({ role: 'assistant', content: fullText });
   } catch (err) {
     bubble.textContent = 'Brief unavailable — check LLM configuration in .env';
   }
+  chatStreaming = false;
+  document.getElementById('chat-send-btn').disabled = false;
+  document.getElementById('chat-input').focus();
+}
 
-  // Record in history
-  if (fullText) {
-    if (isInitialBrief) {
-      chatHistory.push({ role: 'assistant', content: fullText });
-    } else {
-      chatHistory.push({ role: 'assistant', content: fullText });
-    }
+async function streamChatResponse(message) {
+  if (chatStreaming) return;
+  chatStreaming = true;
+  document.getElementById('chat-send-btn').disabled = true;
+  const bubble = appendChatMessage('assistant', '');
+  try {
+    const body = { message, history: chatHistory.slice(0, -1) };
+    if (currentChatMmsi) body.mmsi = currentChatMmsi;
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const fullText = await _streamSse(resp, bubble);
+    if (fullText) chatHistory.push({ role: 'assistant', content: fullText });
+  } catch (err) {
+    bubble.textContent = 'Answer unavailable — check LLM configuration in .env';
+    chatHistory.pop(); // remove the user turn we pushed speculatively
   }
-
   chatStreaming = false;
   document.getElementById('chat-send-btn').disabled = false;
   document.getElementById('chat-input').focus();
 }
 
 async function sendChatMessage() {
-  if (!currentChatMmsi || chatStreaming) return;
+  if (chatStreaming) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
-
   input.value = '';
   appendChatMessage('user', text);
   chatHistory.push({ role: 'user', content: text });
-
-  await streamChatResponse(chatHistory, false);
+  await streamChatResponse(text);
 }
 
 // ── SSE alert stream ───────────────────────────────────────────────────────
