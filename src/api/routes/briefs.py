@@ -11,6 +11,7 @@ import duckdb
 import polars as pl
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
@@ -246,6 +247,72 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
             yield "data: [DONE]\n\n"
             if tokens:
                 _write_cached_brief(mmsi, version, "".join(tokens))
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+class _ChatMsg(BaseModel):
+    role: str
+    content: str
+
+
+class _ChatRequest(BaseModel):
+    messages: list[_ChatMsg]
+
+
+def _build_vessel_system(vessel: dict) -> str:
+    flag = str(vessel.get("flag") or "")
+    vessel_name = str(vessel.get("vessel_name") or vessel.get("mmsi", ""))
+    gdelt_events = query_gdelt_context(
+        flag_country=flag,
+        vessel_name=vessel_name,
+        n=3,
+        lance_path=DEFAULT_LANCE_PATH,
+    )
+    return _SYSTEM_TEMPLATE.format(
+        vessel_name=vessel_name,
+        mmsi=vessel.get("mmsi", ""),
+        imo=vessel.get("imo", ""),
+        flag=flag,
+        vessel_type=vessel.get("vessel_type", "Unknown"),
+        confidence=float(vessel.get("confidence", 0)),
+        signals_text=_format_signals(vessel.get("top_signals")),
+        gdelt_text=_format_gdelt(gdelt_events),
+    )
+
+
+@router.post("/api/briefs/{mmsi}/chat")
+async def vessel_chat(mmsi: str, body: _ChatRequest) -> StreamingResponse:
+    """Stream an LLM response for a multi-turn analyst conversation about a vessel."""
+    vessel = _load_vessel(mmsi)
+
+    async def _not_found():
+        yield "data: Vessel not found in watchlist.\n\n"
+        yield "data: [DONE]\n\n"
+
+    if vessel is None:
+        return StreamingResponse(
+            _not_found(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    system = _build_vessel_system(vessel)
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    async def _stream():
+        try:
+            llm = get_llm_client()
+            async for token in llm.stream_messages(system, messages):
+                yield f"data: {token}\n\n"
+        except Exception as exc:
+            yield f"data: Brief unavailable — {exc}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         _stream(),

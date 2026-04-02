@@ -87,7 +87,7 @@ def test_geojson_vessel_type_filter(client):
 def test_watchlist_top_html(client):
     r = client.get("/api/watchlist/top?min_confidence=0.0&top_n=10")
     assert r.status_code == 200
-    assert "<tr>" in r.text
+    assert "watchlist-row" in r.text
     assert "OCEAN GLORY" in r.text
 
 

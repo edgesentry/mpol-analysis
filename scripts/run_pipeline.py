@@ -254,7 +254,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 8
+TOTAL_STEPS = 9
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -279,6 +279,14 @@ def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
 
 def step_neo4j(p: RegionPreset, non_interactive: bool) -> bool:
     _step(2, TOTAL_STEPS, "Starting Neo4j...")
+
+    # When NEO4J_URI points to a non-localhost host (e.g. docker-compose service
+    # name "neo4j"), assume it is externally managed and already healthy.
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    if "localhost" not in neo4j_uri and "127.0.0.1" not in neo4j_uri:
+        _ok("externally managed")
+        return True
+
     check = _run(["docker", "inspect", "-f", "{{.State.Running}}", "neo4j-mpol"])
     if check.returncode == 0 and check.stdout.strip() == "true":
         _ok("already running")
@@ -450,8 +458,23 @@ def step_score(p: RegionPreset, non_interactive: bool) -> bool:
     return True
 
 
+def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
+    _step(8, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
+    if result.returncode == 0:
+        count_line = next(
+            (l for l in result.stdout.splitlines() if "total" in l.lower()), ""
+        )
+        _ok(count_line.strip() if count_line else "")
+        return True
+    _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
+    if non_interactive:
+        return False
+    return _ask_retry_skip("GDELT ingest") == "skip"
+
+
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(8, TOTAL_STEPS, "Launching dashboard...")
+    _step(9, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -496,6 +519,13 @@ def main() -> None:
         help="How long to collect live AIS data before moving on (default: 0 = skip in "
              "--non-interactive, run until Ctrl-C in interactive mode)",
     )
+    parser.add_argument(
+        "--gdelt-days",
+        type=int,
+        default=3,
+        metavar="DAYS",
+        help="Number of days of GDELT events to ingest for geopolitical context (default: 3)",
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -518,6 +548,7 @@ def main() -> None:
     print()
 
     stream_duration: int = args.stream_duration
+    gdelt_days: int = args.gdelt_days
 
     steps = [
         step_schema,
@@ -527,6 +558,7 @@ def main() -> None:
         step_ownership_graph,
         step_features,
         step_score,
+        lambda p, ni: step_gdelt(p, ni, gdelt_days),
         step_dashboard,
     ]
 
