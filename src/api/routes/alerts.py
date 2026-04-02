@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
 
 import polars as pl
 from fastapi import APIRouter
