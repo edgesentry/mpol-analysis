@@ -1,5 +1,5 @@
 [project]
-name = "capvista-mpol-analysis"
+name = "arktrace"
 version = "0.1.0"
 description = "Shadow fleet candidate screening pipeline for Cap Vista Solicitation 5.0"
 requires-python = ">=3.12"
@@ -16,6 +16,7 @@ dependencies = [
     "h3>=3.7",
     "fastapi>=0.115",
     "uvicorn>=0.32",
+    "lancedb>=0.9",
 ]
 
 [project.optional-dependencies]

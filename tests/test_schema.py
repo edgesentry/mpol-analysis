@@ -12,6 +12,7 @@ def test_all_tables_created(tmp_db):
         "sanctions_entities",
         "trade_flow",
         "vessel_features",
+        "analyst_briefs",
     }
 
 

@@ -10,6 +10,7 @@ Step-by-step guide to run the full screening pipeline on your local machine and 
 | uv | `uv --version` |
 | Docker (with Colima or Docker Desktop) | `docker info` |
 | aisstream.io API key in `.env` | `AISSTREAM_API_KEY=<key>` |
+| LLM provider key in `.env` (for analyst briefs) | `LLM_API_KEY=<key>` or `ANTHROPIC_API_KEY=<key>` |
 
 Clone the repo and install dependencies:
 
@@ -17,8 +18,10 @@ Clone the repo and install dependencies:
 git clone https://github.com/edgesentry/mpol-analysis.git
 cd mpol-analysis
 uv sync --all-extras --group dev
-cp .env.example .env   # then fill in AISSTREAM_API_KEY
+cp .env.example .env   # then fill in AISSTREAM_API_KEY and LLM credentials
 ```
+
+See `.env.example` for LLM provider options (Gemini and Anthropic Claude examples are included).
 
 ---
 
@@ -172,9 +175,41 @@ Acceptance criterion: `precision_at_50 >= 0.6`.
 
 ---
 
-## Step 7 — Dashboard
+## Step 7 — C2: Ingest GDELT geopolitical context
 
-### FastAPI dashboard (default)
+This step seeds the LanceDB vector store used to generate analyst briefs in the dashboard. It downloads the previous day's GDELT event export, filters for conflict/sanctions/coercion events, and indexes them for full-text retrieval.
+
+```bash
+uv run python src/ingest/gdelt.py
+```
+
+To seed multiple days of history (recommended for meaningful context):
+
+```bash
+uv run python src/ingest/gdelt.py --days 7
+```
+
+Expected output:
+```
+20260401: 1842 events ingested
+20260331: 1765 events ingested
+…
+Total events ingested: <N>
+```
+
+The LanceDB store is written to `data/processed/gdelt.lance`. The download requires internet access; each daily file is ~15–30 MB compressed.
+
+Verify the store was created:
+
+```bash
+ls -lh data/processed/gdelt.lance/
+```
+
+Expected: a directory containing Lance data files.
+
+---
+
+## Step 8 — Dashboard
 
 ```bash
 uv run uvicorn src.api.main:app --reload
@@ -182,22 +217,28 @@ uv run uvicorn src.api.main:app --reload
 
 Open `http://localhost:8000`. Verify:
 
-- Map shows candidate vessels colour-coded by confidence (green < 0.4, amber 0.4–0.7, red > 0.7)
+- Map shows candidate vessels colour-coded by confidence (green < 0.4, amber 0.4–0.7, red ≥ 0.7)
 - Ranked table updates independently when you change filters (HTMX partial refresh — visible in browser network tab)
 - KPI bar shows candidate count, high-confidence count, avg confidence, and validation metrics
 - Sidebar filters (minimum confidence, vessel type, top N) → click **Apply**
+
+**Analyst briefs (C2):** click any map marker to open the vessel popup, then click **Get Brief**. A one-paragraph analyst brief citing recent GDELT events streams progressively into the popup. Requires:
+- GDELT store seeded (Step 7)
+- A local LLM running (e.g. `mlx_lm.server --model mlx-community/Llama-3.2-3B-Instruct-4bit`) or cloud credentials set in `.env`
+
+Brief generation is best-effort — if no LLM is reachable the popup displays a "Brief unavailable" message without breaking the rest of the dashboard.
 
 The FastAPI dashboard (`src/api/`) is the only dashboard. See [deployment.md](deployment.md) for full deployment options.
 
 ---
 
-## Step 8 — Unit tests
+## Step 9 — Unit tests
 
 ```bash
 uv run pytest tests/ -v
 ```
 
-Expected: **48 passed**, 3 warnings (sklearn FutureWarning, harmless).
+Expected: **79 passed**, 3 warnings (sklearn FutureWarning, harmless).
 
 ---
 

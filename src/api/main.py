@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from src.api.routes.alerts import router as alerts_router
+from src.api.routes.briefs import router as briefs_router
 from src.api.routes.vessels import router as vessels_router
 
 _TEMPLATE_DIR = Path(__file__).parent.parent / "viz" / "templates"
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
 
     app.include_router(vessels_router)
     app.include_router(alerts_router)
+    app.include_router(briefs_router)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:

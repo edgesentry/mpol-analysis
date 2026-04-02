@@ -69,6 +69,15 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS analyst_briefs (
+                mmsi                VARCHAR NOT NULL,
+                watchlist_version   VARCHAR NOT NULL,
+                brief               TEXT NOT NULL,
+                generated_at        TIMESTAMPTZ DEFAULT now(),
+                PRIMARY KEY (mmsi, watchlist_version)
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                       VARCHAR PRIMARY KEY,
                 ais_gap_count_30d          INTEGER,

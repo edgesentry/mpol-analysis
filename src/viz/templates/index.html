@@ -318,14 +318,16 @@ map.on('load', () => {
 
   map.on('click', 'vessels-circle', (e) => {
     const p = e.features[0].properties;
-    new maplibregl.Popup({ closeButton: true, className: 'vessel-popup' })
+    new maplibregl.Popup({ closeButton: true, className: 'vessel-popup', maxWidth: '340px' })
       .setLngLat(e.lngLat)
       .setHTML(
         `<strong>${p.vessel_name}</strong><br/>` +
         `MMSI: ${p.mmsi}<br/>` +
         `Flag: ${p.flag} &nbsp;|&nbsp; Type: ${p.vessel_type}<br/>` +
         `Confidence: <strong>${parseFloat(p.confidence).toFixed(2)}</strong><br/>` +
-        `Last seen: ${p.last_seen}`
+        `Last seen: ${p.last_seen}<br/>` +
+        `<button class="brief-btn" onclick="loadBrief('${p.mmsi}',this)">Get Brief</button>` +
+        `<div id="brief-${p.mmsi}" class="brief-panel"></div>`
       )
       .addTo(map);
   });
@@ -432,6 +434,37 @@ function loadVesselTypes() {
     .catch(console.error);
 }
 
+// ── Analyst brief streaming ───────────────────────────────────────────────
+async function loadBrief(mmsi, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  const el = document.getElementById(`brief-${mmsi}`);
+  if (!el) return;
+  el.textContent = '';
+
+  try {
+    const resp = await fetch(`/api/briefs/${mmsi}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const raw = decoder.decode(value, { stream: true });
+      for (const line of raw.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') { btn.remove(); return; }
+        el.textContent += chunk;
+      }
+    }
+  } catch (err) {
+    el.textContent = 'Brief unavailable — start a local LLM (see .env).';
+  }
+  btn.remove();
+}
+
 // ── SSE alert stream ───────────────────────────────────────────────────────
 function startAlertStream() {
   const es = new EventSource('/api/alerts/stream');
@@ -462,6 +495,27 @@ function startAlertStream() {
   padding: 0.75rem;
 }
 .maplibregl-popup-tip { border-top-color: #1a1f2e; }
+.brief-btn {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-family: inherit;
+}
+.brief-btn:hover { background: #2563eb; }
+.brief-btn:disabled { background: #374151; cursor: default; }
+.brief-panel {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  color: #a0aec0;
+  line-height: 1.45;
+  max-width: 300px;
+  white-space: pre-wrap;
+}
 </style>
 
 </body>
