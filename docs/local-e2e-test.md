@@ -174,16 +174,26 @@ Acceptance criterion: `precision_at_50 >= 0.6`.
 
 ## Step 7 — Dashboard
 
+### FastAPI dashboard (default)
+
+```bash
+uv run uvicorn src.api.main:app --reload
+```
+
+Open `http://localhost:8000`. Verify:
+
+- Map shows candidate vessels colour-coded by confidence (green < 0.4, amber 0.4–0.7, red > 0.7)
+- Ranked table updates independently when you change filters (HTMX partial refresh — visible in browser network tab)
+- KPI bar shows candidate count, high-confidence count, avg confidence, and validation metrics
+- Sidebar filters (minimum confidence, vessel type, top N) → click **Apply**
+
+### Streamlit dashboard (development fallback)
+
 ```bash
 uv run streamlit run src/viz/dashboard.py
 ```
 
-Open `http://localhost:8501`. Verify:
-
-- Map shows candidate vessels colour-coded by confidence (green < 0.4, amber 0.4–0.7, red > 0.7)
-- Ranked table on the right is sorted by confidence descending
-- Validation panel shows Precision@50, Recall@200, and AUROC
-- Sidebar filters (minimum confidence, vessel type, top N) update the map and table
+Open `http://localhost:8501`. The Streamlit dashboard is the Phase A prototype — use it for quick single-user iteration. The FastAPI dashboard (`src/api/`) is the production path (see [deployment.md](deployment.md)).
 
 ---
 

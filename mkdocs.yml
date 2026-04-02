@@ -33,4 +33,5 @@ nav:
   - Roadmap: roadmap.md
   - Field Investigation: field-investigation.md
   - Local E2E Test: local-e2e-test.md
+  - Deployment: deployment.md
   - Regional Playbooks: regional-playbooks.md
