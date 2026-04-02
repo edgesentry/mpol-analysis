@@ -107,13 +107,7 @@ class AnthropicClient:
                     "content-type": "application/json",
                 },
             ) as resp:
-                if resp.status_code >= 400:
-                    body = await resp.aread()
-                    raise httpx.HTTPStatusError(
-                        f"{resp.status_code} {resp.reason_phrase}: {body.decode()}",
-                        request=resp.request,
-                        response=resp,
-                    )
+                resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue
