@@ -142,11 +142,11 @@ B6 ──► A4 (confirmed labels loop back to improve scoring)
 
 ---
 
-## Phase C — Post-Submission Enhancements
+## Phase C — Pre-Submission Enhancements
 
-> These items are out of scope for the Phase A proposal submission (deadline: 29 April 2026). They represent validated improvements to be prioritised if a trial contract is awarded.
+Work on Phase C items has begun in parallel with Phase A/B ahead of the 29 April 2026 Cap Vista submission. Items marked **In Progress** have open GitHub issues.
 
-### C1 · Dashboard Migration: FastAPI + HTMX
+### C1 · Dashboard Migration: FastAPI + HTMX *(In Progress — [#15](https://github.com/edgesentry/mpol-analysis/issues/15))*
 
 The Phase A Streamlit dashboard (`src/viz/dashboard.py`) is optimised for development speed. For a multi-user port operations deployment, replace it with:
 
@@ -191,12 +191,12 @@ Quantify the causal link between sanction events and observable AIS behaviour:
 
 ## Timeline
 
-| Week | Phase A deliverable |
-|---|---|
-| Week 1 (Apr 1–7) | A1: Project setup + AIS ingestion |
-| Week 2 (Apr 8–14) | A2: Sanctions + Neo4j ownership graph |
-| Week 3 (Apr 15–21) | A3: Full feature engineering pipeline |
-| Week 4 (Apr 22–28) | A4: Scoring + watchlist + Streamlit dashboard |
-| Apr 29 | A5: Validate + submit proposal to Cap Vista |
+| Week | Phase A deliverable | Phase C (parallel) |
+|---|---|---|
+| Week 1 (Apr 1–7) | A1: Project setup + AIS ingestion | — |
+| Week 2 (Apr 8–14) | A2: Sanctions + Neo4j ownership graph | — |
+| Week 3 (Apr 15–21) | A3: Full feature engineering pipeline | C1: FastAPI + HTMX dashboard (start) |
+| Week 4 (Apr 22–28) | A4: Scoring + watchlist + Streamlit dashboard | C1: continued |
+| Apr 29 | A5: Validate + submit proposal to Cap Vista | C1: targeted for submission alongside A5 |
 
 Phase B timeline depends on Cap Vista trial contract award (expected within 60 days of submission deadline).
