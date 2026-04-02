@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import io
 from pathlib import Path
 
 import pytest
