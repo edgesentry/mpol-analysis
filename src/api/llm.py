@@ -26,6 +26,10 @@ class LLMClient(Protocol):
         """Stream response tokens for a system + user message pair."""
         pass
 
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
+        """Stream response tokens for a multi-turn conversation."""
+        pass
+
 
 class OpenAICompatClient:
     """OpenAI-compatible /v1/chat/completions — MLX LM, LM Studio, Ollama, Jan, llamafile, Gemini."""
@@ -36,16 +40,17 @@ class OpenAICompatClient:
         self._model = model
 
     async def chat(self, system: str, user: str) -> AsyncIterator[str]:  # type: ignore[override]
+        async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
+            yield token
+
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:  # type: ignore[override]
         import httpx
 
         url = f"{self._base_url}/chat/completions"
         payload = {
             "model": self._model,
             "stream": True,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            "messages": [{"role": "system", "content": system}] + messages,
         }
         async with httpx.AsyncClient(timeout=120) as client:
             async with client.stream(
@@ -78,13 +83,17 @@ class AnthropicClient:
         self._model = model
 
     async def chat(self, system: str, user: str) -> AsyncIterator[str]:  # type: ignore[override]
+        async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
+            yield token
+
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:  # type: ignore[override]
         import httpx
 
         payload = {
             "model": self._model,
             "max_tokens": 1024,
             "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "messages": messages,
             "stream": True,
         }
         async with httpx.AsyncClient(timeout=120) as client:
@@ -98,7 +107,13 @@ class AnthropicClient:
                     "content-type": "application/json",
                 },
             ) as resp:
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    body = await resp.aread()
+                    raise httpx.HTTPStatusError(
+                        f"{resp.status_code} {resp.reason_phrase}: {body.decode()}",
+                        request=resp.request,
+                        response=resp,
+                    )
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue
@@ -118,8 +133,8 @@ def get_llm_client() -> LLMClient:
     provider = os.getenv("LLM_PROVIDER", "mlx")
     if provider == "anthropic":
         return AnthropicClient(
-            api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            model=os.getenv("LLM_MODEL", "claude-haiku-4-5"),
+            api_key=os.getenv("LLM_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
+            model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
         )
     return OpenAICompatClient(
         base_url=os.getenv("LLM_BASE_URL", "http://localhost:8080/v1"),

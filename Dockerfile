@@ -13,6 +13,7 @@ RUN uv sync --no-dev --frozen
 
 # Copy source
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY data/ ./data/
 
 ENV WATCHLIST_OUTPUT_PATH=data/processed/candidate_watchlist.parquet

@@ -5,8 +5,6 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-import pytest
-
 from src.ingest.gdelt import _parse_csv, _RELEVANT_ROOT_CODES
 
 

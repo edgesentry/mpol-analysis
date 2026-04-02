@@ -6,214 +6,140 @@ Step-by-step guide to run the full screening pipeline on your local machine and 
 
 | Requirement | Check |
 |---|---|
-| Python 3.12 | `python3 --version` |
-| uv | `uv --version` |
 | Docker (with Colima or Docker Desktop) | `docker info` |
+| Docker Compose v2 | `docker compose version` |
 | aisstream.io API key in `.env` | `AISSTREAM_API_KEY=<key>` |
-| LLM provider key in `.env` (for analyst briefs) | `LLM_API_KEY=<key>` or `ANTHROPIC_API_KEY=<key>` |
+| LLM provider key in `.env` (for analyst briefs) | `LLM_API_KEY=<key>` |
 
-Clone the repo and install dependencies:
+Clone the repo and create your `.env`:
 
 ```bash
-git clone https://github.com/edgesentry/mpol-analysis.git
-cd mpol-analysis
-uv sync --all-extras --group dev
-cp .env.example .env   # then fill in AISSTREAM_API_KEY and LLM credentials
+git clone https://github.com/edgesentry/arktrace.git
+cd arktrace
+cp .env.example .env
 ```
-
-See `.env.example` for LLM provider options (Gemini and Anthropic Claude examples are included).
 
 ---
 
-## Step 1 — Start Neo4j
+## API key setup
 
-```bash
-bash scripts/start_neo4j.sh
+### aisstream.io (AIS data)
+
+1. Register at https://aisstream.io and create an API key.
+2. Add it to `.env`:
+
+```env
+AISSTREAM_API_KEY=your_key_here
 ```
 
-The script is idempotent. It waits until Neo4j is ready before returning.
-
-Verify: open `http://localhost:7474` in a browser and log in with `neo4j / password`.
+Without this key the AIS streaming step is skipped (sanctions, ownership graph, and GDELT still run). Set `PIPELINE_STREAM_DURATION` to a non-zero value to actually collect live AIS.
 
 ---
 
-## Step 2 — A1: Initialise the database and stream live AIS
+### LLM provider (analyst briefs)
+
+The dashboard uses an LLM to generate analyst briefs for flagged vessels. Pick one provider and add the corresponding block to `.env`. The `LLM_PROVIDER` value controls which client is used.
+
+**OpenAI**
+
+```env
+LLM_PROVIDER=openai
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
+```
+
+Get an API key at https://platform.openai.com/api-keys.
+
+**Anthropic Claude**
+
+```env
+LLM_PROVIDER=anthropic
+LLM_API_KEY=sk-ant-...
+LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+Get an API key at https://console.anthropic.com.
+
+**Google Gemini**
+
+```env
+LLM_PROVIDER=gemini
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_API_KEY=your_gemini_api_key
+LLM_MODEL=gemini-2.5-flash-lite
+```
+
+Get an API key at https://aistudio.google.com/app/apikey.
+
+> **LLM is optional.** If no key is configured the dashboard loads normally — clicking **Get Brief** on a vessel displays "Brief unavailable" instead of streaming a brief.
+
+---
+
+## Step 1 — Start Neo4j and the dashboard
 
 ```bash
-uv run python src/ingest/schema.py
+docker compose up -d
 ```
 
-Expected output:
-```
-Schema initialised at data/processed/mpol.duckdb
-```
+This starts two services:
 
-The primary AIS source is **aisstream.io** (live WebSocket), which is pre-configured to the Singapore + Malacca Strait bounding box (`5°S–22°N, 92°E–122°E`). Run it for a few minutes to collect position reports, then interrupt with `Ctrl-C`:
+- **neo4j** — waits until the healthcheck passes before the dashboard connects
+- **dashboard** — FastAPI app at `http://localhost:8000`
+
+Verify Neo4j is up: open `http://localhost:7474` and log in with `neo4j / mpol-password`.
+
+---
+
+## Step 2 — Ingest data
+
+The pipeline script handles all ingestion and scoring in sequence: schema init → AIS streaming → sanctions → ownership graph → feature engineering → scoring → GDELT geopolitical context.
 
 ```bash
-uv run python src/ingest/ais_stream.py
+docker compose run --rm pipeline
 ```
 
-| Argument | Default | Description |
+Defaults to the **Singapore / Malacca Strait** region with no live AIS streaming and 3 days of GDELT context.
+
+**Options:**
+
+| Env var / flag | Default | Description |
 |---|---|---|
-| `--batch-size` | `200` | Number of messages to accumulate before flushing to DuckDB |
-| `--flush-interval` | `60` | Max seconds between flushes regardless of batch size |
-| `--db` | `data/processed/mpol.duckdb` | DuckDB path |
+| `PIPELINE_REGION` | `singapore` | Region preset: `singapore`, `japan`, `middleeast`, `europe`, `gulf` |
+| `PIPELINE_STREAM_DURATION` | _(unset)_ | Seconds of live AIS to collect before continuing |
+| `--gdelt-days N` | `3` | Days of GDELT events to ingest |
 
-Expected output (repeating until interrupted):
-```
-Connecting to wss://stream.aisstream.io/v0/stream …
-Subscribed — bbox [[-5.0, 92.0], [22.0, 122.0]], batch_size=200, flush_interval=60s
-  Flushed 200 records → 198 inserted (total 198)
-  Flushed 200 records → 195 inserted (total 393)
-  …
-^C
-Shutdown signal received — flushing final batch …
-Ingestion complete. Total inserted: <N>
+Examples:
+
+```bash
+# Different region
+PIPELINE_REGION=japan docker compose run --rm pipeline
+
+# Collect 5 minutes of live AIS
+PIPELINE_REGION=singapore PIPELINE_STREAM_DURATION=300 docker compose run --rm pipeline
+
+# More GDELT history
+docker compose run --rm pipeline uv run python scripts/run_pipeline.py \
+  --region singapore --non-interactive --gdelt-days 7
 ```
 
-> **Marine Cadastre is not used for Singapore data.** It covers US coastal waters only and is not applicable to this pipeline's area of interest. Ignore `src/ingest/marine_cadastre.py` for local testing.
+A successful run ends with:
+
+```
+[7/9] Scoring...                                   ✓  precision_at_50=0.62
+[8/9] Ingesting GDELT context (3d)...              ✓  Total events ingested: 5423
+[9/9] Launching dashboard...                       (skipped in non-interactive mode)
+```
+
+Output files are written to `./data/processed/` on the host:
+
+- `<region>.duckdb` — DuckDB database
+- `<region>_watchlist.parquet` — ranked candidate watchlist
+- `gdelt.lance/` — LanceDB vector store for analyst briefs
 
 ---
 
-## Step 3 — A2: Load sanctions and vessel registry
-
-```bash
-uv run python src/ingest/sanctions.py
-```
-
-Expected output:
-```
-Sanctions entities loaded: <N> rows
-```
-
-```bash
-uv run python src/ingest/vessel_registry.py
-```
-
-Expected output:
-```
-Vessel nodes merged: <N>
-Sanctions relationships created: <N>
-```
-
----
-
-## Step 4 — A3: Feature engineering
-
-Run the four feature scripts in any order (they all write into `vessel_features`):
-
-```bash
-uv run python src/features/ais_behavior.py
-uv run python src/features/identity.py
-uv run python src/features/ownership_graph.py
-uv run python src/features/trade_mismatch.py
-```
-
-Verify the feature matrix is populated:
-
-```bash
-uv run python - <<'EOF'
-import duckdb, os
-con = duckdb.connect(os.getenv("DB_PATH", "data/processed/mpol.duckdb"), read_only=True)
-print(con.execute("SELECT COUNT(*) FROM vessel_features").fetchone())
-con.close()
-EOF
-```
-
-Expected: a non-zero row count.
-
----
-
-## Step 5 — A4: Scoring and watchlist
-
-```bash
-uv run python src/score/mpol_baseline.py
-uv run python src/score/anomaly.py
-uv run python src/score/composite.py
-uv run python src/score/watchlist.py
-```
-
-Expected final output:
-```
-Watchlist rows written: <N>
-```
-
-Verify the output file:
-
-```bash
-uv run python - <<'EOF'
-import polars as pl
-df = pl.read_parquet("data/processed/candidate_watchlist.parquet")
-print(df.select(["mmsi", "vessel_name", "confidence", "top_signals"]).head(5))
-EOF
-```
-
-Expected: a ranked table with `confidence` descending, each row containing a JSON `top_signals` array.
-
----
-
-## Step 6 — A5: Validation metrics
-
-Validation runs automatically as part of the pipeline. Check the output:
-
-```bash
-cat data/processed/validation_metrics.json
-```
-
-Expected shape:
-
-```json
-{
-  "precision_at_50": 0.62,
-  "recall_at_200": 0.41,
-  "auroc": 0.78
-}
-```
-
-Acceptance criterion: `precision_at_50 >= 0.6`.
-
----
-
-## Step 7 — C2: Ingest GDELT geopolitical context
-
-This step seeds the LanceDB vector store used to generate analyst briefs in the dashboard. It downloads the previous day's GDELT event export, filters for conflict/sanctions/coercion events, and indexes them for full-text retrieval.
-
-```bash
-uv run python src/ingest/gdelt.py
-```
-
-To seed multiple days of history (recommended for meaningful context):
-
-```bash
-uv run python src/ingest/gdelt.py --days 7
-```
-
-Expected output:
-```
-20260401: 1842 events ingested
-20260331: 1765 events ingested
-…
-Total events ingested: <N>
-```
-
-The LanceDB store is written to `data/processed/gdelt.lance`. The download requires internet access; each daily file is ~15–30 MB compressed.
-
-Verify the store was created:
-
-```bash
-ls -lh data/processed/gdelt.lance/
-```
-
-Expected: a directory containing Lance data files.
-
----
-
-## Step 8 — Dashboard
-
-```bash
-uv run uvicorn src.api.main:app --reload
-```
+## Step 3 — Verify the dashboard
 
 Open `http://localhost:8000`. Verify:
 
@@ -222,20 +148,20 @@ Open `http://localhost:8000`. Verify:
 - KPI bar shows candidate count, high-confidence count, avg confidence, and validation metrics
 - Sidebar filters (minimum confidence, vessel type, top N) → click **Apply**
 
-**Analyst briefs (C2):** click any map marker to open the vessel popup, then click **Get Brief**. A one-paragraph analyst brief citing recent GDELT events streams progressively into the popup. Requires:
-- GDELT store seeded (Step 7)
-- A local LLM running (e.g. `mlx_lm.server --model mlx-community/Llama-3.2-3B-Instruct-4bit`) or cloud credentials set in `.env`
+**Validation metrics** — check acceptance criterion (`precision_at_50 >= 0.6`):
 
-Brief generation is best-effort — if no LLM is reachable the popup displays a "Brief unavailable" message without breaking the rest of the dashboard.
+```bash
+cat data/processed/validation_metrics.json
+```
 
-The FastAPI dashboard (`src/api/`) is the only dashboard. See [deployment.md](deployment.md) for full deployment options.
+**Analyst briefs (C2):** click any map marker → **Get Brief**. A one-paragraph brief citing recent GDELT events streams into the popup. Requires LLM credentials in `.env`. Best-effort — displays "Brief unavailable" if no LLM is reachable.
 
 ---
 
-## Step 9 — Unit tests
+## Unit tests
 
 ```bash
-uv run pytest tests/ -v
+docker compose run --rm pipeline uv run pytest tests/ -v
 ```
 
 Expected: **79 passed**, 3 warnings (sklearn FutureWarning, harmless).
@@ -245,5 +171,11 @@ Expected: **79 passed**, 3 warnings (sklearn FutureWarning, harmless).
 ## Teardown
 
 ```bash
-bash scripts/stop_neo4j.sh
+docker compose down
+```
+
+To also remove the persisted Neo4j data volume:
+
+```bash
+docker compose down -v
 ```

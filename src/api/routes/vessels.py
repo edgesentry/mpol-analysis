@@ -94,8 +94,10 @@ def watchlist_top(
         except Exception:
             signals_text = str(row.get("top_signals", "—"))[:60]
 
+        lat = row.get("last_lat") or ""
+        lon = row.get("last_lon") or ""
         rows_html.append(
-            f"<tr>"
+            f"<tr class='watchlist-row' data-mmsi='{row['mmsi']}' data-lat='{lat}' data-lon='{lon}' data-name='{row['vessel_name']}'>"
             f"<td>{row['mmsi']}</td>"
             f"<td>{row['vessel_name']}</td>"
             f"<td>{row['vessel_type']}</td>"
