@@ -282,9 +282,18 @@ def step_neo4j(p: RegionPreset, non_interactive: bool) -> bool:
     return _ask_retry_skip("Neo4j") == "skip"
 
 
-def step_ais_stream(p: RegionPreset, non_interactive: bool) -> bool:
+def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int = 0) -> bool:
+    import signal as _signal
+
     lat_min, lon_min, lat_max, lon_max = p.bbox
-    _step(3, TOTAL_STEPS, "Streaming AIS (Ctrl-C to stop)...")
+
+    if non_interactive and stream_duration == 0:
+        _step(3, TOTAL_STEPS, "Streaming AIS...")
+        print(_dim("(skipped — pass --stream-duration N to collect N seconds of live AIS)"))
+        return True
+
+    duration_note = f"  stopping after {stream_duration}s" if stream_duration else "  Ctrl-C to stop"
+    _step(3, TOTAL_STEPS, f"Streaming AIS ({duration_note.strip()})...")
     print()
     print(f"      bbox {p.bbox}  flush every 60s")
 
@@ -293,16 +302,21 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool) -> bool:
         "--db", p.db_path,
         "--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max),
     ]
+    proc = subprocess.Popen(cmd, env=os.environ.copy())
     try:
-        proc = subprocess.Popen(cmd, env=os.environ.copy())
+        proc.wait(timeout=stream_duration if stream_duration else None)
+    except subprocess.TimeoutExpired:
+        proc.send_signal(_signal.SIGINT)
         proc.wait()
+        print(f"      Streaming stopped after {stream_duration}s.  {_green('✓')}")
+        return True
     except KeyboardInterrupt:
-        proc.send_signal(__import__("signal").SIGINT)
+        proc.send_signal(_signal.SIGINT)
         proc.wait()
         print(f"      ^C  Ingestion stopped.  {_green('✓')}")
         return True
 
-    if proc.returncode == 0 or proc.returncode == -2:  # -2 = SIGINT
+    if proc.returncode == 0 or proc.returncode == -_signal.SIGINT:
         _ok()
         return True
 
@@ -452,6 +466,14 @@ def main() -> None:
         action="store_true",
         help="Run without prompts; fails fast on errors",
     )
+    parser.add_argument(
+        "--stream-duration",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="How long to collect live AIS data before moving on (default: 0 = skip in "
+             "--non-interactive, run until Ctrl-C in interactive mode)",
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -473,10 +495,12 @@ def main() -> None:
 
     print()
 
+    stream_duration: int = args.stream_duration
+
     steps = [
         step_schema,
         step_neo4j,
-        step_ais_stream,
+        lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
         step_ownership_graph,
         step_features,
@@ -487,7 +511,7 @@ def main() -> None:
     for step_fn in steps:
         ok = step_fn(preset, non_interactive)
         if not ok and non_interactive:
-            print(_red(f"\nPipeline aborted at {step_fn.__name__}."), file=sys.stderr)
+            print(_red(f"\nPipeline aborted at step {steps.index(step_fn) + 1}."), file=sys.stderr)
             sys.exit(1)
 
 
