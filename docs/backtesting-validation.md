@@ -163,6 +163,40 @@ Unit tests validate backtest metric/report generation (`tests/test_backtest.py`)
 
 For full offline evaluations in CI, add a scheduled job with curated historical artifacts and publish `backtest_report.json` as an artifact.
 
+## Periodic Reviewed-Outcome Evaluation Loop
+
+To close the feedback loop from analyst decisions, run the reviewed-outcome evaluator.
+This job consumes the latest `vessel_reviews` snapshot from DuckDB, joins it with
+regional watchlists, and emits:
+
+- Tier-aware reporting (review tier mix + top-k tier mix)
+- Operations-aware metrics (capacity hit-rate and min-score thresholds)
+- Region/capacity threshold recommendations with support counts
+- Drift/regression checks against a prior report baseline
+
+Run:
+
+```bash
+uv run python scripts/run_review_feedback_evaluation.py \
+  --db data/processed/mpol.duckdb \
+  --output data/processed/review_feedback_evaluation.json \
+  --review-capacities 25,50,100 \
+  --baseline-report data/processed/review_feedback_evaluation_prev.json \
+  --fail-on-regression
+```
+
+Key reproducibility controls:
+
+- `--as-of-utc` to freeze the review snapshot boundary
+- Stable region-to-watchlist mapping via `--watchlist region=path`
+- Persisted JSON artifact containing config, mappings, and tier-label policy
+
+Report output:
+
+- `summary`: snapshot size and labeled coverage
+- `regions[]`: tier-aware metrics, ops thresholds, recommended threshold evidence
+- `drift_regression_checks`: pass/fail checks versus baseline by region
+
 ## Public Data Integration Test (Opt-in)
 
 We provide an opt-in integration test that actually downloads public sanctions data,
