@@ -38,6 +38,31 @@ jobs:
       - name: Run tests
         run: uv run --group dev python -m pytest tests/ -v
 
+  docker_build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5730b6bbb1b56e05e57ac55f71c29cdc47fc2e6  # v3
+
+      - name: Build image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6
+        with:
+          context: .
+          push: false
+          tags: arktrace:${{ github.sha }}
+          # Layer cache stored in GitHub Actions Cache (10 GB limit per repo).
+          # When pyproject.toml/uv.lock are unchanged the uv sync layer
+          # (including compiled lance-graph Rust code) is restored from cache.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   license_check:
     name: OSS License Check
     runs-on: ubuntu-latest
