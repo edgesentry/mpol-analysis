@@ -1,0 +1,7 @@
+{
+  "source_db": "data/processed/public_eval.duckdb",
+  "demo_db": "data/demo/public_eval_demo.duckdb",
+  "max_rows": 300,
+  "inserted_rows": 300,
+  "updated_at_utc": "2026-04-03T09:54:05.901190+00:00"
+}

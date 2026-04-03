@@ -92,12 +92,115 @@ def _load_labels(labels_path: str) -> pl.DataFrame:
         if "label_confidence" in labels.columns
         else pl.lit("unknown")
     )
+    source_expr = (
+        pl.col("evidence_source").cast(pl.Utf8).str.strip_chars()
+        if "evidence_source" in labels.columns
+        else pl.lit("unknown")
+    )
+    url_expr = (
+        pl.col("evidence_url").cast(pl.Utf8).str.strip_chars()
+        if "evidence_url" in labels.columns
+        else pl.lit("")
+    )
 
     return labels.with_columns(
         *cols,
         pl.col("label").cast(pl.Utf8).str.to_lowercase().str.strip_chars().alias("label"),
         conf_expr.alias("label_confidence"),
+        source_expr.alias("evidence_source"),
+        url_expr.alias("evidence_url"),
     )
+
+
+def _source_positive_coverage(
+    ranked_all: pl.DataFrame,
+    labels: pl.DataFrame,
+    capacities: list[int],
+) -> dict[str, object]:
+    positives = labels.filter(pl.col("label").is_in(sorted(TRUE_LABELS)))
+    if positives.is_empty():
+        return {
+            "source_positive_total": 0,
+            "matched_total": 0,
+            "missed_total": 0,
+            "source_recall_in_watchlist": 0.0,
+            "detected_in_top_k": [],
+            "matched_examples": [],
+            "missed_examples": [],
+        }
+
+    ranked_rows = ranked_all.select(
+        [c for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"] if c in ranked_all.columns]
+    ).to_dicts()
+
+    mmsi_idx: dict[str, tuple[int, dict[str, object]]] = {}
+    imo_idx: dict[str, tuple[int, dict[str, object]]] = {}
+    for idx, row in enumerate(ranked_rows, start=1):
+        mmsi = _normalize_id(row.get("mmsi"))
+        imo = _normalize_id(row.get("imo"))
+        if mmsi and mmsi not in mmsi_idx:
+            mmsi_idx[mmsi] = (idx, row)
+        if imo and imo not in imo_idx:
+            imo_idx[imo] = (idx, row)
+
+    matched: list[dict[str, object]] = []
+    missed: list[dict[str, object]] = []
+    for row in positives.select(
+        [c for c in ["mmsi", "imo", "label_confidence", "evidence_source", "evidence_url"] if c in positives.columns]
+    ).iter_rows(named=True):
+        mmsi = _normalize_id(row.get("mmsi"))
+        imo = _normalize_id(row.get("imo"))
+        hit: tuple[int, dict[str, object]] | None = None
+        if mmsi and mmsi in mmsi_idx:
+            hit = mmsi_idx[mmsi]
+        elif imo and imo in imo_idx:
+            hit = imo_idx[imo]
+
+        common = {
+            "mmsi": mmsi,
+            "imo": imo,
+            "label_confidence": str(row.get("label_confidence") or "unknown"),
+            "evidence_source": str(row.get("evidence_source") or "unknown"),
+            "evidence_url": str(row.get("evidence_url") or ""),
+        }
+
+        if hit is None:
+            missed.append(common)
+            continue
+
+        rank, watch = hit
+        matched.append(
+            {
+                **common,
+                "rank": rank,
+                "vessel_name": watch.get("vessel_name"),
+                "vessel_type": watch.get("vessel_type"),
+                "watchlist_confidence": watch.get("confidence"),
+            }
+        )
+
+    detected_in_top_k: list[dict[str, int | float]] = []
+    matched_ranks = [int(x["rank"]) for x in matched]
+    total = len(positives)
+    for k in capacities:
+        hits = sum(1 for r in matched_ranks if r <= k)
+        detected_in_top_k.append(
+            {
+                "k": k,
+                "hits": hits,
+                "recall": round((hits / total) if total else 0.0, 4),
+            }
+        )
+
+    return {
+        "source_positive_total": total,
+        "matched_total": len(matched),
+        "missed_total": len(missed),
+        "source_recall_in_watchlist": round((len(matched) / total) if total else 0.0, 4),
+        "detected_in_top_k": detected_in_top_k,
+        "matched_examples": matched[:20],
+        "missed_examples": missed[:20],
+    }
 
 
 def _label_watchlist(watchlist: pl.DataFrame, labels: pl.DataFrame) -> pl.DataFrame:
@@ -298,6 +401,7 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
     labels = _load_labels(window.labels_path)
     labeled_all = _label_watchlist(watchlist, labels).sort("confidence", descending=True)
     labeled = labeled_all.filter(pl.col("y_true").is_not_null())
+    source_coverage = _source_positive_coverage(labeled_all, labels, capacities)
 
     if labeled.is_empty():
         metrics = {
@@ -322,6 +426,7 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
             "stratified_by_vessel_type": [],
             "error_analysis": {"false_positives": [], "false_negatives": []},
             "recommended_threshold": None,
+            "source_positive_coverage": source_coverage,
         }
 
     ranked = labeled.sort("confidence", descending=True)
@@ -377,6 +482,7 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
             "false_negatives": fn,
         },
         "recommended_threshold": round(float(used_threshold), 4),
+        "source_positive_coverage": source_coverage,
     }
 
 

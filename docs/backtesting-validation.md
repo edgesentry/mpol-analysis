@@ -76,6 +76,49 @@ Recommended:
 - Keep label confidence explicit to avoid over-claiming
 - Prefer MMSI and IMO where possible
 
+## Public Data for Identified Vessels
+
+Yes, we can build a useful labeled set from public data.
+
+### Practical positive-label sources
+
+1. Sanctions lists (machine-readable, strongest baseline)
+- OFAC SDN (US)
+- UN sanctions lists
+- EU sanctions lists
+
+2. Government and intergovernmental disclosures
+- Enforcement advisories and designation notices
+- Public case summaries naming vessels, IMO, or MMSI
+
+3. Reputable investigative datasets/reports
+- Open investigations that provide vessel identifiers and dated evidence
+
+### How to use these sources in evaluation
+
+- Treat sanctions/designations as high-confidence positives when vessel identifiers are present.
+- Include source URL and publication date in labels.
+- Map identifiers by MMSI and IMO (prefer both when available).
+- Freeze each evaluation window by date to prevent future information leakage.
+
+### Limits to keep in mind
+
+- Public data will not cover all true shadow-fleet vessels.
+- Some records are delayed, incomplete, or ambiguous.
+- Therefore, backtesting measures practical ranking utility, not perfect population recall.
+
+### Critical evaluation caveat
+
+- Cases that are neither detected by our algorithm nor publicly confirmed (not identified/caught in open sources) are treated as unknown and excluded from strict success/failure judgment.
+- The primary objective is to detect cases that are publicly confirmed with credible evidence.
+- Beyond that boundary, public data alone cannot provide rigorous ground truth for complete-recall evaluation.
+
+### Recommended confidence mapping
+
+- `high`: explicit sanctioned/officially designated vessel with identifier match
+- `medium`: multiple credible public sources with strong identifier evidence
+- `weak`: plausible but incomplete evidence (keep for analysis, not primary KPI)
+
 ## Run Backtest
 
 ```bash
@@ -119,3 +162,113 @@ Use `ops_thresholds` for deployment defaults when analyst capacity is fixed.
 Unit tests validate backtest metric/report generation (`tests/test_backtest.py`).
 
 For full offline evaluations in CI, add a scheduled job with curated historical artifacts and publish `backtest_report.json` as an artifact.
+
+## Public Data Integration Test (Opt-in)
+
+We provide an opt-in integration test that actually downloads public sanctions data,
+loads DuckDB, and evaluates found-vs-missed outcomes against practical positive-label sources.
+
+### Prepare once and reuse DB (recommended)
+
+Because OpenSanctions ingestion can take time, prepare a persistent DB once and reuse it in later tests.
+
+```bash
+uv run python scripts/prepare_public_sanctions_db.py \
+  --db data/processed/public_eval.duckdb
+```
+
+This writes:
+
+1. Persistent DB: `data/processed/public_eval.duckdb`
+2. Cached raw file: `data/raw/sanctions/opensanctions_entities.jsonl`
+3. Metadata snapshot: `data/processed/public_eval_metadata.json`
+
+To refresh data:
+
+```bash
+uv run python scripts/prepare_public_sanctions_db.py \
+  --db data/processed/public_eval.duckdb \
+  --force-download \
+  --force-reload
+```
+
+Run manually:
+
+```bash
+RUN_PUBLIC_DATA_TESTS=1 \
+  PUBLIC_SANCTIONS_DB=data/processed/public_eval.duckdb \
+  uv run --group dev python -m pytest tests/test_public_data_backtest_integration.py -v
+```
+
+Optional fallback (not recommended for daily runs): if `PUBLIC_SANCTIONS_DB` does not exist,
+you can allow the test to prepare data on demand by setting `PREPARE_PUBLIC_DATA_IF_MISSING=1`.
+
+## Demo-size Sample Dataset
+
+For demos, you can build a small sample DB from the prepared public DB.
+
+```bash
+uv run python scripts/build_public_sanctions_demo_sample.py \
+  --source-db data/processed/public_eval.duckdb \
+  --demo-db data/demo/public_eval_demo.duckdb \
+  --max-rows 300
+```
+
+This is useful for fast demos and local smoke checks without full-size ingestion.
+The `data/demo/` folder is intended to be committed to Git as portable demo fixtures.
+
+## Main-merge Integration Batch (Known-case Check)
+
+Run a medium-scale batch that:
+
+1. Reuses (or refreshes) the public sanctions DB.
+2. Runs multi-region pipeline output generation.
+3. Builds public-overlap labels per region.
+4. Executes backtesting and verifies a minimum known-case floor.
+
+Local equivalent run:
+
+```bash
+uv run python scripts/run_public_backtest_batch.py \
+  --regions singapore,japan,middleeast,europe,gulf \
+  --gdelt-days 14 \
+  --seed-dummy \
+  --max-known-cases 200 \
+  --min-known-cases 30 \
+  --strict-known-cases
+```
+
+Outputs:
+
+- `data/processed/evaluation_manifest_public_nightly.json`
+- `data/processed/backtest_report_public_nightly.json`
+- `data/processed/backtest_public_nightly_summary.json`
+- `data/processed/eval_labels_public_*_nightly.csv`
+
+GitHub Actions workflow:
+
+- `.github/workflows/public-backtest-integration.yml`
+
+Execution policy:
+
+- This integration batch runs automatically on `push` to `main` (post-merge).
+- It is not scheduled as a nightly cron job.
+
+If your target is "tens to hundreds" of known cases, tune:
+
+- `--max-known-cases` (upper cap)
+- `--min-known-cases` (required floor)
+- `--regions` and `--gdelt-days` (candidate pool breadth)
+
+What this test checks:
+
+1. Public sanctions data is downloadable and loadable into DuckDB.
+2. Labels can be derived from practical positive-label sources (OFAC/UN/EU-like tags).
+3. Backtest report includes:
+   - `source_positive_coverage.matched_total` (found by algorithm output overlap)
+   - `source_positive_coverage.missed_total` (publicly identified positives not found)
+
+Boundary reminder:
+
+- Cases not publicly identified/caught are outside strict pass/fail ground truth.
+- This test evaluates detection of publicly evidenced cases, which is the reliable scope for open-data validation.

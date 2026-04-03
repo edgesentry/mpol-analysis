@@ -212,4 +212,8 @@ data/processed/     # DuckDB files, Parquet outputs, Neo4j database
 site/               # MkDocs build output
 .env                # API keys (aisstream.io, Equasis)
 _inputs/
-data/
+
+# Keep data/ mostly ignored, but allow checked-in demo fixtures
+data/*
+!data/demo/
+!data/demo/**

@@ -24,10 +24,18 @@ def test_run_backtest_generates_report(tmp_path):
 
     labels = pl.DataFrame(
         {
-            "mmsi": ["111", "333", "444", "666"],
-            "imo": ["IMO111", "IMO333", "IMO444", "IMO666"],
-            "label": ["positive", "positive", "negative", "negative"],
-            "label_confidence": ["high", "medium", "high", "medium"],
+            "mmsi": ["111", "333", "999", "444", "666"],
+            "imo": ["IMO111", "IMO333", "IMO999", "IMO444", "IMO666"],
+            "label": ["positive", "positive", "positive", "negative", "negative"],
+            "label_confidence": ["high", "medium", "high", "high", "medium"],
+            "evidence_source": ["ofac_sdn", "un_list", "eu_list", "registry", "registry"],
+            "evidence_url": [
+                "https://ofac.example/111",
+                "https://un.example/333",
+                "https://eu.example/999",
+                "https://registry.example/444",
+                "https://registry.example/666",
+            ],
         }
     )
     labels.write_csv(labels_path)
@@ -61,6 +69,14 @@ def test_run_backtest_generates_report(tmp_path):
     assert metrics["precision_at_50"] >= 0.0
     assert metrics["precision_at_100"] >= 0.0
     assert "recommended_threshold" in w0
+
+    source_cov = w0["source_positive_coverage"]
+    assert source_cov["source_positive_total"] == 3
+    assert source_cov["matched_total"] == 2
+    assert source_cov["missed_total"] == 1
+    assert source_cov["source_recall_in_watchlist"] > 0.0
+    assert len(source_cov["matched_examples"]) == 2
+    assert len(source_cov["missed_examples"]) == 1
 
     summary = report["summary"]
     assert summary["window_count"] == 1
