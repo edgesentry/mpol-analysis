@@ -26,19 +26,25 @@ theme:
 
 nav:
   - Home: index.md
-  - Background: background.md
-  - Architecture: architecture.md
-  - Technical Solution: technical-solution.md
-  - Scenarios: scenarios.md
-  - Roadmap: roadmap.md
-  - Analytics:
-    - Overview: analytics-overview.md
+  - Requirements:
+    - Background: background.md
+    - Roadmap: roadmap.md
+  - Design:
+    - Architecture: architecture.md
+    - Technical Solution: technical-solution.md
+    - Analytics Overview: analytics-overview.md
     - Feature Engineering: feature-engineering.md
     - Scoring Model: scoring-model.md
-    - Backtesting Validation: backtesting-validation.md
+    - Scenarios: scenarios.md
+    - Triage Governance: triage-governance.md
+    - Field Investigation: field-investigation.md
+  - Implementation:
+    - Development Guide: development.md
+    - Local E2E Test: local-e2e-test.md
+    - Local LLM Setup: local-llm-setup.md
+  - Operations:
+    - Pipeline Catalog (Operations View): pipeline-catalog.md
     - Pipeline Operations: pipeline-operations.md
-  - Field Investigation: field-investigation.md
-  - Local E2E Test: local-e2e-test.md
-  - Deployment: deployment.md
-  - Regional Playbooks: regional-playbooks.md
-  - Development Guide: development.md
+    - Regional Playbooks: regional-playbooks.md
+    - Backtesting Validation: backtesting-validation.md
+    - Deployment: deployment.md

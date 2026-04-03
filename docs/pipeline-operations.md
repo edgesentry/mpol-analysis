@@ -2,6 +2,8 @@
 
 How to run the arktrace MPOL screening pipeline for each supported region, configure parameters, and interpret outputs.
 
+If you need an operations-level summary of pipeline types (purpose, run timing, expected results), see [Pipeline Catalog (Operations View)](pipeline-catalog.md).
+
 ## Quick start
 
 ```bash
