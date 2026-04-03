@@ -1,21 +1,4 @@
 services:
-  neo4j:
-    image: neo4j:2026.03.1-community
-    container_name: neo4j-mpol
-    environment:
-      NEO4J_AUTH: neo4j/mpol-password
-      NEO4J_PLUGINS: '["graph-data-science"]'
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    volumes:
-      - neo4j_data:/data
-    healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "mpol-password", "RETURN 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   dashboard:
     build: .
     container_name: mpol-dashboard
@@ -24,18 +7,12 @@ services:
     env_file:
       - .env
     environment:
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: mpol-password
       WATCHLIST_OUTPUT_PATH: data/processed/candidate_watchlist.parquet
       VALIDATION_METRICS_PATH: data/processed/validation_metrics.json
       ALERT_CONFIDENCE_THRESHOLD: "0.75"
       ALERT_POLL_INTERVAL: "60"
     volumes:
       - ./data:/app/data
-    depends_on:
-      neo4j:
-        condition: service_healthy
     command: ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
 
   pipeline:
@@ -43,15 +20,9 @@ services:
     env_file:
       - .env
     environment:
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: mpol-password
       WATCHLIST_OUTPUT_PATH: data/processed/candidate_watchlist.parquet
     volumes:
       - ./data:/app/data
-    depends_on:
-      neo4j:
-        condition: service_healthy
     profiles:
       - pipeline
     command: >
@@ -60,6 +31,3 @@ services:
       --non-interactive
       --seed-dummy
       ${PIPELINE_STREAM_DURATION:+--stream-duration ${PIPELINE_STREAM_DURATION}}
-
-volumes:
-  neo4j_data:

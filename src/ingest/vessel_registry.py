@@ -1,14 +1,14 @@
 """
-Vessel ownership registry — Neo4j graph builder.
+Vessel ownership registry — Lance Graph builder.
 
-Builds the ownership graph in Neo4j from two sources:
+Builds the ownership graph as Lance datasets from two sources:
 
 1. **Vessel nodes** seeded from DuckDB vessel_meta (populated by AIS ingestion).
 2. **Company, ownership, and sanctions relationships** derived from DuckDB
    sanctions_entities (populated by src/ingest/sanctions.py).
 3. **Equasis-style ownership chains** from an optional CSV export.
 
-Requires a running Neo4j instance (see AGENTS.md for the Docker command).
+No external graph server required — data is stored as Lance files on disk.
 
 Usage:
     uv run python src/ingest/vessel_registry.py
@@ -20,281 +20,241 @@ Usage:
 import argparse
 import csv
 import os
-from typing import Any
 
 import duckdb
+import pyarrow as pa
 from dotenv import load_dotenv
-from neo4j import GraphDatabase, Driver
+
+from src.graph.store import NODE_SCHEMAS, REL_SCHEMAS, write_tables
 
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-
-BATCH_SIZE = 500
 
 
 # ---------------------------------------------------------------------------
-# Schema / constraints
+# Helpers
 # ---------------------------------------------------------------------------
 
-_CONSTRAINTS = [
-    "CREATE CONSTRAINT vessel_mmsi IF NOT EXISTS FOR (v:Vessel) REQUIRE v.mmsi IS UNIQUE",
-    "CREATE CONSTRAINT company_id IF NOT EXISTS FOR (c:Company) REQUIRE c.id IS UNIQUE",
-    "CREATE CONSTRAINT country_code IF NOT EXISTS FOR (c:Country) REQUIRE c.code IS UNIQUE",
-    "CREATE CONSTRAINT address_id IF NOT EXISTS FOR (a:Address) REQUIRE a.address_id IS UNIQUE",
-    "CREATE CONSTRAINT person_id IF NOT EXISTS FOR (p:Person) REQUIRE p.person_id IS UNIQUE",
-    "CREATE CONSTRAINT regime_name IF NOT EXISTS FOR (r:SanctionsRegime) REQUIRE r.name IS UNIQUE",
-]
-
-
-def init_constraints(driver: Driver) -> None:
-    """Create uniqueness constraints (idempotent)."""
-    with driver.session() as session:
-        for stmt in _CONSTRAINTS:
-            session.run(stmt)
+def _rows_to_table(rows: list[dict], schema: pa.Schema) -> pa.Table:
+    """Convert a list of dicts to a PyArrow table, filling missing fields with None."""
+    if not rows:
+        return schema.empty_table()
+    arrays = {field.name: [r.get(field.name) for r in rows] for field in schema}
+    return pa.table(arrays, schema=schema)
 
 
 # ---------------------------------------------------------------------------
-# Vessel nodes from DuckDB
+# Graph builder
 # ---------------------------------------------------------------------------
 
-_MERGE_VESSELS = """
-UNWIND $batch AS row
-MERGE (v:Vessel {mmsi: row.mmsi})
-SET v.imo  = row.imo,
-    v.name = row.name
-"""
+def build_graph_tables(
+    db_path: str,
+    equasis_csv: str | None = None,
+) -> dict[str, pa.Table]:
+    """Build all graph tables from DuckDB and an optional Equasis CSV.
 
-_MERGE_VESSEL_ALIAS = """
-UNWIND $batch AS row
-MATCH (v:Vessel {mmsi: row.mmsi})
-MERGE (n:VesselName {name: row.alias_name})
-MERGE (v)-[:ALIAS {date: row.alias_date}]->(n)
-"""
-
-
-def load_vessels_from_duckdb(db_path: str, driver: Driver) -> int:
-    """Seed Vessel nodes from DuckDB vessel_meta. Returns node count upserted."""
+    Returns a dict of PyArrow tables ready to be written as Lance datasets.
+    """
     con = duckdb.connect(db_path, read_only=True)
     try:
-        rows = con.execute(
+        vessel_rows = con.execute(
             "SELECT mmsi, COALESCE(imo,'') AS imo, COALESCE(name,'') AS name "
             "FROM vessel_meta WHERE mmsi IS NOT NULL"
         ).fetchall()
-    finally:
-        con.close()
 
-    if not rows:
-        return 0
-
-    batch = [{"mmsi": r[0], "imo": r[1], "name": r[2]} for r in rows]
-    total = 0
-    with driver.session() as session:
-        for i in range(0, len(batch), BATCH_SIZE):
-            chunk = batch[i : i + BATCH_SIZE]
-            session.run(_MERGE_VESSELS, batch=chunk)
-            total += len(chunk)
-    return total
-
-
-# ---------------------------------------------------------------------------
-# Company / sanctions nodes from DuckDB sanctions_entities
-# ---------------------------------------------------------------------------
-
-_MERGE_COMPANIES = """
-UNWIND $batch AS row
-MERGE (c:Company {id: row.entity_id})
-SET c.name    = row.name,
-    c.country = row.flag
-WITH c, row
-WHERE row.flag IS NOT NULL
-MERGE (co:Country {code: row.flag})
-MERGE (c)-[:REGISTERED_IN]->(co)
-"""
-
-_MERGE_VESSEL_SANCTIONS = """
-UNWIND $batch AS row
-MATCH (v:Vessel)
-WHERE v.mmsi = row.mmsi OR v.imo = row.imo
-MERGE (r:SanctionsRegime {name: row.list_source})
-MERGE (v)-[:SANCTIONED_BY {list: row.list_source, date: row.entity_id}]->(r)
-"""
-
-_MERGE_COMPANY_SANCTIONS = """
-UNWIND $batch AS row
-MERGE (c:Company {id: row.entity_id})
-SET c.name = row.name
-MERGE (r:SanctionsRegime {name: row.list_source})
-MERGE (c)-[:SANCTIONED_BY {list: row.list_source}]->(r)
-"""
-
-
-def load_sanctions_graph(db_path: str, driver: Driver) -> dict[str, int]:
-    """Create Company and SanctionsRegime nodes from DuckDB sanctions_entities."""
-    con = duckdb.connect(db_path, read_only=True)
-    try:
-        companies = con.execute(
-            "SELECT entity_id, name, flag, list_source FROM sanctions_entities "
+        company_rows = con.execute(
+            "SELECT entity_id, COALESCE(name,'') AS name, COALESCE(flag,'') AS flag, "
+            "list_source FROM sanctions_entities "
             "WHERE type IN ('Company','Organization','LegalEntity')"
         ).fetchall()
 
-        sanctioned_vessels = con.execute(
-            "SELECT entity_id, mmsi, imo, list_source FROM sanctions_entities "
+        sanctioned_vessel_rows = con.execute(
+            "SELECT entity_id, COALESCE(mmsi,'') AS mmsi, COALESCE(imo,'') AS imo, "
+            "list_source FROM sanctions_entities "
             "WHERE type = 'Vessel' AND (mmsi IS NOT NULL OR imo IS NOT NULL)"
         ).fetchall()
 
-        sanctioned_companies = con.execute(
-            "SELECT entity_id, name, list_source FROM sanctions_entities "
+        sanctioned_company_rows = con.execute(
+            "SELECT entity_id, COALESCE(name,'') AS name, list_source "
+            "FROM sanctions_entities "
             "WHERE type IN ('Company','Organization','LegalEntity')"
         ).fetchall()
     finally:
         con.close()
 
-    counts: dict[str, int] = {}
+    # ------------------------------------------------------------------
+    # Node accumulators (dict keyed by unique ID for MERGE semantics)
+    # ------------------------------------------------------------------
+    vessels: dict[str, dict] = {}
+    for r in vessel_rows:
+        vessels[r[0]] = {"mmsi": r[0], "imo": r[1], "name": r[2]}
 
-    # Upsert company nodes
-    company_batch = [
-        {"entity_id": r[0], "name": r[1], "flag": r[2], "list_source": r[3]}
-        for r in companies
-    ]
-    with driver.session() as session:
-        for i in range(0, len(company_batch), BATCH_SIZE):
-            session.run(_MERGE_COMPANIES, batch=company_batch[i : i + BATCH_SIZE])
-    counts["companies"] = len(company_batch)
+    companies: dict[str, dict] = {}
+    for entity_id, name, flag, _ in company_rows:
+        companies[entity_id] = {"id": entity_id, "name": name, "country": flag}
 
-    # SANCTIONED_BY edges for vessels
-    vessel_batch = [
-        {"entity_id": r[0], "mmsi": r[1] or "", "imo": r[2] or "", "list_source": r[3]}
-        for r in sanctioned_vessels
-    ]
-    with driver.session() as session:
-        for i in range(0, len(vessel_batch), BATCH_SIZE):
-            session.run(_MERGE_VESSEL_SANCTIONS, batch=vessel_batch[i : i + BATCH_SIZE])
-    counts["vessel_sanctions"] = len(vessel_batch)
+    countries: dict[str, dict] = {}
+    for _, _, flag, _ in company_rows:
+        if flag:
+            countries[flag] = {"code": flag}
 
-    # SANCTIONED_BY edges for companies
-    co_sanction_batch = [
-        {"entity_id": r[0], "name": r[1], "list_source": r[2]}
-        for r in sanctioned_companies
-    ]
-    with driver.session() as session:
-        for i in range(0, len(co_sanction_batch), BATCH_SIZE):
-            session.run(_MERGE_COMPANY_SANCTIONS, batch=co_sanction_batch[i : i + BATCH_SIZE])
-    counts["company_sanctions"] = len(co_sanction_batch)
+    regimes: set[str] = set()
+    for *_, list_source in sanctioned_vessel_rows:
+        regimes.add(list_source)
+    for *_, list_source in sanctioned_company_rows:
+        regimes.add(list_source)
 
-    return counts
+    addresses: dict[str, dict] = {}
+    vessel_names: dict[str, dict] = {}
 
+    # ------------------------------------------------------------------
+    # Relationship accumulators (list; duplicates checked via seen sets)
+    # ------------------------------------------------------------------
+    sanctioned_by: list[dict] = []
+    _sb_seen: set[tuple] = set()
 
-# ---------------------------------------------------------------------------
-# Equasis CSV loader
-# ---------------------------------------------------------------------------
-#
-# Expected CSV columns (all optional except mmsi):
-#   mmsi, imo, vessel_name,
-#   owner_id, owner_name, owner_country, owner_address_id, owner_address,
-#   manager_id, manager_name, manager_country,
-#   since, until
-#
-# Rows without owner_id are silently skipped (vessel node still created).
+    registered_in: list[dict] = []
+    _ri_seen: set[tuple] = set()
 
-_MERGE_OWNERSHIP = """
-UNWIND $batch AS row
-MERGE (v:Vessel {mmsi: row.mmsi})
-SET v.imo = row.imo, v.name = row.vessel_name
-MERGE (c:Company {id: row.owner_id})
-SET c.name = row.owner_name
-WITH v, c, row
-WHERE row.owner_country <> ''
-MERGE (co:Country {code: row.owner_country})
-MERGE (c)-[:REGISTERED_IN]->(co)
-WITH v, c, row
-MERGE (v)-[r:OWNED_BY]->(c)
-SET r.since = row.since, r.until = row.until
-"""
+    registered_at: list[dict] = []
+    owned_by: list[dict] = []
+    managed_by: list[dict] = []
+    aliases: list[dict] = []
 
-_MERGE_MANAGEMENT = """
-UNWIND $batch AS row
-MATCH (v:Vessel {mmsi: row.mmsi})
-MERGE (m:Company {id: row.manager_id})
-SET m.name = row.manager_name
-WITH v, m, row
-MERGE (v)-[r:MANAGED_BY]->(m)
-SET r.since = row.since, r.until = row.until
-"""
+    # ------------------------------------------------------------------
+    # SANCTIONED_BY edges
+    # ------------------------------------------------------------------
+    # Build mmsi→vessel and imo→vessel indices for sanctions lookup
+    imo_index: dict[str, str] = {v["imo"]: v["mmsi"] for v in vessels.values() if v["imo"]}
 
-_MERGE_OWNER_ADDRESS = """
-UNWIND $batch AS row
-MATCH (c:Company {id: row.owner_id})
-MERGE (a:Address {address_id: row.owner_address_id})
-SET a.street = row.owner_address
-MERGE (c)-[:REGISTERED_AT]->(a)
-"""
+    for entity_id, mmsi, imo, list_source in sanctioned_vessel_rows:
+        vessel_id = mmsi or imo_index.get(imo)
+        if vessel_id and (vessel_id, list_source) not in _sb_seen:
+            sanctioned_by.append({
+                "src_id": vessel_id,
+                "dst_id": list_source,
+                "list": list_source,
+                "date": entity_id,
+            })
+            _sb_seen.add((vessel_id, list_source))
 
+    for entity_id, _name, list_source in sanctioned_company_rows:
+        if (entity_id, list_source) not in _sb_seen:
+            sanctioned_by.append({
+                "src_id": entity_id,
+                "dst_id": list_source,
+                "list": list_source,
+                "date": "",
+            })
+            _sb_seen.add((entity_id, list_source))
 
-def load_equasis_csv(csv_path: str, driver: Driver) -> dict[str, int]:
-    """Load vessel ownership chains from an Equasis-style CSV export."""
-    ownership_batch: list[dict] = []
-    management_batch: list[dict] = []
-    address_batch: list[dict] = []
+    # ------------------------------------------------------------------
+    # REGISTERED_IN edges (company → country)
+    # ------------------------------------------------------------------
+    for entity_id, _, flag, _ in company_rows:
+        if flag and (entity_id, flag) not in _ri_seen:
+            registered_in.append({"src_id": entity_id, "dst_id": flag})
+            _ri_seen.add((entity_id, flag))
 
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            mmsi = (row.get("mmsi") or "").strip()
-            if not mmsi:
-                continue
+    # ------------------------------------------------------------------
+    # Equasis CSV — ownership / management chains
+    # ------------------------------------------------------------------
+    if equasis_csv:
+        with open(equasis_csv, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                mmsi = (row.get("mmsi") or "").strip()
+                if not mmsi:
+                    continue
 
-            base = {
-                "mmsi": mmsi,
-                "imo": (row.get("imo") or "").strip(),
-                "vessel_name": (row.get("vessel_name") or "").strip(),
-                "since": (row.get("since") or "").strip(),
-                "until": (row.get("until") or "").strip(),
-            }
+                imo = (row.get("imo") or "").strip()
+                vessel_name = (row.get("vessel_name") or "").strip()
+                since = (row.get("since") or "").strip()
+                until = (row.get("until") or "").strip()
 
-            owner_id = (row.get("owner_id") or "").strip()
-            if owner_id:
-                ownership_batch.append({
-                    **base,
-                    "owner_id": owner_id,
-                    "owner_name": (row.get("owner_name") or "").strip(),
-                    "owner_country": (row.get("owner_country") or "").strip(),
-                })
+                # Upsert vessel
+                existing = vessels.get(mmsi, {})
+                vessels[mmsi] = {
+                    "mmsi": mmsi,
+                    "imo": imo or existing.get("imo", ""),
+                    "name": vessel_name or existing.get("name", ""),
+                }
 
-                addr_id = (row.get("owner_address_id") or "").strip()
-                if addr_id:
-                    address_batch.append({
-                        "owner_id": owner_id,
-                        "owner_address_id": addr_id,
-                        "owner_address": (row.get("owner_address") or "").strip(),
+                owner_id = (row.get("owner_id") or "").strip()
+                if owner_id:
+                    owner_name = (row.get("owner_name") or "").strip()
+                    owner_country = (row.get("owner_country") or "").strip()
+
+                    existing_co = companies.get(owner_id, {})
+                    companies[owner_id] = {
+                        "id": owner_id,
+                        "name": owner_name or existing_co.get("name", ""),
+                        "country": owner_country or existing_co.get("country", ""),
+                    }
+                    if owner_country:
+                        countries[owner_country] = {"code": owner_country}
+                        if (owner_id, owner_country) not in _ri_seen:
+                            registered_in.append({"src_id": owner_id, "dst_id": owner_country})
+                            _ri_seen.add((owner_id, owner_country))
+
+                    owned_by.append({
+                        "src_id": mmsi,
+                        "dst_id": owner_id,
+                        "since": since,
+                        "until": until,
                     })
 
-            manager_id = (row.get("manager_id") or "").strip()
-            if manager_id:
-                management_batch.append({
-                    **base,
-                    "manager_id": manager_id,
-                    "manager_name": (row.get("manager_name") or "").strip(),
-                })
+                    addr_id = (row.get("owner_address_id") or "").strip()
+                    if addr_id:
+                        addresses[addr_id] = {
+                            "address_id": addr_id,
+                            "street": (row.get("owner_address") or "").strip(),
+                        }
+                        registered_at.append({"src_id": owner_id, "dst_id": addr_id})
 
-    counts: dict[str, int] = {}
-    with driver.session() as session:
-        for i in range(0, len(ownership_batch), BATCH_SIZE):
-            session.run(_MERGE_OWNERSHIP, batch=ownership_batch[i : i + BATCH_SIZE])
-        counts["ownership"] = len(ownership_batch)
+                manager_id = (row.get("manager_id") or "").strip()
+                if manager_id:
+                    manager_name = (row.get("manager_name") or "").strip()
+                    existing_mgr = companies.get(manager_id, {})
+                    companies[manager_id] = {
+                        "id": manager_id,
+                        "name": manager_name or existing_mgr.get("name", ""),
+                        "country": existing_mgr.get("country", ""),
+                    }
+                    managed_by.append({
+                        "src_id": mmsi,
+                        "dst_id": manager_id,
+                        "since": since,
+                        "until": until,
+                    })
 
-        for i in range(0, len(management_batch), BATCH_SIZE):
-            session.run(_MERGE_MANAGEMENT, batch=management_batch[i : i + BATCH_SIZE])
-        counts["management"] = len(management_batch)
+    # ------------------------------------------------------------------
+    # Assemble PyArrow tables
+    # ------------------------------------------------------------------
+    empty_str_pair = pa.table({
+        "src_id": pa.array([], type=pa.string()),
+        "dst_id": pa.array([], type=pa.string()),
+    })
 
-        for i in range(0, len(address_batch), BATCH_SIZE):
-            session.run(_MERGE_OWNER_ADDRESS, batch=address_batch[i : i + BATCH_SIZE])
-        counts["addresses"] = len(address_batch)
-
-    return counts
+    return {
+        "Vessel":          _rows_to_table(list(vessels.values()),      NODE_SCHEMAS["Vessel"]),
+        "Company":         _rows_to_table(list(companies.values()),    NODE_SCHEMAS["Company"]),
+        "Country":         _rows_to_table(list(countries.values()),    NODE_SCHEMAS["Country"]),
+        "Address":         _rows_to_table(list(addresses.values()),    NODE_SCHEMAS["Address"]),
+        "VesselName":      _rows_to_table(list(vessel_names.values()), NODE_SCHEMAS["VesselName"]),
+        "SanctionsRegime": _rows_to_table([{"name": n} for n in regimes], NODE_SCHEMAS["SanctionsRegime"]),
+        "ALIAS":           _rows_to_table(aliases,        REL_SCHEMAS["ALIAS"]),
+        "OWNED_BY":        _rows_to_table(owned_by,       REL_SCHEMAS["OWNED_BY"]),
+        "MANAGED_BY":      _rows_to_table(managed_by,     REL_SCHEMAS["MANAGED_BY"]),
+        "SANCTIONED_BY":   _rows_to_table(sanctioned_by,  REL_SCHEMAS["SANCTIONED_BY"]),
+        "REGISTERED_IN":   _rows_to_table(registered_in,  REL_SCHEMAS["REGISTERED_IN"]),
+        "REGISTERED_AT":   _rows_to_table(registered_at,  REL_SCHEMAS["REGISTERED_AT"]),
+        # CONTROLLED_BY is populated externally (e.g. company hierarchy data)
+        "CONTROLLED_BY":   REL_SCHEMAS["CONTROLLED_BY"].empty_table(),
+        # STS_CONTACT is populated by the AIS behavior pipeline
+        "STS_CONTACT":     REL_SCHEMAS["STS_CONTACT"].empty_table(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -302,34 +262,17 @@ def load_equasis_csv(csv_path: str, driver: Driver) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build vessel ownership graph in Neo4j")
+    parser = argparse.ArgumentParser(description="Build vessel ownership graph (Lance Graph)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--neo4j-uri", default=NEO4J_URI)
-    parser.add_argument("--neo4j-user", default=NEO4J_USER)
-    parser.add_argument("--neo4j-password", default=NEO4J_PASSWORD)
     parser.add_argument("--equasis-csv", default=None,
                         help="Path to Equasis ownership chain CSV export")
     args = parser.parse_args()
 
-    driver = GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password))
-    try:
-        print("Initialising Neo4j constraints …")
-        init_constraints(driver)
+    print("Building ownership graph tables …")
+    tables = build_graph_tables(args.db, equasis_csv=args.equasis_csv)
 
-        print("Loading vessel nodes from DuckDB vessel_meta …")
-        n = load_vessels_from_duckdb(args.db, driver)
-        print(f"  {n} vessel nodes upserted")
+    print("Writing Lance datasets …")
+    write_tables(args.db, tables)
 
-        print("Loading company/sanctions graph from DuckDB sanctions_entities …")
-        counts = load_sanctions_graph(args.db, driver)
-        for k, v in counts.items():
-            print(f"  {k}: {v}")
-
-        if args.equasis_csv:
-            print(f"Loading ownership chains from {args.equasis_csv} …")
-            counts = load_equasis_csv(args.equasis_csv, driver)
-            for k, v in counts.items():
-                print(f"  {k}: {v}")
-
-    finally:
-        driver.close()
+    for name, table in tables.items():
+        print(f"  {name}: {len(table)} rows")

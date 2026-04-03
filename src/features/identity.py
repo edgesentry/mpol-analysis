@@ -1,8 +1,8 @@
 """
 Identity volatility feature engineering.
 
-Queries Neo4j for per-vessel identity change counts and ownership structure.
-Also reads vessel_meta from DuckDB for the current flag state.
+Queries the Lance Graph datasets for per-vessel identity change counts and
+ownership structure. Also reads vessel_meta from DuckDB for the current flag state.
 
 Output columns (one row per MMSI):
     mmsi, flag_changes_2y, name_changes_2y, owner_changes_2y,
@@ -17,14 +17,12 @@ import os
 import duckdb
 import polars as pl
 from dotenv import load_dotenv
-from neo4j import Driver, GraphDatabase
+
+from src.graph.store import load_tables
 
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 
 # Flags with weak Port State Control oversight (UNCTAD/Paris MOU grey/black list proxies)
 HIGH_RISK_FLAGS = {
@@ -35,82 +33,161 @@ HIGH_RISK_FLAGS = {
 
 
 # ---------------------------------------------------------------------------
-# Neo4j queries
+# Feature computations (polars joins on PyArrow tables)
 # ---------------------------------------------------------------------------
 
-_QUERY_NAME_CHANGES = """
-MATCH (v:Vessel)
-OPTIONAL MATCH (v)-[:ALIAS]->(n:VesselName)
-RETURN v.mmsi AS mmsi, count(n) AS name_changes_2y
-"""
+def _compute_name_changes(tables: dict) -> pl.DataFrame:
+    vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
+    aliases = pl.from_arrow(tables["ALIAS"])
 
-_QUERY_OWNER_CHANGES = """
-MATCH (v:Vessel)
-OPTIONAL MATCH (v)-[r:OWNED_BY]->()
-RETURN v.mmsi AS mmsi, count(r) AS owner_changes_2y
-"""
+    if len(aliases) == 0:
+        return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("name_changes_2y"))
 
-_QUERY_OWNERSHIP_DEPTH = """
-MATCH (v:Vessel)
-OPTIONAL MATCH path = (v)-[:OWNED_BY]->(:Company)-[:CONTROLLED_BY*0..5]->(:Company)
-RETURN v.mmsi AS mmsi, coalesce(max(length(path)), 0) AS ownership_depth
-"""
-
-_QUERY_OWNER_COUNTRIES = """
-MATCH (v:Vessel)
-OPTIONAL MATCH (v)-[:OWNED_BY]->(c:Company)-[:REGISTERED_IN]->(co:Country)
-RETURN v.mmsi AS mmsi, collect(co.code) AS owner_countries
-"""
+    counts = (
+        aliases.rename({"src_id": "mmsi"})
+        .group_by("mmsi")
+        .agg(pl.len().alias("name_changes_2y"))
+    )
+    return (
+        vessels
+        .join(counts, on="mmsi", how="left")
+        .with_columns(pl.col("name_changes_2y").fill_null(0).cast(pl.Int32))
+    )
 
 
-def _run_query(driver: Driver, cypher: str) -> list[dict]:
-    with driver.session() as session:
-        return [dict(r) for r in session.run(cypher)]
+def _compute_owner_changes(tables: dict) -> pl.DataFrame:
+    vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
+    ob = pl.from_arrow(tables["OWNED_BY"])
+
+    if len(ob) == 0:
+        return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("owner_changes_2y"))
+
+    counts = (
+        ob.rename({"src_id": "mmsi"})
+        .group_by("mmsi")
+        .agg(pl.len().alias("owner_changes_2y"))
+    )
+    return (
+        vessels
+        .join(counts, on="mmsi", how="left")
+        .with_columns(pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32))
+    )
 
 
-def _compute_high_risk_ratio(owner_countries: list[str]) -> float:
-    """Fraction of owning-company country codes that are high-risk."""
-    if not owner_countries:
-        return 0.0
-    risky = sum(1 for c in owner_countries if c in HIGH_RISK_FLAGS)
-    return risky / len(owner_countries)
+def _compute_ownership_depth(tables: dict) -> pl.DataFrame:
+    """Max ownership chain depth: OWNED_BY(1) + CONTROLLED_BY hops (0..5)."""
+    vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
+    ob = pl.from_arrow(tables["OWNED_BY"])
+    cb = pl.from_arrow(tables["CONTROLLED_BY"])
+
+    if len(ob) == 0:
+        return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("ownership_depth"))
+
+    # Vessels with at least one owner start at depth=1
+    has_owner = set(ob["src_id"].to_list())
+
+    if len(cb) == 0:
+        # No CONTROLLED_BY edges → depth is 1 for any vessel with an owner, 0 otherwise
+        return vessels.with_columns(
+            pl.when(pl.col("mmsi").is_in(has_owner))
+            .then(1)
+            .otherwise(0)
+            .cast(pl.Int32)
+            .alias("ownership_depth")
+        )
+
+    # BFS through CONTROLLED_BY for each owned company (up to 5 hops)
+    # Build adjacency: company → parent companies
+    cb_map: dict[str, list[str]] = {}
+    for src, dst in cb.select(["src_id", "dst_id"]).iter_rows():
+        cb_map.setdefault(src, []).append(dst)
+
+    # For each vessel, find all companies it owns, then BFS through CONTROLLED_BY
+    vessel_companies: dict[str, set[str]] = {}
+    for vessel, company in ob.select(["src_id", "dst_id"]).iter_rows():
+        vessel_companies.setdefault(vessel, set()).add(company)
+
+    depth_map: dict[str, int] = {}
+    for mmsi, start_companies in vessel_companies.items():
+        max_depth = 1  # OWNED_BY = 1
+        frontier = set(start_companies)
+        for hop in range(1, 6):
+            next_frontier: set[str] = set()
+            for company in frontier:
+                next_frontier.update(cb_map.get(company, []))
+            if not next_frontier:
+                break
+            frontier = next_frontier
+            max_depth = 1 + hop
+        depth_map[mmsi] = max_depth
+
+    depth_df = pl.DataFrame(
+        [{"mmsi": k, "ownership_depth": v} for k, v in depth_map.items()],
+        schema={"mmsi": pl.Utf8, "ownership_depth": pl.Int32},
+    )
+
+    return (
+        vessels
+        .join(depth_df, on="mmsi", how="left")
+        .with_columns(pl.col("ownership_depth").fill_null(0).cast(pl.Int32))
+    )
 
 
-def compute_identity_features(
-    driver: Driver,
-    db_path: str = DEFAULT_DB_PATH,
-) -> pl.DataFrame:
-    """Query Neo4j + DuckDB for identity volatility features."""
+def _compute_high_risk_flag_ratio(tables: dict) -> pl.DataFrame:
+    """Fraction of owning-company country codes that are high-risk flags."""
+    vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
+    ob = pl.from_arrow(tables["OWNED_BY"])
+    ri = pl.from_arrow(tables["REGISTERED_IN"])
 
-    # --- Name changes ---
-    name_rows = _run_query(driver, _QUERY_NAME_CHANGES)
-    name_df = pl.DataFrame(name_rows, schema={"mmsi": pl.Utf8, "name_changes_2y": pl.Int32}) \
-        if name_rows else pl.DataFrame(schema={"mmsi": pl.Utf8, "name_changes_2y": pl.Int32})
+    if len(ob) == 0 or len(ri) == 0:
+        return vessels.with_columns(pl.lit(0.0).cast(pl.Float32).alias("high_risk_flag_ratio"))
 
-    # --- Owner changes ---
-    owner_rows = _run_query(driver, _QUERY_OWNER_CHANGES)
-    owner_df = pl.DataFrame(owner_rows, schema={"mmsi": pl.Utf8, "owner_changes_2y": pl.Int32}) \
-        if owner_rows else pl.DataFrame(schema={"mmsi": pl.Utf8, "owner_changes_2y": pl.Int32})
+    # vessel → company → country
+    vessel_countries = (
+        ob.select(["src_id", "dst_id"])
+        .rename({"src_id": "mmsi", "dst_id": "company"})
+        .join(ri.rename({"src_id": "company", "dst_id": "country"}), on="company")
+        .select(["mmsi", "country"])
+        .unique()
+    )
 
-    # --- Ownership depth ---
-    depth_rows = _run_query(driver, _QUERY_OWNERSHIP_DEPTH)
-    depth_df = pl.DataFrame(depth_rows, schema={"mmsi": pl.Utf8, "ownership_depth": pl.Int32}) \
-        if depth_rows else pl.DataFrame(schema={"mmsi": pl.Utf8, "ownership_depth": pl.Int32})
+    if len(vessel_countries) == 0:
+        return vessels.with_columns(pl.lit(0.0).cast(pl.Float32).alias("high_risk_flag_ratio"))
 
-    # --- High-risk flag ratio (from owning company countries) ---
-    country_rows = _run_query(driver, _QUERY_OWNER_COUNTRIES)
-    if country_rows:
-        hrisk_df = pl.DataFrame([
-            {
-                "mmsi": r["mmsi"],
-                "high_risk_flag_ratio": _compute_high_risk_ratio(r["owner_countries"] or []),
-            }
-            for r in country_rows
-        ], schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
-    else:
-        hrisk_df = pl.DataFrame(schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
+    rows = []
+    for mmsi, grp in vessel_countries.group_by("mmsi"):
+        countries = grp["country"].to_list()
+        if not countries:
+            ratio = 0.0
+        else:
+            risky = sum(1 for c in countries if c in HIGH_RISK_FLAGS)
+            ratio = risky / len(countries)
+        rows.append({"mmsi": mmsi[0] if isinstance(mmsi, tuple) else mmsi, "high_risk_flag_ratio": ratio})
 
-    # --- flag_changes_2y: from vessel current flag in DuckDB (0 where history unavailable) ---
+    hrisk_df = pl.DataFrame(rows, schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32}) \
+        if rows else pl.DataFrame(schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
+
+    return (
+        vessels
+        .join(hrisk_df, on="mmsi", how="left")
+        .with_columns(pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
+    """Load Lance datasets + DuckDB for identity volatility features."""
+    tables = load_tables(db_path)
+
+    name_df  = _compute_name_changes(tables)
+    owner_df = _compute_owner_changes(tables)
+    depth_df = _compute_ownership_depth(tables)
+    hrisk_df = _compute_high_risk_flag_ratio(tables)
+
+    # flag_changes_2y: from DuckDB vessel_meta (0 where full history unavailable)
     con = duckdb.connect(db_path, read_only=True)
     try:
         meta = con.execute(
@@ -123,7 +200,6 @@ def compute_identity_features(
         pl.lit(0).cast(pl.Int32).alias("flag_changes_2y")
     ).select(["mmsi", "flag_changes_2y"])
 
-    # --- Join ---
     all_mmsi = name_df.select("mmsi")
     if all_mmsi.is_empty() and not flag_df.is_empty():
         all_mmsi = flag_df.select("mmsi")
@@ -150,15 +226,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Compute identity volatility features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--neo4j-uri", default=NEO4J_URI)
-    parser.add_argument("--neo4j-user", default=NEO4J_USER)
-    parser.add_argument("--neo4j-password", default=NEO4J_PASSWORD)
     args = parser.parse_args()
 
-    driver = GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password))
-    try:
-        result = compute_identity_features(driver, args.db)
-        print(f"Identity features: {len(result)} vessels")
-        print(result.head())
-    finally:
-        driver.close()
+    result = compute_identity_features(args.db)
+    print(f"Identity features: {len(result)} vessels")
+    print(result.head())

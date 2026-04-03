@@ -326,7 +326,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 10
+TOTAL_STEPS = 9
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -379,42 +379,16 @@ def step_marine_cadastre(p: RegionPreset, non_interactive: bool, years: list[int
     return _ask_retry_skip("Marine Cadastre") == "skip"
 
 
-def step_neo4j(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(3, TOTAL_STEPS, "Starting Neo4j...")
-
-    # When NEO4J_URI points to a non-localhost host (e.g. docker-compose service
-    # name "neo4j"), assume it is externally managed and already healthy.
-    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    if "localhost" not in neo4j_uri and "127.0.0.1" not in neo4j_uri:
-        _ok("externally managed")
-        return True
-
-    check = _run(["docker", "inspect", "-f", "{{.State.Running}}", "neo4j-mpol"])
-    if check.returncode == 0 and check.stdout.strip() == "true":
-        _ok("already running")
-        return True
-
-    start = _run(["bash", "scripts/start_neo4j.sh"])
-    if start.returncode == 0:
-        _ok()
-        return True
-
-    _fail("could not start Neo4j — is Docker running?")
-    if non_interactive:
-        return False
-    return _ask_retry_skip("Neo4j") == "skip"
-
-
 def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int = 0) -> bool:
     lat_min, lon_min, lat_max, lon_max = p.bbox
 
     if non_interactive and stream_duration == 0:
-        _step(4, TOTAL_STEPS, "Streaming AIS...")
+        _step(3, TOTAL_STEPS, "Streaming AIS...")
         print(_dim("(skipped — pass --stream-duration N to collect N seconds of live AIS)"))
         return True
 
     duration_note = f"stopping after {stream_duration}s" if stream_duration else "Ctrl-C to stop"
-    _step(4, TOTAL_STEPS, f"Streaming AIS ({duration_note})...")
+    _step(3, TOTAL_STEPS, f"Streaming AIS ({duration_note})...")
     print()
     print(f"      bbox {p.bbox}  flush every 60s")
 
@@ -459,7 +433,7 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
 
 
 def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(5, TOTAL_STEPS, "Loading sanctions...")
+    _step(4, TOTAL_STEPS, "Loading sanctions...")
     result = _run([sys.executable, "-m", "src.ingest.sanctions", "--db", p.db_path])
     if result.returncode == 0:
         # Extract entity count from stdout if available
@@ -481,8 +455,8 @@ def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(6, TOTAL_STEPS, "Building ownership graph...")
-    # vessel_registry populates Neo4j from DuckDB vessel_meta
+    _step(5, TOTAL_STEPS, "Building ownership graph...")
+    # vessel_registry builds Lance datasets from DuckDB vessel_meta
     reg = _run([sys.executable, "-m", "src.ingest.vessel_registry", "--db", p.db_path])
     if reg.returncode != 0:
         _fail("vessel_registry failed")
@@ -491,7 +465,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
         if _ask_retry_skip("vessel_registry") == "skip":
             return True
     # ownership_graph computes graph features into DuckDB
-    graph = _run([sys.executable, "-m", "src.features.ownership_graph"])
+    graph = _run([sys.executable, "-m", "src.features.ownership_graph", "--db", p.db_path])
     if graph.returncode == 0:
         count_line = next(
             (l for l in graph.stdout.splitlines() if "vessel" in l.lower()), ""
@@ -505,7 +479,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
-    _step(7, TOTAL_STEPS, "Computing features...")
+    _step(6, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         ([sys.executable, "-m", "src.features.ais_behavior",
@@ -558,7 +532,7 @@ def step_score(
     non_interactive: bool,
     geo_filter_path: str | None = None,
 ) -> bool:
-    _step(8, TOTAL_STEPS, "Scoring...")
+    _step(7, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
 
     # C3: calibrate graph_risk_score weight before composite scoring
@@ -607,7 +581,7 @@ def step_score(
 
 
 def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
-    _step(9, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    _step(8, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
         count_line = next(
@@ -622,7 +596,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
 
 
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(10, TOTAL_STEPS, "Launching dashboard...")
+    _step(9, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -734,7 +708,6 @@ def main() -> None:
     steps = [
         step_schema,
         lambda p, ni: step_marine_cadastre(p, ni, marine_cadastre_years),
-        step_neo4j,
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
         step_ownership_graph,
