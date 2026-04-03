@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+# Limit cargo parallelism to avoid OOM during Rust release builds.
+# deltalake-core and similar crates are very memory-hungry at opt-level=3.
+ENV CARGO_BUILD_JOBS=2
 
 RUN pip install --no-cache-dir uv
 
