@@ -44,7 +44,7 @@ This project was developed in response to **Cap Vista Accelerator Solicitation 5
 | **Computational cost** | DuckDB + Polars run on a laptop; full pipeline ~45 min, no cloud required; edge-deployable |
 | **Granularity** | Per-vessel per-feature scores with SHAP attribution |
 | **Explainability** | SHAP `top_signals` JSON per candidate; human-readable reasoning |
-| **Novel (not just AIS)** | Ownership graph (Neo4j), trade flow (UN Comtrade), identity volatility, and C3 causal DiD model linking sanction announcements to AIS gap increases — not off-the-shelf AIS tools |
+| **Novel (not just AIS)** | Ownership graph (Lance Graph), trade flow (UN Comtrade), identity volatility, and C3 causal DiD model linking sanction announcements to AIS gap increases — not off-the-shelf AIS tools |
 | **Low cost to scale** | All OSS; no server required for screening layer |
 
 **Explicitly not used** (per challenge spec — insufficient novelty):

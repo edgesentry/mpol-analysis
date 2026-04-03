@@ -12,7 +12,7 @@ uv run python scripts/run_pipeline.py
 uv run python scripts/run_pipeline.py --region singapore --non-interactive
 ```
 
-Prerequisites: Docker (for Neo4j), a valid `AISSTREAM_API_KEY` in `.env`, and Python 3.12+.
+Prerequisites: a valid `AISSTREAM_API_KEY` in `.env` and Python 3.12+.
 
 ---
 
@@ -32,20 +32,19 @@ The preset weights are starting points. The C3 causal model automatically calibr
 
 ## Pipeline steps
 
-The pipeline runs 10 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
+The pipeline runs 9 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
 
 | # | Step | Key modules |
 |---|---|---|
 | 1 | Schema initialisation | `src/ingest/schema.py` |
 | 2 | Marine Cadastre historical backfill | `src/ingest/marine_cadastre.py` |
-| 3 | Neo4j startup | `scripts/start_neo4j.sh` |
-| 4 | Live AIS streaming | `src/ingest/ais_stream.py` |
-| 5 | Sanctions loading | `src/ingest/sanctions.py` |
-| 6 | Ownership graph | `src/ingest/vessel_registry.py` + `src/features/ownership_graph.py` |
-| 7 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
-| 8 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
-| 9 | GDELT ingestion | `src/ingest/gdelt.py` |
-| 10 | Dashboard | `src/api/main.py` (uvicorn) |
+| 3 | Live AIS streaming | `src/ingest/ais_stream.py` |
+| 4 | Sanctions loading | `src/ingest/sanctions.py` |
+| 5 | Ownership graph | `src/ingest/vessel_registry.py` (→ Lance Graph) + `src/features/ownership_graph.py` |
+| 6 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
+| 7 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
+| 8 | GDELT ingestion | `src/ingest/gdelt.py` |
+| 9 | Dashboard | `src/api/main.py` (uvicorn) |
 
 ---
 
@@ -161,9 +160,6 @@ All configurable paths are also settable via environment variables (useful in Do
 |---|---|---|
 | `DB_PATH` | `data/processed/mpol.duckdb` | Active DuckDB path |
 | `AISSTREAM_API_KEY` | — | Required for live AIS ingestion |
-| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection string |
-| `NEO4J_USER` | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | `neo4jpassword` | Neo4j password |
 | `LLM_PROVIDER` | `openai` | LLM client: `openai`, `anthropic`, `gemini`, `mlx`, `ollama` |
 | `LLM_BASE_URL` | — | OpenAI-compatible base URL (required for `gemini`, `mlx`, `ollama`) |
 | `LLM_MODEL` | — | Model identifier (e.g., `gpt-4o-mini`, `llama3.2:3b`) |
@@ -222,14 +218,14 @@ SQL
 
 ## Troubleshooting
 
-**Step 3 (Neo4j) fails — Docker not running**
-Start Docker Desktop and retry. Alternatively, pass `--skip-neo4j` to `build_matrix.py` to run without graph features (graph features default to safe values).
-
-**Step 4 (AIS stream) — 0 rows inserted**
+**Step 3 (AIS stream) — 0 rows inserted**
 Check `AISSTREAM_API_KEY` in `.env` and verify the bounding box covers an area with vessel traffic.
 
-**Step 8 (Scoring) — composite returns empty DataFrame**
-`vessel_features` is empty. Re-run step 7 (feature engineering) and confirm `build_matrix.py` completed without errors.
+**Step 5 (Ownership graph) — vessel_registry fails**
+Run `uv run python src/ingest/vessel_registry.py --db <db_path>` to rebuild the Lance Graph datasets manually. Alternatively, pass `--skip-graph` to `build_matrix.py` to run without graph features (graph features default to safe values).
+
+**Step 7 (Scoring) — composite returns empty DataFrame**
+`vessel_features` is empty. Re-run step 6 (feature engineering) and confirm `build_matrix.py` completed without errors.
 
 **Dashboard shows no vessels**
 Confirm `WATCHLIST_OUTPUT_PATH` points to the correct parquet file and that it contains rows (`polars.read_parquet(path).height > 0`).

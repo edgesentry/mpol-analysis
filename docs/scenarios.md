@@ -45,7 +45,7 @@ An analyst is investigating a specific STS transfer event that was reported by a
    - Two vessels identified: MMSI `987654321` and `111222333`
 
 3. **Trace ownership graph**
-   - Neo4j Cypher query: find all companies connected to both vessels within 3 hops
+   - ownership graph query: find all companies connected to both vessels within 3 hops (via Lance Graph datasets)
    - Result: both vessels share a common management company registered in the Marshall Islands, which is in turn a subsidiary of a Dubai holding company that manages 4 other vessels in the watchlist
 
 4. **Score the cluster**
@@ -53,7 +53,7 @@ An analyst is investigating a specific STS transfer event that was reported by a
    - 3 of the 6 are promoted into the top-20 candidates
 
 5. **Export for report**
-   - Analyst exports the ownership subgraph as PNG (Neo4j Browser) and the candidate rows as CSV
+   - Analyst exports the ownership subgraph data and the candidate rows as CSV
    - This feeds into a formal intelligence report
 
 ---

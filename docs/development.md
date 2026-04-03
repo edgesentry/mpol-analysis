@@ -15,13 +15,14 @@ _inputs/        Challenge docs (Cap Vista Solicitation 5.0 — do not edit)
 docs/           Project documentation (source of truth for design decisions)
 scripts/        Operator-facing CLI tools (run_pipeline.py)
 src/
+  graph/        Lance Graph storage layer (store.py — node/relationship schemas, read/write)
   ingest/       Data ingestion scripts (AIS, sanctions, registry, trade flow)
-  features/     Feature engineering (Polars + Neo4j)
+  features/     Feature engineering (Polars + Lance Graph)
   score/        Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite, causal DiD)
   api/          FastAPI + HTMX dashboard (src/api/main.py → http://localhost:8000)
 data/
   raw/          Downloaded raw data (gitignored)
-  processed/    DuckDB files, Parquet outputs, Neo4j database
+  processed/    DuckDB files, Parquet outputs, Lance Graph datasets (<region>_graph/)
 tests/
 pyproject.toml
 ```
@@ -54,10 +55,10 @@ Alternatively, run each step manually:
 uv run python src/ingest/schema.py             # initialise DuckDB schema
 uv run python src/ingest/marine_cadastre.py    # load historical AIS
 uv run python src/ingest/sanctions.py          # load sanctions entities
-uv run python src/ingest/vessel_registry.py    # load Equasis + ITU MMSI → Neo4j
+uv run python src/ingest/vessel_registry.py    # load Equasis + ITU MMSI → Lance Graph
 uv run python src/features/ais_behavior.py     # compute AIS behavioral features
-uv run python src/features/identity.py         # identity volatility features
-uv run python src/features/ownership_graph.py  # Neo4j BFS graph features
+uv run python src/features/identity.py         # identity volatility features (Lance Graph)
+uv run python src/features/ownership_graph.py  # Lance Graph ownership features
 uv run python src/features/trade_mismatch.py   # trade flow mismatch features
 uv run python src/score/mpol_baseline.py       # HDBSCAN baseline
 uv run python src/score/anomaly.py             # Isolation Forest scoring
@@ -79,22 +80,11 @@ uv run uvicorn src.api.main:app --reload
 uv run pytest tests/
 ```
 
-### Start Neo4j (Docker)
-
-```bash
-docker run -d \
-  --name neo4j-mpol \
-  -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/password \
-  -e NEO4J_PLUGINS='["graph-data-science"]' \
-  neo4j:5-community
-```
-
 ## Coding Conventions
 
 - **Polars:** use the lazy API (`pl.scan_parquet`, `.lazy()`, `.collect()`) for all large AIS queries; avoid `.to_pandas()`.
 - **DuckDB:** use parameterised queries; never interpolate user-supplied strings into SQL.
-- **Neo4j:** use parameterised Cypher (`$param`); close driver sessions explicitly.
+- **Lance Graph:** read datasets via `src.graph.store.load_tables(db_path)`; write via `write_tables(db_path, tables)`. Graph features are implemented as Polars joins — no external graph server.
 - **Output:** all intermediate outputs are Parquet in `data/processed/`; no CSV outputs.
 - **Secrets:** API keys (aisstream.io, Equasis) go in `.env` (gitignored); read via `python-dotenv`.
 

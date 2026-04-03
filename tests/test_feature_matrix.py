@@ -40,7 +40,7 @@ def _seed_minimal_data(db_path: str) -> None:
 def test_build_feature_matrix_skip_neo4j(tmp_db):
     _seed_minimal_data(tmp_db)
 
-    df = build_feature_matrix(db_path=tmp_db, window_days=3650, skip_neo4j=True)
+    df = build_feature_matrix(db_path=tmp_db, window_days=3650, skip_graph=True)
 
     assert df.height == 2
     assert set(df["mmsi"].to_list()) == {"111111111", "222222222"}
@@ -51,7 +51,7 @@ def test_build_feature_matrix_skip_neo4j(tmp_db):
 def test_write_vessel_features_and_validate_core_columns(tmp_db):
     _seed_minimal_data(tmp_db)
 
-    df = build_feature_matrix(db_path=tmp_db, window_days=3650, skip_neo4j=True)
+    df = build_feature_matrix(db_path=tmp_db, window_days=3650, skip_graph=True)
     validate_core_columns_non_null(df)
 
     written = write_vessel_features(tmp_db, df)

@@ -193,35 +193,72 @@ def _format_gdelt(events: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _query_neo4j_ownership(mmsi: str) -> str:
+def _query_graph_ownership(mmsi: str) -> str:
     """Return a text summary of the 2-hop ownership subgraph. Fails gracefully."""
     try:
-        from neo4j import GraphDatabase  # optional dependency
+        import polars as pl
+        from src.graph.store import load_tables
 
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        user = os.getenv("NEO4J_USER", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD", "password")
-        driver = GraphDatabase.driver(uri, auth=(user, password))
-        with driver.session() as session:
-            rows = session.run(
-                """
-                MATCH (v:Vessel {mmsi: $mmsi})
-                OPTIONAL MATCH (v)-[:OWNED_BY|MANAGED_BY*1..2]->(c:Company)
-                OPTIONAL MATCH (c)-[:SANCTIONED_BY]->(s)
-                RETURN c.name AS company, c.country AS country,
-                       s.list_source AS sanction_list
-                LIMIT 20
-                """,
-                mmsi=mmsi,
-            ).data()
-        driver.close()
-        if not rows:
+        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+        tables = load_tables(db_path)
+
+        ob = pl.from_arrow(tables["OWNED_BY"])
+        mb = pl.from_arrow(tables["MANAGED_BY"])
+        sb = pl.from_arrow(tables["SANCTIONED_BY"])
+        co = pl.from_arrow(tables["Company"])
+
+        if len(ob) == 0 and len(mb) == 0:
             return "  No ownership records in graph for this vessel."
+
+        frames = []
+        if len(ob):
+            frames.append(ob.filter(pl.col("src_id") == mmsi).select("dst_id"))
+        if len(mb):
+            frames.append(mb.filter(pl.col("src_id") == mmsi).select("dst_id"))
+
+        if not frames:
+            return "  No ownership records in graph for this vessel."
+
+        direct_companies = pl.concat(frames).unique()
+
+        # 2nd hop: companies owned by those companies (via OWNED_BY/MANAGED_BY again)
+        frames2 = []
+        if len(ob):
+            frames2.append(
+                ob.filter(pl.col("src_id").is_in(direct_companies["dst_id"]))
+                .select("dst_id")
+            )
+        if len(mb):
+            frames2.append(
+                mb.filter(pl.col("src_id").is_in(direct_companies["dst_id"]))
+                .select("dst_id")
+            )
+
+        all_company_ids = direct_companies
+        if frames2:
+            all_company_ids = pl.concat([direct_companies] + frames2).unique()
+
+        # Join with Company nodes for name/country
+        company_info = co.filter(pl.col("id").is_in(all_company_ids["dst_id"])).select(
+            ["id", "name", "country"]
+        )
+
+        # Sanctioned entities
+        sanctioned_ids: set[str] = set(sb["src_id"].to_list()) if len(sb) else set()
+
+        if len(company_info) == 0:
+            return "  No ownership records in graph for this vessel."
+
         lines: list[str] = []
-        for r in rows:
-            sanction = f" [SANCTIONED: {r['sanction_list']}]" if r.get("sanction_list") else ""
-            lines.append(f"  • {r.get('company') or '?'} ({r.get('country','?')}){sanction}")
-        return "\n".join(lines)
+        for row in company_info.iter_rows(named=True):
+            sanction = f" [SANCTIONED]" if row["id"] in sanctioned_ids else ""
+            name = row.get("name") or "?"
+            country = row.get("country") or "?"
+            lines.append(f"  • {name} ({country}){sanction}")
+            if len(lines) >= 20:
+                break
+
+        return "\n".join(lines) if lines else "  No ownership records in graph for this vessel."
     except Exception as exc:
         return f"  Ownership graph unavailable ({exc})."
 
@@ -251,7 +288,7 @@ def _build_system(vessel: dict | None, df: pl.DataFrame) -> str:
         signals_text=_format_signals(vessel.get("top_signals")),
     )
 
-    ownership_text = _query_neo4j_ownership(mmsi)
+    ownership_text = _query_graph_ownership(mmsi)
     ownership_section = _OWNERSHIP_SECTION.format(ownership_text=ownership_text)
 
     gdelt_events = query_gdelt_context(

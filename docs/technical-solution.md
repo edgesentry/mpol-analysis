@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Analytical store | **DuckDB** | ≥ 1.1 | In-process columnar OLAP; queries Parquet natively; no server; edge-deployable |
 | DataFrame / feature engineering | **Polars** | ≥ 1.0 | Lazy evaluation; fast AIS window operations; Arrow-native |
-| Graph DB | **Neo4j Community** | ≥ 5.x | Cypher + GDS plugin for BFS, PageRank, community detection; Docker deployment |
+| Graph DB | **Lance Graph** | ≥ 0.5 | Cypher-capable graph engine built in Rust with Python bindings; embedded in-process, serverless, stores data as Lance columnar files |
 | ML / clustering | **scikit-learn** | ≥ 1.5 | HDBSCAN, Isolation Forest; no GPU required |
 | Explainability | **SHAP** | ≥ 0.46 | TreeExplainer for Isolation Forest; per-vessel feature attribution |
 | Dashboard | **FastAPI + HTMX** | ≥ 0.115 / — | Production-grade API layer + partial-page updates; SSE alerts; MapLibre GL JS |
@@ -98,40 +98,31 @@ Two-vessel co-location is detected by:
 
 Implemented as a DuckDB spatial query (using `h3` or ST_Distance on lat/lon).
 
-### Ownership Graph (Neo4j + GDS)
+### Ownership Graph (Lance Graph + Polars)
 
-Vessel ownership chains are loaded into Neo4j. The Graph Data Science (GDS) plugin computes:
+Vessel ownership chains are stored as Lance columnar datasets on disk (no external server). Graph features are computed by Polars joins over these datasets in `src/features/ownership_graph.py` and `src/features/identity.py`.
 
-```cypher
-// BFS shortest path from vessel to nearest sanctioned node
-CALL gds.shortestPath.dijkstra.stream('ownership-graph', {
-  sourceNode: vesselNodeId,
-  targetNodes: sanctionedNodeIds,
-  relationshipWeightProperty: null
-})
-YIELD nodeId, totalCost
-RETURN min(totalCost) AS sanctions_distance
+```python
+# BFS shortest path from vessel to nearest sanctioned entity
+# 0 = directly sanctioned, 1 = 1-hop owner/manager, 2 = 2-hop via CONTROLLED_BY, 99 = none
+tables = load_tables(db_path)
+vessel_companies = pl.concat([OWNED_BY, MANAGED_BY]).unique()
+one_hop = vessel_companies.filter(pl.col("dst_id").is_in(sanctioned_ids))["src_id"]
 ```
 
-Community detection (Louvain) identifies ownership clusters; `cluster_sanctions_ratio` is computed per cluster.
+Cluster sanctions ratio is computed by self-joining the OWNED_BY dataset on `company_id`; `cluster_sanctions_ratio` is the fraction of co-owned vessels that are directly sanctioned.
 
-```cypher
-// Hub vessel detection: STS contact degree (vessels acting as laundering intermediaries)
-MATCH (v:Vessel)-[:STS_CONTACT]->(other:Vessel)
-RETURN v.mmsi, count(DISTINCT other) AS sts_hub_degree
-ORDER BY sts_hub_degree DESC
-LIMIT 20
-```
+```python
+# Hub vessel detection: STS contact degree
+sts_hub = STS_CONTACT.group_by("src_id").agg(
+    pl.col("dst_id").n_unique().alias("sts_hub_degree")
+)
 
-```cypher
-// Shared-address clustering: addresses with >5 distinct vessels in their ownership chain
-MATCH (addr:Address)<-[:REGISTERED_AT]-(c:Company)<-[:OWNED_BY|MANAGED_BY]-(v:Vessel)
-WITH addr, count(DISTINCT v) AS vessel_count
-WHERE vessel_count > 5
-MATCH (addr)<-[:REGISTERED_AT]-(c2:Company)<-[:OWNED_BY|MANAGED_BY]-(v2:Vessel)
-RETURN addr.address_id, addr.city, addr.country, vessel_count,
-       collect(DISTINCT v2.mmsi) AS flagged_mmsi_list
-ORDER BY vessel_count DESC
+# Shared-address clustering
+vessel_address = vessel_company.join(REGISTERED_AT, on="company")
+shared = vessel_address.join(vessel_address, on="address") \
+    .filter(pl.col("vessel") != pl.col("peer")) \
+    .group_by("vessel").agg(pl.col("peer").n_unique())
 ```
 
 ### HDBSCAN Normal Behavior Baseline
@@ -144,7 +135,7 @@ Trained on the subset of vessels with `sanctions_distance ≥ 3` (proxy for "cle
 
 ### C3 · Causal Sanction-Response Model (DiD)
 
-Implemented in `src/score/causal_sanction.py`. Quantifies the *causal* effect of sanction announcement events on AIS gap frequency for vessels connected within 2 hops in the Neo4j ownership graph.
+Implemented in `src/score/causal_sanction.py`. Quantifies the *causal* effect of sanction announcement events on AIS gap frequency for vessels connected within 2 hops in the Lance Graph ownership graph.
 
 **Model specification** (for each regime × announcement date):
 
@@ -252,7 +243,7 @@ The full pipeline (historical AIS + scoring) runs on a standard laptop:
 |---|---|---|
 | AIS Parquet load (12 months) | ~5 min | ~4 GB |
 | Feature engineering (Polars) | ~10 min | ~2 GB |
-| Neo4j graph build | ~15 min | ~1 GB |
+| Lance Graph build | ~15 min | ~1 GB |
 | HDBSCAN + Isolation Forest | ~5 min | ~1 GB |
 | C3 causal DiD model | ~1 min | ~0.5 GB |
 | SHAP attribution | ~10 min | ~2 GB |

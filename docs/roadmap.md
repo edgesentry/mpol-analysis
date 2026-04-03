@@ -6,11 +6,11 @@
 
 **Goal:** Running pipeline that ingests historical and live AIS for the area of interest.
 
-- `pyproject.toml` with full dependency set (DuckDB, Polars, Neo4j driver, scikit-learn, SHAP, FastAPI, uvicorn)
+- `pyproject.toml` with full dependency set (DuckDB, Polars, lance-graph, scikit-learn, SHAP, FastAPI, uvicorn)
 - DuckDB schema initialisation (`src/ingest/schema.py`)
 - Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag (annual files); see [regional-playbooks.md](regional-playbooks.md) for non-US historical backfill options
 - aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
-- Neo4j Docker lifecycle scripts (`scripts/start_neo4j.sh`, `scripts/stop_neo4j.sh`)
+- Lance Graph storage module (`src/graph/store.py`)
 - End-to-end local test guide (`docs/local-e2e-test.md`)
 
 **Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](regional-playbooks.md) for other regions) with no duplicate MMSI/timestamp rows.
@@ -22,11 +22,11 @@
 **Goal:** Sanctions entities and vessel ownership graph loaded and queryable.
 
 - OFAC SDN + EU + UN + OpenSanctions XML/Parquet → DuckDB `sanctions_entities` (`src/ingest/sanctions.py`)
-- Equasis ownership chains → Neo4j graph (`src/ingest/vessel_registry.py`)
+- Equasis ownership chains → Lance Graph datasets (`src/ingest/vessel_registry.py`)
   - Node types: Vessel, Company, Country, VesselName
   - Relationship types: OWNED_BY, MANAGED_BY, REGISTERED_IN, ALIAS, SANCTIONED_BY
 
-**Acceptance:** Neo4j Cypher query `MATCH (v:Vessel)-[:OWNED_BY*1..3]->(:Company)-[:SANCTIONED_BY]->() RETURN v LIMIT 10` returns results for vessels with known OFAC exposure.
+**Acceptance:** `uv run python src/ingest/vessel_registry.py` completes without error and the Lance Graph directory contains non-empty OWNED_BY and SANCTIONED_BY datasets for vessels with known OFAC exposure.
 
 ---
 
@@ -36,7 +36,7 @@
 
 - AIS behavioral features (Polars): `ais_gap_count_30d`, `position_jump_count`, `sts_candidate_count`, `loitering_hours_30d` (`src/features/ais_behavior.py`)
 - Identity volatility features: `flag_changes_2y`, `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
-- Ownership graph features (Neo4j GDS BFS): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
+- Ownership graph features (Lance Graph + Polars joins): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
 - ~~GEBCO bathymetric mask (`src/features/bathymetric_mask.py`)~~ — **not implemented**; STS candidate detection uses a 5nm-from-port filter as a proxy; bathymetric masking deferred to C4
 
@@ -181,7 +181,7 @@ Several parameters currently require direct code edits when deploying to non-def
 Quantify the causal link between sanction events and observable AIS behaviour:
 
 - **Instrument:** sanction announcement date × affected flag state / entity (`OFAC_Iran`, `OFAC_Russia`, `UN_DPRK`)
-- **Outcome:** AIS gap frequency for vessels connected within 2 hops in Neo4j in the 30-day post-announcement window
+- **Outcome:** AIS gap frequency for vessels connected within 2 hops in the ownership graph in the 30-day post-announcement window
 - **Method:** Difference-in-Differences (DiD) with vessel-type and route-corridor fixed effects; OLS with HC3 heteroskedasticity-robust standard errors (`src/score/causal_sanction.py`)
 - **Output:** Per-sanction-regime ATT estimate + 95% CI written to `data/processed/causal_effects.parquet`; `calibrate_graph_weight()` derives a `graph_risk_score` weight in [0.20, 0.65] that is passed as `--w-graph` to `src/score/composite.py`
 
@@ -208,7 +208,7 @@ Documented in B5 above.  Splits evidence transmission into a lightweight triage 
 | Week | Phase A deliverable | Phase C (parallel) |
 |---|---|---|
 | Week 1 (Apr 1–7) | A1: Project setup + AIS ingestion | — |
-| Week 2 (Apr 8–14) | A2: Sanctions + Neo4j ownership graph | — |
+| Week 2 (Apr 8–14) | A2: Sanctions + Lance Graph ownership graph | — |
 | Week 3 (Apr 15–21) | A3: Full feature engineering pipeline | C1: FastAPI + HTMX dashboard (start) |
 | Week 4 (Apr 22–28) | A4: Scoring + watchlist + Streamlit dashboard | C1: continued |
 | Apr 29 | A5: Validate + submit proposal to Cap Vista | C1: targeted for submission alongside A5 |

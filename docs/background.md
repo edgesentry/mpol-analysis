@@ -60,4 +60,4 @@ The gap is **contextual fusion**: linking AIS behavior to ownership graph proxim
 | Vessel behavior profiling | Pole Star, FleetMon | Proprietary; no ownership context |
 | Satellite SAR correlation | Orbital Insight, Hawkeye360 | High cost; coverage gaps |
 
-**Our differentiation:** We combine AIS behavioral signals with **ownership graph risk distance** (Neo4j BFS to sanctioned entities), **identity volatility** (flag/name/owner change rates), and **trade flow mismatch** (UN Comtrade declared cargo vs detected route) — all with SHAP-based per-vessel explanation. The entire stack runs on open-source software with no cloud dependency.
+**Our differentiation:** We combine AIS behavioral signals with **ownership graph risk distance** (Lance Graph BFS to sanctioned entities), **identity volatility** (flag/name/owner change rates), and **trade flow mismatch** (UN Comtrade declared cargo vs detected route) — all with SHAP-based per-vessel explanation. The entire stack runs on open-source software with no cloud dependency.

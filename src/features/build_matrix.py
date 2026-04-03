@@ -12,15 +12,9 @@ import os
 import duckdb
 import polars as pl
 from dotenv import load_dotenv
-from neo4j import GraphDatabase
 
 from src.features.ais_behavior import DEFAULT_DB_PATH, compute_ais_features
-from src.features.identity import (
-    NEO4J_PASSWORD,
-    NEO4J_URI,
-    NEO4J_USER,
-    compute_identity_features,
-)
+from src.features.identity import compute_identity_features
 from src.features.ownership_graph import compute_ownership_graph_features
 from src.features.trade_mismatch import compute_trade_features
 
@@ -127,24 +121,17 @@ def _merge_feature_frames(
 def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 30,
-    neo4j_uri: str = NEO4J_URI,
-    neo4j_user: str = NEO4J_USER,
-    neo4j_password: str = NEO4J_PASSWORD,
-    skip_neo4j: bool = False,
+    skip_graph: bool = False,
 ) -> pl.DataFrame:
     ais_df = compute_ais_features(db_path=db_path, window_days=window_days)
     trade_df = compute_trade_features(db_path=db_path)
 
-    if skip_neo4j:
+    if skip_graph:
         identity_df = _empty_identity()
         ownership_df = _empty_ownership()
     else:
-        driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
-        try:
-            identity_df = compute_identity_features(driver=driver, db_path=db_path)
-            ownership_df = compute_ownership_graph_features(driver=driver)
-        finally:
-            driver.close()
+        identity_df = compute_identity_features(db_path=db_path)
+        ownership_df = compute_ownership_graph_features(db_path=db_path)
 
     return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df)
 
@@ -231,19 +218,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build and persist vessel feature matrix")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--window", type=int, default=30)
-    parser.add_argument("--neo4j-uri", default=NEO4J_URI)
-    parser.add_argument("--neo4j-user", default=NEO4J_USER)
-    parser.add_argument("--neo4j-password", default=NEO4J_PASSWORD)
-    parser.add_argument("--skip-neo4j", action="store_true")
+    parser.add_argument("--skip-graph", action="store_true")
     args = parser.parse_args()
 
     matrix = build_feature_matrix(
         db_path=args.db,
         window_days=args.window,
-        neo4j_uri=args.neo4j_uri,
-        neo4j_user=args.neo4j_user,
-        neo4j_password=args.neo4j_password,
-        skip_neo4j=args.skip_neo4j,
+        skip_graph=args.skip_graph,
     )
     validate_core_columns_non_null(matrix)
     written = write_vessel_features(args.db, matrix)

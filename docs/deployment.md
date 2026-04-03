@@ -2,7 +2,7 @@
 
 ## Local — single command (Docker Compose)
 
-The fastest way to run the full stack (Neo4j + dashboard) locally without touching Python:
+The fastest way to run the dashboard locally without touching Python:
 
 ```bash
 docker compose up
@@ -12,7 +12,6 @@ This starts:
 
 | Container | Port | Purpose |
 |---|---|---|
-| `neo4j-mpol` | 7474 (HTTP), 7687 (Bolt) | Ownership graph database |
 | `mpol-dashboard` | 8000 | FastAPI + HTMX dashboard |
 
 Open `http://localhost:8000`.
@@ -32,12 +31,9 @@ docker compose down
 If you are running the scoring pipeline on your host and only want the dashboard process:
 
 ```bash
-# 1. Start Neo4j (Docker still required for the graph DB)
-bash scripts/start_neo4j.sh
+# 1. Run the ingestion + scoring pipeline (Steps 1–5 from local-e2e-test.md)
 
-# 2. Run the ingestion + scoring pipeline (Steps 1–6 from local-e2e-test.md)
-
-# 3. Start the dashboard
+# 2. Start the dashboard
 uv run uvicorn src.api.main:app --reload
 ```
 
@@ -78,7 +74,7 @@ sudo usermod -aG docker $USER
 git clone https://github.com/edgesentry/arktrace.git
 cd arktrace
 cp .env.example .env
-# Edit .env — set AISSTREAM_API_KEY and NEO4J_PASSWORD
+# Edit .env — set AISSTREAM_API_KEY and LLM_API_KEY
 ```
 
 ### 4. Build and start

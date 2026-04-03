@@ -7,8 +7,8 @@ The arktrace pipeline computes 19 features across four families for every vessel
 | Family | Module | Features | Backend |
 |---|---|---|---|
 | AIS Behavioral | `ais_behavior.py` | 6 | DuckDB / Polars |
-| Identity Volatility | `identity.py` | 5 | Neo4j + DuckDB |
-| Ownership Graph | `ownership_graph.py` | 5 | Neo4j BFS |
+| Identity Volatility | `identity.py` | 5 | Lance Graph + DuckDB |
+| Ownership Graph | `ownership_graph.py` | 5 | Lance Graph (Polars joins) |
 | Trade Flow Mismatch | `trade_mismatch.py` | 2 | DuckDB + Comtrade API |
 | **Total** | | **19** | |
 
@@ -64,7 +64,7 @@ Total hours spent moving slower than 2 knots outside declared moorage areas, acc
 
 ## Identity Volatility features
 
-Source: Neo4j (ownership changes) + `vessel_meta` DuckDB table. Computed over a 2-year lookback.
+Source: Lance Graph datasets (ownership changes, name aliases) + `vessel_meta` DuckDB table. Computed over a 2-year lookback.
 
 ### `flag_changes_2y`
 
@@ -82,7 +82,7 @@ Number of vessel name changes in 2 years.
 
 Number of registered owner changes in 2 years.
 
-**Shadow fleet signal:** Ownership obfuscation through rapid beneficial-owner changes is a key sanctions evasion technique. This feature counts distinct ownership transitions recorded in the Equasis Neo4j graph over 2 years.
+**Shadow fleet signal:** Ownership obfuscation through rapid beneficial-owner changes is a key sanctions evasion technique. This feature counts distinct ownership transitions recorded in the Lance Graph OWNED_BY dataset over 2 years.
 
 ### `high_risk_flag_ratio`
 
@@ -102,11 +102,11 @@ BFS path length from the vessel to the ultimate beneficial owner, capped at 5.
 
 ## Ownership Graph features
 
-Source: Neo4j graph, computed via native Cypher BFS (no GDS plugin required). All graph features use `sanctions_distance` from the merged OpenSanctions dataset.
+Source: Lance Graph datasets, computed via Polars joins. All graph features use `sanctions_distance` from the merged OpenSanctions dataset.
 
 ### `sanctions_distance`
 
-Minimum BFS hop count from the vessel to any node in the Neo4j graph that carries a `SANCTIONED_BY` relationship.
+Minimum BFS hop count from the vessel to any node in the ownership graph that carries a `SANCTIONED_BY` relationship.
 
 | Value | Meaning |
 |---|---|
@@ -119,7 +119,7 @@ Minimum BFS hop count from the vessel to any node in the Neo4j graph that carrie
 
 ### `cluster_sanctions_ratio`
 
-Fraction of vessels sharing the same registered owner or manager cluster that are individually sanctioned (i.e. have `sanctions_distance = 0`).
+Fraction of vessels sharing the same registered owner (via the OWNED_BY dataset) that are individually sanctioned (i.e. have `sanctions_distance = 0`).
 
 **Shadow fleet signal:** Sanctioned fleets tend to operate in clusters. If 50% of the vessels sharing a manager are on the OFAC list, the remaining 50% are likely operating on behalf of the same beneficial owner but have not yet been individually designated.
 
@@ -180,4 +180,4 @@ Difference (USD) between the declared cargo value from AIS voyage data and the U
 | `ownership_depth` | 1 |
 | All count features | 0 |
 
-Pass `--skip-neo4j` to run without a Neo4j connection (graph features default to safe values).
+Pass `--skip-graph` to run without loading Lance Graph datasets (graph features default to safe values).

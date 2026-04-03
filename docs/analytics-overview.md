@@ -14,11 +14,12 @@ End-to-end data flow for the arktrace Maritime Pattern of Life (MPOL) shadow fle
                              ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  STORAGE                                                                │
-│  DuckDB  ──  ais_positions, vessel_meta, sanctions_entities,            │
-│              trade_flow, vessel_features, analyst_briefs, chat_cache,   │
-│              cleared_vessels                                            │
-│  Neo4j   ──  Vessel · Company · Country · VesselName graph             │
-│  LanceDB ──  GDELT event vectors (RAG context)                         │
+│  DuckDB      ──  ais_positions, vessel_meta, sanctions_entities,        │
+│                  trade_flow, vessel_features, analyst_briefs,           │
+│                  chat_cache, cleared_vessels                            │
+│  Lance Graph ──  Vessel · Company · Country · VesselName datasets       │
+│                  (ownership relationships as columnar Lance files)       │
+│  LanceDB     ──  GDELT event vectors (RAG context)                     │
 └────────────────────────────┬────────────────────────────────────────────┘
                              │  src/features/
                              ▼
@@ -58,7 +59,7 @@ End-to-end data flow for the arktrace Maritime Pattern of Life (MPOL) shadow fle
 | **aisstream.io** | `src/ingest/ais_stream.py` | WebSocket | Live AIS positions for a configurable bounding box |
 | **Marine Cadastre** | `src/ingest/marine_cadastre.py` | Parquet files | Annual US-coastal AIS archive (2022–2025); useful for Gulf of Mexico historical backfill |
 | **OpenSanctions** | `src/ingest/sanctions.py` | JSONL | Merged OFAC SDN, EU, UN consolidated lists |
-| **Equasis** | `src/ingest/vessel_registry.py` | HTTP scrape / CSV | Vessel ownership chains → Neo4j |
+| **Equasis** | `src/ingest/vessel_registry.py` | HTTP scrape / CSV | Vessel ownership chains → Lance Graph |
 | **UN Comtrade** | `src/features/trade_mismatch.py` | REST API | Bilateral crude oil trade statistics (HS 2709) |
 | **GDELT** | `src/ingest/gdelt.py` | CSV | Geopolitical event stream; indexed in LanceDB for RAG |
 
@@ -79,21 +80,26 @@ End-to-end data flow for the arktrace Maritime Pattern of Life (MPOL) shadow fle
 
 Each region runs its own DuckDB file (e.g. `singapore.duckdb`, `japansea.duckdb`) so data is fully isolated between deployment areas.
 
-### Neo4j graph
+### Lance Graph (`<region>_graph/`)
 
-Node types: `Vessel`, `Company`, `Country`, `VesselName`
+Stores the vessel ownership graph as Lance columnar datasets on disk — no external server required. Written by `src/ingest/vessel_registry.py`, read by `src/features/ownership_graph.py` and `src/features/identity.py`.
 
-Relationship types:
+Node datasets: `Vessel`, `Company`, `Country`, `VesselName`, `Address`, `SanctionsRegime`
 
-| Relationship | Meaning |
+Relationship datasets (src_id → dst_id):
+
+| Dataset | Meaning |
 |---|---|
-| `OWNED_BY` | Vessel → Company (registered owner) |
-| `MANAGED_BY` | Vessel → Company (technical manager) |
-| `REGISTERED_IN` | Vessel or Company → Country (flag/registration) |
-| `ALIAS` | Vessel → VesselName (historical name) |
-| `SANCTIONED_BY` | Company → sanctions list entity |
+| `OWNED_BY` | Vessel → Company (registered owner) with `{since, until}` |
+| `MANAGED_BY` | Vessel → Company (technical manager) with `{since, until}` |
+| `REGISTERED_IN` | Company → Country (registration flag) |
+| `ALIAS` | Vessel → VesselName (historical name) with `{date}` |
+| `SANCTIONED_BY` | Vessel or Company → SanctionsRegime with `{list, date}` |
+| `REGISTERED_AT` | Company → Address (shared-address clustering) |
+| `CONTROLLED_BY` | Company → Company (beneficial ownership layers) |
+| `STS_CONTACT` | Vessel → Vessel (co-location events) |
 
-BFS traversal depth up to 3 hops is used to compute `sanctions_distance` and related graph features.
+BFS traversal depth up to 3 hops is used to compute `sanctions_distance` and related graph features (implemented as Polars joins over the Lance datasets).
 
 ### LanceDB (GDELT)
 
@@ -101,17 +107,16 @@ Daily GDELT event rows are embedded and stored in a local LanceDB vector store. 
 
 ## Orchestration
 
-`scripts/run_pipeline.py` runs the full 10-step pipeline in order:
+`scripts/run_pipeline.py` runs the full 9-step pipeline in order:
 
 1. Schema initialisation
 2. Marine Cadastre historical backfill (optional)
-3. Neo4j startup
-4. Live AIS streaming
-5. Sanctions loading
-6. Ownership graph computation
-7. Feature engineering (AIS → identity → trade mismatch → build matrix)
-8. Scoring (C3 causal calibration → MPOL baseline → anomaly → composite → watchlist)
-9. GDELT ingestion
-10. Dashboard launch
+3. Live AIS streaming
+4. Sanctions loading
+5. Ownership graph computation (vessel_registry → Lance Graph datasets)
+6. Feature engineering (AIS → identity → trade mismatch → build matrix)
+7. Scoring (C3 causal calibration → MPOL baseline → anomaly → composite → watchlist)
+8. GDELT ingestion
+9. Dashboard launch
 
 See [Pipeline Operations](pipeline-operations.md) for per-region configuration and [Regional Playbooks](regional-playbooks.md) for analyst-persona-specific guidance.

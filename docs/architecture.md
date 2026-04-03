@@ -19,7 +19,7 @@
 │                                                                 │
 │  AIS positions ──────────────────► DuckDB (ais_positions table) │
 │  Sanctions entities ─────────────► DuckDB (sanctions_entities)  │
-│  Vessel ownership chains ────────► Neo4j  (graph DB)            │
+│  Vessel ownership chains ────────► Lance Graph (on-disk files)  │
 │  Trade flow by route ────────────► DuckDB (trade_flow table)    │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -38,7 +38,7 @@
 │    · name_changes_2y                                            │
 │    · owner_changes_2y                                           │
 │                                                                 │
-│  Ownership graph features ───────► Neo4j GDS (BFS)              │
+│  Ownership graph features ───────► Lance Graph (Polars joins)   │
 │    · sanctions_distance (min hops to sanctioned entity)         │
 │    · cluster_sanctions_ratio                                    │
 │                                                                 │
@@ -52,7 +52,7 @@
 │                                                                 │
 │  HDBSCAN ── normal MPOL baseline (per vessel type / route)      │
 │  Isolation Forest ── anomaly_score ∈ [0,1]                      │
-│  Neo4j BFS ── graph_risk_score ∈ [0,1]                          │
+│  Lance Graph ── graph_risk_score ∈ [0,1]                        │
 │  C3 DiD model ─ calibrate graph_risk_score weight (→ composite) │
 │  Composite ── confidence = w_a·anomaly + w_g·graph              │
 │                           + w_i·identity_volatility             │
@@ -91,35 +91,32 @@ DuckDB is the primary analytical store. It runs in-process with no server and qu
 | `vessel_meta` | `mmsi, imo, name, flag, ship_type, gross_tonnage` | Equasis + ITU MMSI |
 | `vessel_features` | one row per MMSI, all engineered features | Computed by `src/features/` |
 
-### Neo4j (Community Edition, Docker)
+### Lance Graph (`data/processed/mpol_graph/`)
 
-Neo4j holds the ownership graph. Cypher + GDS plugin enable BFS path queries and community detection that would be expensive to express in SQL.
+Lance Graph stores the vessel ownership graph as columnar Lance datasets on disk — no external server or Docker container required. The graph directory sits alongside the DuckDB file and is written by `src/ingest/vessel_registry.py`, read by `src/features/ownership_graph.py` and `src/features/identity.py`.
 
-**Node types:**
+**Node datasets** (one Lance file each):
 - `Vessel {mmsi, imo, name}`
 - `Company {id, name, country}`
-- `Country {code, name}`
-- `VesselName {name, date_from, date_to}`
-- `Address {address_id, street, city, country}` — registered address (P.O. box or physical)
-- `Person {person_id, name, nationality}` — directors, nominees, beneficial owners
+- `Country {code}`
+- `VesselName {name}`
+- `Address {address_id, street}`
+- `SanctionsRegime {name}`
 
-**Relationship types:**
-- `(Vessel)-[:OWNED_BY {since, until}]->(Company)`
-- `(Vessel)-[:MANAGED_BY {since, until}]->(Company)`
-- `(Company)-[:REGISTERED_IN]->(Country)`
-- `(Company)-[:CONTROLLED_BY]->(Company)` — beneficial ownership layers
-- `(Vessel)-[:ALIAS {date}]->(VesselName)`
-- `(Company)-[:SANCTIONED_BY {list, date}]->(SanctionsRegime)`
-- `(Company)-[:REGISTERED_AT]->(Address)` — enables shared-address clustering
-- `(Company)-[:DIRECTED_BY {since, until}]->(Person)` — nominee/director network
-- `(Vessel)-[:STS_CONTACT {timestamp, lat, lon, duration_h}]->(Vessel)` — co-location events recorded as graph edges
+**Relationship datasets** (src_id → dst_id plus edge properties):
+- `OWNED_BY` — `(Vessel.mmsi) → (Company.id)` with `{since, until}`
+- `MANAGED_BY` — `(Vessel.mmsi) → (Company.id)` with `{since, until}`
+- `REGISTERED_IN` — `(Company.id) → (Country.code)`
+- `CONTROLLED_BY` — `(Company.id) → (Company.id)` — beneficial ownership layers
+- `ALIAS` — `(Vessel.mmsi) → (VesselName.name)` with `{date}`
+- `SANCTIONED_BY` — `(Vessel.mmsi | Company.id) → (SanctionsRegime.name)` with `{list, date}`
+- `REGISTERED_AT` — `(Company.id) → (Address.address_id)` — shared-address clustering
+- `STS_CONTACT` — `(Vessel.mmsi) → (Vessel.mmsi)` — co-location events
 
-**Key GDS queries:**
-```cypher
-// Minimum BFS distance from vessel to any sanctioned company
-MATCH (v:Vessel {mmsi: $mmsi})
-CALL gds.shortestPath.dijkstra.stream(...)
-YIELD totalCost AS sanctions_distance
+**Key graph queries** (implemented as Polars joins in `src/features/`):
+```python
+# Minimum BFS distance from vessel to any sanctioned company
+# 0 = directly sanctioned, 1 = 1-hop owner/manager, 2 = 2-hop via CONTROLLED_BY, 99 = none
 ```
 
 ---
@@ -141,24 +138,24 @@ Computed with Polars over a rolling 30-day window per MMSI.
 
 ### Identity Volatility Features
 
-Computed from Equasis historical data via Neo4j.
+Computed from Equasis historical data via Lance Graph datasets.
 
 | Feature | Definition |
 |---|---|
 | `flag_changes_2y` | Number of flag state changes in rolling 2 years |
-| `name_changes_2y` | Number of name changes in rolling 2 years |
-| `owner_changes_2y` | Number of registered owner changes |
+| `name_changes_2y` | Number of name changes in rolling 2 years (from ALIAS dataset) |
+| `owner_changes_2y` | Number of registered owner changes (from OWNED_BY dataset) |
 | `high_risk_flag_ratio` | Fraction of time under flags with weak PSC oversight |
 | `ownership_depth` | Number of beneficial ownership layers to natural person |
 
 ### Ownership Graph Features
 
-Computed by Neo4j GDS.
+Computed by Polars joins over Lance Graph datasets.
 
 | Feature | Definition |
 |---|---|
 | `sanctions_distance` | Min BFS hops from vessel to any sanctioned entity (0 = vessel itself sanctioned) |
-| `cluster_sanctions_ratio` | Fraction of vessels in same Neo4j community that are sanctioned |
+| `cluster_sanctions_ratio` | Fraction of vessels in same ownership cluster that are sanctioned |
 | `shared_manager_risk` | Max sanctions_distance among all vessels sharing the same manager |
 | `shared_address_centrality` | Number of distinct vessels sharing the same registered address as any company in this vessel's ownership chain |
 | `sts_hub_degree` | Number of distinct vessels this vessel has been co-located with (STS_CONTACT degree) — identifies laundering hubs |
@@ -186,7 +183,7 @@ Isolation Forest is trained on the full feature matrix of vessels with `sanction
 
 ### C3 · Causal Sanction-Response Model (DiD)
 
-`src/score/causal_sanction.py` quantifies whether AIS gap frequency *causally increases* after sanction announcements for vessels connected (within 2 Neo4j hops) to sanctioned entities. This is used to calibrate the `graph_risk_score` weight in the composite formula.
+`src/score/causal_sanction.py` quantifies whether AIS gap frequency *causally increases* after sanction announcements for vessels connected (within 2 graph hops) to sanctioned entities. This is used to calibrate the `graph_risk_score` weight in the composite formula.
 
 For each regime (OFAC Iran, OFAC Russia, UN DPRK) the model fits a Difference-in-Differences (DiD) regression:
 

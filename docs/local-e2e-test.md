@@ -84,24 +84,21 @@ See [Local LLM Setup (macOS)](local-llm-setup.md) for a detailed configuration g
 
 ---
 
-## Step 1 — Start Neo4j and the dashboard
+## Step 1 — Start the dashboard
 
 ```bash
 docker compose up -d
 ```
 
-This starts two services:
+This starts:
 
-- **neo4j** — waits until the healthcheck passes before the dashboard connects
 - **dashboard** — FastAPI app at `http://localhost:8000`
-
-Verify Neo4j is up: open `http://localhost:7474` and log in with `neo4j / mpol-password`.
 
 ---
 
 ## Step 2 — Ingest data
 
-`scripts/run_pipeline.py` handles everything in one command: schema init → Marine Cadastre (optional) → AIS streaming → sanctions → ownership graph → feature engineering → scoring → GDELT geopolitical context.
+`scripts/run_pipeline.py` handles everything in one command: schema init → Marine Cadastre (optional) → AIS streaming → sanctions → ownership graph (Lance Graph) → feature engineering → scoring → GDELT geopolitical context.
 
 ```bash
 docker compose run --rm pipeline
@@ -139,16 +136,17 @@ See `docs/regional-playbooks.md` for per-region configuration details.
 A successful run ends with:
 
 ```
-[ 8/10] Scoring...                                 ✓  precision_at_50=0.62
-[ 9/10] Ingesting GDELT context (3d)...            ✓  Total events ingested: 5423
-[10/10] Launching dashboard...                     (skipped in non-interactive mode)
+[ 7/9] Scoring...                                  ✓  precision_at_50=0.62
+[ 8/9] Ingesting GDELT context (3d)...             ✓  Total events ingested: 5423
+[ 9/9] Launching dashboard...                      (skipped in non-interactive mode)
 ```
 
-> **Note on composite weights:** Step 8 automatically runs the C3 causal sanction-response model before `composite.py`. If enough AIS data is present to estimate a statistically significant treatment effect, the `w_graph` used will differ from the preset value shown in the region summary above. The calibrated value is logged to `data/processed/<region>_causal_effects.parquet`.
+> **Note on composite weights:** Step 7 automatically runs the C3 causal sanction-response model before `composite.py`. If enough AIS data is present to estimate a statistically significant treatment effect, the `w_graph` used will differ from the preset value shown in the region summary above. The calibrated value is logged to `data/processed/<region>_causal_effects.parquet`.
 
 Output files written to `./data/processed/`:
 
 - `<region>.duckdb` — DuckDB database for that region's raw data
+- `<region>_graph/` — Lance Graph datasets (Vessel, Company, ownership relationships)
 - `candidate_watchlist.parquet` — ranked candidate watchlist (read by the dashboard)
 - `<region>_causal_effects.parquet` — per-regime DiD ATT estimates and calibrated `w_graph` (C3)
 - `gdelt.lance/` — LanceDB vector store for analyst briefs
@@ -172,7 +170,7 @@ cat data/processed/validation_metrics.json
 
 **Analyst briefs (C2):** click any map marker → **Get Brief**. A one-paragraph brief citing recent GDELT events streams into the popup. Requires LLM credentials in `.env`. Best-effort — displays "Brief unavailable" if no LLM is reachable.
 
-**Causal effects (C3):** the pipeline writes `data/processed/<region>_causal_effects.parquet` during Step 8. To verify it manually:
+**Causal effects (C3):** the pipeline writes `data/processed/<region>_causal_effects.parquet` during Step 7. To verify it manually:
 
 1. Open the file in DuckDB CLI or any Parquet viewer:
    ```bash
@@ -206,10 +204,4 @@ All tests should pass. Any warnings from sklearn are harmless.
 
 ```bash
 docker compose down
-```
-
-To also remove the persisted Neo4j data volume:
-
-```bash
-docker compose down -v
 ```

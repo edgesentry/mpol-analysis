@@ -97,7 +97,7 @@ Note: a larger bbox increases WebSocket message volume significantly. Reduce `--
 
 **Who:** Analyst at Japan Coast Guard, a UN Panel of Experts on DPRK, or a sanctions intelligence firm monitoring North Korean coal exports and fuel imports in violation of UN Security Council resolutions (UNSCR 2371, 2375, 2397).
 
-**Primary signals:** Vessels going dark near DPRK waters, position jumps (GPS spoofing is endemic near the Korean Peninsula), STS transfers in the East China Sea, ownership links to DPRK-adjacent shell companies, high `cluster_sanctions_ratio` in the Neo4j graph (DPRK-connected networks are tightly clustered).
+**Primary signals:** Vessels going dark near DPRK waters, position jumps (GPS spoofing is endemic near the Korean Peninsula), STS transfers in the East China Sea, ownership links to DPRK-adjacent shell companies, high `cluster_sanctions_ratio` in the Lance Graph (DPRK-connected networks are tightly clustered).
 
 ### Step-by-step configuration
 

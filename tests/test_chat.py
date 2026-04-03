@@ -66,7 +66,7 @@ def test_chat_vessel_streams_tokens(client):
 
     with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
          patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_neo4j_ownership", return_value="No graph."):
+         patch("src.api.routes.chat._query_graph_ownership", return_value="No graph."):
         resp = client.post("/api/chat", json={"message": "Why is this vessel flagged?", "mmsi": "123456789"})
 
     assert resp.status_code == 200
@@ -92,7 +92,7 @@ def test_chat_vessel_context_in_system_prompt(client):
 
     with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
          patch("src.api.routes.chat.query_gdelt_context", return_value=gdelt_events), \
-         patch("src.api.routes.chat._query_neo4j_ownership", return_value="Owner Corp (Panama)"):
+         patch("src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"):
         client.post("/api/chat", json={"message": "Explain risk.", "mmsi": "123456789"})
 
     assert captured, "stream_messages never called"
@@ -153,7 +153,7 @@ def test_chat_response_cached_after_first_call(client, tmp_db):
 
     with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
          patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_neo4j_ownership", return_value="none"):
+         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
 
@@ -173,7 +173,7 @@ def test_chat_different_questions_not_shared_cache(client):
 
     with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
          patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_neo4j_ownership", return_value="none"):
+         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
         client.post("/api/chat", json={"message": "Question A", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Question B", "mmsi": "123456789"})
 
@@ -222,7 +222,7 @@ def test_chat_history_forwarded_to_llm(client):
 
     with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
          patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_neo4j_ownership", return_value="none"):
+         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
         client.post("/api/chat", json={
             "message": "Follow-up",
             "mmsi": "123456789",
