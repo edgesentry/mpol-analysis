@@ -8,9 +8,7 @@ For macOS users (Intel or Apple Silicon), you can run inference locally without 
 | :--- | :--- | :--- | :--- |
 | **OpenAI-alternative** | Llama 3.2 3B | `mlx-community/Llama-3.2-3B-Instruct-4bit` | `llama3.2:3b` |
 | **Chinese Model** | Qwen 2.5 7B | `mlx-community/Qwen2.5-7B-Instruct-4bit` | `qwen2.5:7b` |
-| **Google Model** | Gemma 4 E4B | `mlx-community/gemma-4-E4B-it-4bit` | `gemma4:e4b`* |
-
-*\*Gemma 4 support in Ollama may require the latest version.*
+| **Compact Model** | Qwen 2.5 3B | `mlx-community/Qwen2.5-3B-Instruct-4bit` | `qwen2.5:3b` |
 
 ---
 
@@ -35,9 +33,9 @@ Optimized for Apple Silicon. MLX LM runs quantized models natively on the Apple 
 2. **Start the OpenAI-compatible server**:
    Replace `--model` with your chosen model ID from the table above.
    ```bash
-   # Example: Running the latest Google Gemma 4 model
+   # Example: Running Llama 3.2 3B
    uv run mlx_lm.server \
-     --model mlx-community/gemma-4-E4B-it-4bit \
+     --model mlx-community/Llama-3.2-3B-Instruct-4bit \
      --port 8080
    ```
 
@@ -80,7 +78,7 @@ Supports Metal acceleration on Apple Silicon and CPU on Intel.
 ## Hardware & Performance Notes
 
 ### Memory Requirements
-- **2B - 4B Models (Llama 3.2 3B, Gemma 4 E4B):** Requires ~4GB RAM. Runs comfortably on 8GB MacBook Air.
+- **2B - 4B Models (Llama 3.2 3B, Qwen 2.5 3B):** Requires ~4GB RAM. Runs comfortably on 8GB MacBook Air.
 - **7B - 9B Models (Qwen 2.5 7B):** Requires ~8GB RAM. Recommended for 16GB+ machines.
 
 ### Processor Support
