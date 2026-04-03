@@ -35,6 +35,7 @@ nav:
     - Overview: analytics-overview.md
     - Feature Engineering: feature-engineering.md
     - Scoring Model: scoring-model.md
+    - Backtesting Validation: backtesting-validation.md
     - Pipeline Operations: pipeline-operations.md
   - Field Investigation: field-investigation.md
   - Local E2E Test: local-e2e-test.md

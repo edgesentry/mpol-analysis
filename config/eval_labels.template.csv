@@ -1,0 +1,3 @@
+mmsi,imo,label,label_confidence,evidence_source,evidence_url,notes
+123456789,IMO1234567,positive,high,ofac_sdn,https://ofac.treasury.gov/,Known sanctioned vessel in window
+987654321,IMO7654321,negative,medium,public_registry,,No public sanctions/evasion evidence in window

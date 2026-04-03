@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "description": "Historical backtest windows for shadow-fleet candidate evaluation",
+  "windows": [
+    {
+      "window_id": "2025q1-singapore",
+      "region": "singapore",
+      "start_date": "2025-01-01",
+      "end_date": "2025-03-31",
+      "watchlist_path": "../data/processed/candidate_watchlist.parquet",
+      "labels_path": "../data/processed/eval_labels_2025q1.csv"
+    }
+  ]
+}

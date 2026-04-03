@@ -29,6 +29,7 @@ Full documentation is in [`docs/`](docs/):
 | [Scenarios](docs/scenarios.md) | End-to-end workflows: morning brief, investigation, streaming, patrol handoff |
 | [Roadmap](docs/roadmap.md) | Phase A (screening) + Phase B (field investigation in edgesentry OSS) |
 | [Field Investigation](docs/field-investigation.md) | Physical vessel measurement, evidence capture, VDES reporting (edgesentry-rs/app) |
+| [Backtesting Validation](docs/backtesting-validation.md) | Historical offline evaluation workflow, labels policy, and threshold tuning |
 
 ## Scope
 
