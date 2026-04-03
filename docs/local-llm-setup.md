@@ -4,11 +4,11 @@ For macOS users (Intel or Apple Silicon), you can run inference locally without 
 
 ## Recommended Models
 
-| Category | Model | MLX ID (Hugging Face) | Ollama ID |
+| RAM Tier | Model | MLX ID (Hugging Face) | Ollama ID |
 | :--- | :--- | :--- | :--- |
-| **OpenAI-alternative** | Llama 3.2 3B | `mlx-community/Llama-3.2-3B-Instruct-4bit` | `llama3.2:3b` |
-| **Chinese Model** | Qwen 2.5 7B | `mlx-community/Qwen2.5-7B-Instruct-4bit` | `qwen2.5:7b` |
-| **Compact Model** | Qwen 2.5 3B | `mlx-community/Qwen2.5-3B-Instruct-4bit` | `qwen2.5:3b` |
+| **≤ 4 GB — Recommended** | Llama 3.2 3B | `mlx-community/Llama-3.2-3B-Instruct-4bit` | `llama3.2:3b` |
+| **≤ 4 GB — Alternative** | Qwen 2.5 3B | `mlx-community/Qwen2.5-3B-Instruct-4bit` | `qwen2.5:3b` |
+| **≤ 8 GB — Higher quality** | Qwen 2.5 7B | `mlx-community/Qwen2.5-7B-Instruct-4bit` | `qwen2.5:7b` |
 
 ---
 
@@ -78,8 +78,8 @@ Supports Metal acceleration on Apple Silicon and CPU on Intel.
 ## Hardware & Performance Notes
 
 ### Memory Requirements
-- **2B - 4B Models (Llama 3.2 3B, Qwen 2.5 3B):** Requires ~4GB RAM. Runs comfortably on 8GB MacBook Air.
-- **7B - 9B Models (Qwen 2.5 7B):** Requires ~8GB RAM. Recommended for 16GB+ machines.
+- **3B models (Llama 3.2 3B, Qwen 2.5 3B):** ~4 GB RAM. Runs comfortably on an 8 GB MacBook Air.
+- **7B models (Qwen 2.5 7B):** ~8 GB RAM. Recommended for 16 GB+ machines.
 
 ### Processor Support
 - **MLX LM:** Native support for **Apple Silicon (M1/M2/M3/M4)** only.
