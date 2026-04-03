@@ -39,6 +39,9 @@ WORKDIR /app
 # Copy the pre-built virtualenv from the builder
 COPY --from=builder /app/.venv /app/.venv
 
+# uv is needed at runtime because docker-compose commands use `uv run`
+RUN pip install --no-cache-dir uv
+
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY data/ ./data/
