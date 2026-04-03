@@ -232,11 +232,6 @@ def build_graph_tables(
     # ------------------------------------------------------------------
     # Assemble PyArrow tables
     # ------------------------------------------------------------------
-    empty_str_pair = pa.table({
-        "src_id": pa.array([], type=pa.string()),
-        "dst_id": pa.array([], type=pa.string()),
-    })
-
     return {
         "Vessel":          _rows_to_table(list(vessels.values()),      NODE_SCHEMAS["Vessel"]),
         "Company":         _rows_to_table(list(companies.values()),    NODE_SCHEMAS["Company"]),
