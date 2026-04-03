@@ -81,7 +81,7 @@ def watchlist_top(
 ) -> HTMLResponse:
     df = _load_watchlist()
     if df.is_empty():
-        return HTMLResponse("<tr><td colspan='6'>No data — run watchlist.py first.</td></tr>")
+        return HTMLResponse("<tr><td colspan='9'>No data — run watchlist.py first.</td></tr>")
 
     filtered = df.filter(pl.col("confidence") >= min_confidence)
     if vessel_types:
@@ -91,6 +91,8 @@ def watchlist_top(
     for row in filtered.head(top_n).with_columns(pl.col("last_seen").cast(pl.Utf8)).to_dicts():
         conf = row["confidence"]
         badge_class = "badge-red" if conf >= 0.7 else "badge-yellow" if conf >= 0.4 else "badge-green"
+        vessel_name = str(row["vessel_name"])
+        safe_name_attr = vessel_name.replace("'", "&#39;")
         try:
             signals = json.loads(row.get("top_signals") or "[]")
             signals_text = ", ".join(f"{s['feature']}" for s in signals[:2]) if signals else "—"
@@ -100,13 +102,16 @@ def watchlist_top(
         lat = row.get("last_lat") or ""
         lon = row.get("last_lon") or ""
         rows_html.append(
-            f"<tr class='watchlist-row' data-mmsi='{row['mmsi']}' data-lat='{lat}' data-lon='{lon}' data-name='{row['vessel_name']}'>"
+            f"<tr class='watchlist-row' data-mmsi='{row['mmsi']}' data-lat='{lat}' data-lon='{lon}' data-name='{safe_name_attr}'>"
             f"<td>{row['mmsi']}</td>"
-            f"<td>{row['vessel_name']}</td>"
+            f"<td>{vessel_name}</td>"
             f"<td>{row['vessel_type']}</td>"
             f"<td>{row['flag']}</td>"
             f"<td><span class='badge {badge_class}'>{conf:.2f}</span></td>"
             f"<td class='signals'>{signals_text}</td>"
+            f"<td class='review-tier' data-mmsi='{row['mmsi']}'>—</td>"
+            f"<td class='review-handoff' data-mmsi='{row['mmsi']}'>—</td>"
+            f"<td><button class='brief-btn review-btn' onclick=\"event.stopPropagation(); openReviewPanel('{row['mmsi']}', '{safe_name_attr}');\">Review</button></td>"
             f"</tr>"
         )
 

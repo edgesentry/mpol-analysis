@@ -89,6 +89,9 @@ def test_watchlist_top_html(client):
     assert r.status_code == 200
     assert "watchlist-row" in r.text
     assert "OCEAN GLORY" in r.text
+    assert "review-tier" in r.text
+    assert "review-handoff" in r.text
+    assert "Review</button>" in r.text
 
 
 def test_watchlist_top_filtered(client):
