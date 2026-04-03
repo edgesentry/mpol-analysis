@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 
 # Export pinned requirements then install into /install so it can be copied cleanly
-RUN uv export --no-dev --frozen -o /tmp/requirements.txt \
+RUN uv export --no-dev --frozen --no-emit-project -o /tmp/requirements.txt \
     && pip install --no-cache-dir --prefix /install -r /tmp/requirements.txt
 
 # ── runtime: lean image without build tools ────────────────────────────────────
