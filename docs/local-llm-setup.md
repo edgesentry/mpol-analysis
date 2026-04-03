@@ -25,19 +25,19 @@ A frontier-class model is not needed. The task is closer to *templated summarisa
 
 ## Recommended Models
 
-| RAM Tier | Model | MLX ID (Hugging Face) | Ollama ID | Why it fits |
-| :--- | :--- | :--- | :--- | :--- |
-| **≤ 4 GB — Recommended** | Llama 3.2 3B | `mlx-community/Llama-3.2-3B-Instruct-4bit` | `llama3.2:3b` | Strong instruction following at 3B; runs at ~80 tok/s on M-series; well-tested with the brief and chat prompts |
-| **≤ 4 GB — Alternative** | Qwen 2.5 3B | `mlx-community/Qwen2.5-3B-Instruct-4bit` | `qwen2.5:3b` | Slightly better structured-output fidelity than Llama at the same size; good fallback if Llama output feels loose |
-| **≤ 8 GB — Higher quality** | Qwen 2.5 7B | `mlx-community/Qwen2.5-7B-Instruct-4bit` | `qwen2.5:7b` | Noticeably better at multi-hop reasoning (e.g. connecting an ownership chain to a sanctions regime in chat); use on 16 GB+ machines |
+Model IDs and full config blocks live in **`.env.example`** — that is the single source of truth. The table below explains which option to pick and why.
+
+| RAM Tier | Model | Why it fits |
+| :--- | :--- | :--- |
+| **≤ 4 GB — Recommended** | Llama 3.2 3B | Strong instruction following at 3B; runs at ~80 tok/s on M-series; well-tested with the brief and chat prompts |
+| **≤ 4 GB — Alternative** | Qwen 2.5 3B | Slightly better structured-output fidelity than Llama at the same size; good fallback if Llama output feels loose |
+| **≤ 8 GB — Higher quality** | Qwen 2.5 7B | Noticeably better at multi-hop reasoning (e.g. connecting an ownership chain to a sanctions regime in chat); use on 16 GB+ machines |
 
 ---
 
 ## ⚠️ Docker Access Note
-If you are running the **MPOL Dashboard or Pipeline inside Docker**, you cannot use `localhost` in your `.env` file to reach the LLM server. You must use **`host.docker.internal`** to allow the container to communicate with your Mac host:
 
-*   **MLX:** `LLM_BASE_URL=http://host.docker.internal:8080/v1`
-*   **Ollama:** `LLM_BASE_URL=http://host.docker.internal:11434/v1`
+If you are running the **MPOL Dashboard or Pipeline inside Docker**, you cannot use `localhost` in your `.env` file to reach the LLM server. The blocks in `.env.example` already use `host.docker.internal` for this reason.
 
 ---
 
@@ -47,26 +47,15 @@ Optimized for Apple Silicon. MLX LM runs quantized models natively on the Apple 
 
 1. **Install the dependencies** (requires Python 3.10+):
    ```bash
-   # Sync the environment and include the mlx extra
    uv sync --extra mlx
    ```
 
-2. **Start the OpenAI-compatible server**:
-   Replace `--model` with your chosen model ID from the table above.
+2. **Start the OpenAI-compatible server** using the model ID from your chosen block in `.env.example`:
    ```bash
-   # Example: Running Llama 3.2 3B
-   uv run mlx_lm.server \
-     --model mlx-community/Llama-3.2-3B-Instruct-4bit \
-     --port 8080
+   uv run mlx_lm.server --model <LLM_MODEL from .env.example> --port 8080
    ```
 
-3. **Update `.env`**:
-   ```env
-   LLM_PROVIDER=mlx
-   LLM_BASE_URL=http://localhost:8080/v1  # Use host.docker.internal if running in Docker
-   LLM_API_KEY=local
-   LLM_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
-   ```
+3. **Copy the matching `MLX LM` block from `.env.example` into `.env`** and uncomment it.
 
 ---
 
@@ -79,19 +68,13 @@ Supports Metal acceleration on Apple Silicon and CPU on Intel.
    brew install ollama
    ```
 
-2. **Pull a model and start the server**:
+2. **Pull the model** using the ID from your chosen `Ollama` block in `.env.example`:
    ```bash
-   ollama pull llama3.2:3b
+   ollama pull <LLM_MODEL from .env.example>
    ollama serve
    ```
 
-3. **Update `.env`**:
-   ```env
-   LLM_PROVIDER=ollama
-   LLM_BASE_URL=http://localhost:11434/v1 # Use host.docker.internal if running in Docker
-   LLM_API_KEY=local
-   LLM_MODEL=llama3.2:3b
-   ```
+3. **Copy the matching `Ollama` block from `.env.example` into `.env`** and uncomment it.
 
 ---
 
