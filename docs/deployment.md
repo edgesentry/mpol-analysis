@@ -12,11 +12,14 @@ This starts:
 
 | Container | Port | Purpose |
 |---|---|---|
+| `mpol-minio` | 9000 / 9001 | MinIO S3-compatible object store (API / console) |
 | `mpol-dashboard` | 8000 | FastAPI + HTMX dashboard |
+
+MinIO is pre-configured with a bucket named `arktrace`. The pipeline and dashboard write Lance Graph datasets, LanceDB, and output Parquet files to it. Open the MinIO console at `http://localhost:9001` (user: `minioadmin` / password: `minioadmin`) to browse stored objects.
 
 Open `http://localhost:8000`.
 
-The `data/` directory is bind-mounted into the container, so the scoring pipeline (`uv run python src/score/watchlist.py`) can still be run on the host and the dashboard will pick up changes immediately.
+The `data/` directory is bind-mounted for the DuckDB working file only. All derived artifacts (Parquet outputs, graph datasets, GDELT vector store) go to MinIO.
 
 Stop everything:
 
@@ -48,6 +51,20 @@ Environment variables (all optional — defaults shown):
 | `ALERT_CONFIDENCE_THRESHOLD` | `0.75` | Confidence level that triggers SSE toast |
 | `ALERT_POLL_INTERVAL` | `60` | Seconds between watchlist polls for alerts |
 
+### Object storage (S3)
+
+When `S3_BUCKET` is set, all derived artifacts are written to S3-compatible storage instead of local disk. Omit `S3_BUCKET` to use local paths (default).
+
+| Variable | Local default | Description |
+|---|---|---|
+| `S3_BUCKET` | _(unset — local mode)_ | Bucket name; setting this enables S3 mode |
+| `S3_ENDPOINT` | — | Custom endpoint URL for MinIO or R2 (omit for real AWS S3) |
+| `AWS_ACCESS_KEY_ID` | — | Access key |
+| `AWS_SECRET_ACCESS_KEY` | — | Secret key |
+| `AWS_REGION` | `us-east-1` | Region (ignored for MinIO) |
+
+What goes to S3: Lance Graph datasets (`<region>_graph/`), LanceDB GDELT store (`gdelt.lance`), output Parquet files (`processed/`). The DuckDB `.duckdb` working file always stays local.
+
 ---
 
 ## Cloud — single VM (e.g. AWS EC2, GCP Compute Engine, DigitalOcean Droplet)
@@ -74,7 +91,17 @@ sudo usermod -aG docker $USER
 git clone https://github.com/edgesentry/arktrace.git
 cd arktrace
 cp .env.example .env
-# Edit .env — set AISSTREAM_API_KEY and LLM_API_KEY
+# Edit .env — set AISSTREAM_API_KEY, LLM_API_KEY, and S3 credentials
+```
+
+For production, point to a real S3 bucket instead of MinIO:
+
+```env
+S3_BUCKET=your-bucket-name
+# S3_ENDPOINT=               # leave blank for AWS S3
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+AWS_REGION=ap-southeast-1
 ```
 
 ### 4. Build and start
@@ -145,4 +172,13 @@ docker build -t ghcr.io/edgesentry/mpol-dashboard:latest .
 docker push ghcr.io/edgesentry/mpol-dashboard:latest
 ```
 
-The image exposes port `8000` and reads `WATCHLIST_OUTPUT_PATH` / `VALIDATION_METRICS_PATH` from environment variables. Mount the processed data directory as a volume or copy the parquet/json files into the image at build time for a fully self-contained read-only demo.
+The image exposes port `8000`. Pass S3 credentials as environment variables so the dashboard reads Parquet outputs and Lance datasets from the shared bucket — no volume mount required:
+
+```bash
+docker run -p 8000:8000 \
+  -e S3_BUCKET=your-bucket \
+  -e AWS_ACCESS_KEY_ID=... \
+  -e AWS_SECRET_ACCESS_KEY=... \
+  -e AWS_REGION=ap-southeast-1 \
+  ghcr.io/edgesentry/mpol-dashboard:latest
+```
