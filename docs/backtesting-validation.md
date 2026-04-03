@@ -250,10 +250,10 @@ uv run python scripts/run_public_backtest_batch.py \
 
 Outputs:
 
-- `data/processed/evaluation_manifest_public_nightly.json`
-- `data/processed/backtest_report_public_nightly.json`
-- `data/processed/backtest_public_nightly_summary.json`
-- `data/processed/eval_labels_public_*_nightly.csv`
+- `data/processed/evaluation_manifest_public_integration.json`
+- `data/processed/backtest_report_public_integration.json`
+- `data/processed/backtest_public_integration_summary.json`
+- `data/processed/eval_labels_public_*_integration.csv`
 
 GitHub Actions workflow:
 

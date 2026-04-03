@@ -102,7 +102,7 @@ def _build_labels_for_watchlist(
         pl.lit("positive").alias("label"),
         pl.lit("high").alias("label_confidence"),
         pl.lit("https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json").alias("evidence_url"),
-        pl.lit("public sanctions overlap (nightly OR match)").alias("notes"),
+        pl.lit("public sanctions overlap (integration OR match)").alias("notes"),
     ).select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
 
     tail = watchlist.filter(pl.col("confidence") < 0.2)
@@ -115,14 +115,14 @@ def _build_labels_for_watchlist(
         pl.lit("weak").alias("label_confidence"),
         pl.lit("no_public_match_demo").alias("evidence_source"),
         pl.lit("").alias("evidence_url"),
-        pl.lit("nightly synthetic negative; analyst review required").alias("notes"),
+        pl.lit("integration synthetic negative; analyst review required").alias("notes"),
     ).select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
 
     return pl.concat([pos_labels, neg_labels], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run nightly public-data backtest batch")
+    parser = argparse.ArgumentParser(description="Run public-data backtest integration batch")
     parser.add_argument(
         "--regions",
         default="singapore,japan,middleeast,europe,gulf",
@@ -131,13 +131,18 @@ def main() -> None:
     parser.add_argument("--gdelt-days", type=int, default=14)
     parser.add_argument("--stream-duration", type=int, default=0)
     parser.add_argument("--seed-dummy", action="store_true")
-    parser.add_argument("--marine-cadastre-year", type=int, default=2023)
+    parser.add_argument(
+        "--marine-cadastre-year",
+        type=int,
+        default=None,
+        help="Optional year for Gulf marine cadastre backfill. Disabled by default for CI portability.",
+    )
     parser.add_argument("--public-db", default="data/processed/public_eval.duckdb")
     parser.add_argument("--public-raw", default="data/raw/sanctions/opensanctions_entities.jsonl")
     parser.add_argument("--public-metadata", default="data/processed/public_eval_metadata.json")
-    parser.add_argument("--manifest-out", default="data/processed/evaluation_manifest_public_nightly.json")
-    parser.add_argument("--report-out", default="data/processed/backtest_report_public_nightly.json")
-    parser.add_argument("--summary-out", default="data/processed/backtest_public_nightly_summary.json")
+    parser.add_argument("--manifest-out", default="data/processed/evaluation_manifest_public_integration.json")
+    parser.add_argument("--report-out", default="data/processed/backtest_report_public_integration.json")
+    parser.add_argument("--summary-out", default="data/processed/backtest_public_integration_summary.json")
     parser.add_argument("--max-known-cases", type=int, default=200)
     parser.add_argument("--min-known-cases", type=int, default=30)
     parser.add_argument(
@@ -189,13 +194,13 @@ def main() -> None:
             continue
         watchlist = pl.read_parquet(watchlist_path)
         labels = _build_labels_for_watchlist(watchlist, positives, args.max_known_cases)
-        labels_path = (processed_dir / f"eval_labels_public_{region}_nightly.csv").resolve()
+        labels_path = (processed_dir / f"eval_labels_public_{region}_integration.csv").resolve()
         labels.write_csv(labels_path)
         label_counts[region] = int(labels.filter(pl.col("label") == "positive").height)
 
         windows.append(
             {
-                "window_id": f"{region}-nightly-public",
+                "window_id": f"{region}-integration-public",
                 "region": region,
                 "start_date": "2026-01-01",
                 "end_date": datetime.now(UTC).date().isoformat(),
@@ -206,7 +211,7 @@ def main() -> None:
 
     manifest = {
         "schema_version": "1.0",
-        "description": "Nightly public-data backtest batch",
+        "description": "Main-merge public-data backtest integration batch",
         "windows": windows,
     }
     manifest_path = (project_root / args.manifest_out).resolve()
@@ -214,11 +219,20 @@ def main() -> None:
 
     report_path = (project_root / args.report_out).resolve()
     report = run_backtest(str(manifest_path), str(report_path), [25, 50, 100, 200])
+    report_dict = report if isinstance(report, dict) else {}
 
     total_known_cases = 0
     region_summary: list[dict[str, Any]] = []
-    for window in report.get("windows", []):
+    windows_data = report_dict.get("windows", [])
+    if not isinstance(windows_data, list):
+        windows_data = []
+
+    for window in windows_data:
+        if not isinstance(window, dict):
+            continue
         cov = window.get("source_positive_coverage", {})
+        if not isinstance(cov, dict):
+            cov = {}
         total = int(cov.get("source_positive_total", 0))
         total_known_cases += total
         region_summary.append(
@@ -240,7 +254,7 @@ def main() -> None:
         "report_path": str(report_path),
         "manifest_path": str(manifest_path),
         "region_summary": region_summary,
-        "metrics_summary": report.get("summary", {}),
+        "metrics_summary": report_dict.get("summary", {}),
     }
 
     summary_path = (project_root / args.summary_out).resolve()
