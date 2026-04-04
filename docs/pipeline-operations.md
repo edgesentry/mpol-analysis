@@ -30,6 +30,20 @@ Available menu jobs:
 - Historical Backtesting + Public Integration Batch
 - Demo/Smoke
 
+### Delayed-label intelligence loop (backtracking)
+
+Run after a confirmed label is submitted to surface precursor signals and uplift related entities.
+
+```bash
+# Full pass
+uv run python scripts/run_backtracking.py
+
+# Incremental — only labels confirmed since a checkpoint
+uv run python scripts/run_backtracking.py --since 2026-04-01T00:00:00Z
+```
+
+See [Backtracking Runbook](backtracking-runbook.md) for full options, output format, and demo scenario.
+
 ---
 
 ## Region presets
@@ -229,6 +243,9 @@ SQL
 | `data/processed/composite_scores.parquet` | Full scored vessel frame (all vessels) |
 | `data/processed/candidate_watchlist.parquet` | Top candidates, sorted by confidence |
 | `data/processed/validation_metrics.json` | Precision@50, Recall@200, AUROC |
+| `data/processed/review_feedback_evaluation.json` | Tier-aware metrics and threshold recommendations |
+| `data/processed/backtracking_report.json` | Delayed-label intelligence loop report |
+| `data/processed/backtracking_report.md` | Human-readable backtracking summary |
 
 ---
 

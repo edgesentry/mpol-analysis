@@ -185,6 +185,34 @@ Quantify the causal link between sanction events and observable AIS behaviour:
 - **Method:** Difference-in-Differences (DiD) with vessel-type and route-corridor fixed effects; OLS with HC3 heteroskedasticity-robust standard errors (`src/score/causal_sanction.py`)
 - **Output:** Per-sanction-regime ATT estimate + 95% CI written to `data/processed/causal_effects.parquet`; `calibrate_graph_weight()` derives a `graph_risk_score` weight in [0.20, 0.65] that is passed as `--w-graph` to `src/score/composite.py`
 
+### C8 · Human-in-the-Loop Triage System *(Done — [#54](https://github.com/edgesentry/arktrace/issues/54), [#55](https://github.com/edgesentry/arktrace/issues/55), [#56](https://github.com/edgesentry/arktrace/issues/56), [#57](https://github.com/edgesentry/arktrace/issues/57), [#58](https://github.com/edgesentry/arktrace/issues/58))*
+
+End-to-end human-in-the-loop review and feedback workflow:
+
+- **Tier taxonomy + evidence policy** ([#55](https://github.com/edgesentry/arktrace/issues/55)): Five-tier classification (Confirmed / Probable / Suspect / Cleared / Inconclusive) with evidence requirements, escalation rules, and over-claim safeguards documented in [`docs/triage-governance.md`](triage-governance.md)
+- **Review schema + API** ([#56](https://github.com/edgesentry/arktrace/issues/56)): `vessel_reviews` DuckDB table; `POST /api/reviews`, `GET /api/reviews/{mmsi}`, `GET /api/reviews/{mmsi}/history` endpoints; tiered handoff states (queued → in_review → handoff_recommended → handoff_completed)
+- **Dashboard review workflow** ([#57](https://github.com/edgesentry/arktrace/issues/57)): Review panel in HTMX dashboard with vessel details, past feedback records, LLM explanation, and tier/handoff decision submission; row-level tier and handoff state reflected in watchlist table
+- **Feedback-driven evaluation + threshold tuning** ([#58](https://github.com/edgesentry/arktrace/issues/58)): `src/score/review_feedback_evaluation.py` computes Precision@K, ops-aware hit-rate, tier-aware metrics, and threshold recommendations from analyst decisions; drift/regression pass/fail gates; `scripts/run_review_feedback_evaluation.py` CLI
+
+### C9 · Historical Backtesting Validation *(Done — [#53](https://github.com/edgesentry/arktrace/issues/53))*
+
+Offline evaluation workflow using historical AIS windows and public label sources:
+
+- Historical backtesting script (`scripts/run_backtest.py`) that runs the scoring pipeline over a frozen AIS window and evaluates against OFAC ground truth
+- Public integration batch (`scripts/run_public_backtest_batch.py`) that verifies known-case floor across all five regions; runs automatically in CI on merge to `main`
+- Batch summary and known-case coverage reports written to `data/processed/`
+- Documented in [`docs/backtesting-validation.md`](backtesting-validation.md)
+
+### C10 · Delayed-Label Intelligence Loop *(Done — [#67](https://github.com/edgesentry/arktrace/issues/67))*
+
+Converts delayed confirmed labels into forward-looking detection power without full model retrain:
+
+- **`src/analysis/causal_rewind.py`**: per-vessel retroactive 12-month AIS scan; detects precursor signals (AIS gap uplift, STS proxy, low-SOG fraction) by comparing 0–90 day pre-confirmation window to 90–365 day baseline
+- **`src/analysis/label_propagation.py`**: BFS graph traversal from confirmed MMSIs via shared owner (confidence 0.65), shared manager (0.60), and STS contact (0.50) edges; output includes traceable `source_mmsi` + `evidence_type` per propagated entity
+- **`src/analysis/backtracking_runner.py`**: orchestrator; `--since` flag enables incremental mode (process only labels confirmed since a checkpoint); `regression_checks.pass` validates completeness; writes JSON + Markdown artifacts
+- **`scripts/run_backtracking.py`**: CLI entry point
+- Documented in [`docs/backtracking-runbook.md`](backtracking-runbook.md)
+
 ### C7 · Cap Vista Pre-Submission Enhancements *(Done — [#26](https://github.com/edgesentry/arktrace/issues/26))*
 
 Four targeted improvements identified during pre-submission review:
@@ -242,4 +270,10 @@ A3 ──► C3 (causal model uses AIS gap + sanctions event time-series)
 A3 ──► C4 (CLI hardening exposes ais_behavior / composite / marine_cadastre params)
 C3 ──► A4 (calibrated graph_risk_score weights feed back into composite scoring)
 C1 ──► B6 (C1 dashboard replaces Phase A Streamlit in port ops centre)
+
+A4 ──► C8 (triage review consumes watchlist candidates)
+C8 ──► C9 (backtesting uses confirmed/cleared labels as ground truth)
+C8 ──► C10 (backtracking loop triggered by confirmed labels from C8)
+C9 ──► C10 (backtracking extends evaluation with precursor discovery)
+C10 ──► A4 (propagated entity uplift feeds forward into next screening cycle)
 ```
