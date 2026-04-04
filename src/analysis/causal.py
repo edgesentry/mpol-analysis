@@ -55,13 +55,6 @@ SIGNAL_UPLIFT_THRESHOLD = 1.5
 # Minimum number of matching signals to surface a candidate
 MIN_MATCHING_SIGNALS = 1
 
-# Features mapped to C3's ATT interpretation (AIS gaps are the primary outcome)
-_CAUSAL_FEATURES: list[str] = [
-    "ais_gap_count_30d",
-    "sts_candidate_count",
-    "flag_changes_2y",
-]
-
 
 @dataclass
 class CausalSignal:
