@@ -171,10 +171,82 @@ def apply_geopolitical_filter(
     )
 
 
+# ITU Maritime Identification Digits (MID) → ISO 3166-1 alpha-2 country code.
+# Keys are the first three digits of the MMSI string.  Only covers MIDs
+# relevant to shadow-fleet regions; unknown prefixes return empty string.
+_MID_TO_FLAG: dict[str, str] = {
+    # North Asia
+    "412": "CN", "413": "CN", "414": "CN",
+    "431": "JP", "432": "JP", "433": "JP",
+    "440": "KR", "441": "KR",
+    "445": "KP",
+    "477": "HK",
+    # South-East Asia
+    "525": "ID",
+    "533": "MY",
+    "563": "SG", "564": "SG", "565": "SG", "566": "SG", "567": "SG",
+    "574": "VN", "576": "VN",
+    "567": "SG",
+    # South Asia
+    "419": "IN",
+    "403": "SA",
+    # Middle East / Gulf
+    "422": "IR",
+    "447": "KW",
+    "466": "QA",
+    "470": "AE", "471": "AE",
+    # Russia / CIS
+    "273": "RU",
+    "272": "UA",
+    # Europe
+    "209": "CY", "210": "CY",
+    "232": "GB", "233": "GB", "234": "GB", "235": "GB",
+    "237": "GR", "239": "GR", "240": "GR", "241": "GR",
+    "248": "MT", "249": "MT",
+    "257": "NO", "258": "NO", "259": "NO",
+    "271": "TR",
+    # Flag-of-convenience / open registries
+    "308": "BS", "309": "BS", "310": "BS", "311": "BS",
+    "351": "PA", "352": "PA", "353": "PA", "354": "PA",
+    "355": "PA", "356": "PA", "357": "PA",
+    "370": "PA", "371": "PA", "372": "PA", "373": "PA", "374": "PA",
+    "538": "MH",
+    "636": "LR",
+    "667": "SL",
+    # Africa
+    "613": "CM",
+    # Americas
+    "303": "US", "338": "US", "366": "US", "367": "US", "368": "US", "369": "US",
+    "305": "AG",
+    "710": "BR",
+    "725": "CL",
+    "730": "CO",
+    "734": "VE",
+    # Additional open registries / flag-of-convenience
+    "205": "BE",
+    "209": "CY", "210": "CY",
+    "212": "CY",
+    "219": "DK",
+    "253": "IE",
+    "256": "MT",
+    "312": "BZ",
+    "416": "TW",
+    "518": "CK",
+    "548": "PH",
+}
+
+
+def _mmsi_to_flag(mmsi: str) -> str:
+    """Return ISO 2-letter flag code derived from the MMSI MID prefix, or ''."""
+    if not mmsi or len(mmsi) < 3:
+        return ""
+    return _MID_TO_FLAG.get(mmsi[:3], "")
+
+
 def load_watchlist_context(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     con = duckdb.connect(db_path, read_only=True)
     try:
-        return con.execute(
+        df = con.execute(
             """
             WITH latest_positions AS (
                 SELECT
@@ -184,24 +256,41 @@ def load_watchlist_context(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
                     timestamp AS last_seen,
                     ROW_NUMBER() OVER (PARTITION BY mmsi ORDER BY timestamp DESC) AS rn
                 FROM ais_positions
+            ),
+            ais_meta AS (
+                SELECT
+                    mmsi,
+                    mode(ship_type) FILTER (WHERE ship_type IS NOT NULL AND ship_type > 0)
+                        AS ais_ship_type
+                FROM ais_positions
+                GROUP BY mmsi
             )
             SELECT
-                vf.*, 
+                vf.*,
                 COALESCE(vm.imo, '') AS imo,
                 COALESCE(vm.name, vf.mmsi) AS vessel_name,
-                COALESCE(vm.ship_type, 0) AS ship_type,
-                COALESCE(vm.flag, '') AS flag,
+                COALESCE(vm.ship_type, am.ais_ship_type, 0) AS ship_type,
+                COALESCE(NULLIF(vm.flag, ''), '') AS flag,
                 lp.last_lat,
                 lp.last_lon,
                 lp.last_seen
             FROM vessel_features vf
             LEFT JOIN vessel_meta vm ON vm.mmsi = vf.mmsi
             LEFT JOIN latest_positions lp ON lp.mmsi = vf.mmsi AND lp.rn = 1
+            LEFT JOIN ais_meta am ON am.mmsi = vf.mmsi
             ORDER BY vf.mmsi
             """
         ).pl()
     finally:
         con.close()
+
+    # Fallback: derive flag from MMSI prefix (ITU MID) when registry data is absent
+    return df.with_columns(
+        pl.struct(["mmsi", "flag"]).map_elements(
+            lambda r: r["flag"] if r["flag"] else _mmsi_to_flag(r["mmsi"]),
+            return_dtype=pl.Utf8,
+        ).alias("flag")
+    )
 
 
 def _ship_type_label(ship_type: int) -> str:
