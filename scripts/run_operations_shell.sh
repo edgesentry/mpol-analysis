@@ -219,6 +219,79 @@ run_demo_smoke() {
   print_watchlist_summary "$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
 }
 
+run_backtracking() {
+  echo
+  echo "[5] Delayed-Label Intelligence (Backtracking)"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+  local since
+  since="$(prompt "Process labels confirmed since (ISO timestamp, leave blank for all)" "")"
+  local output_path
+  output_path="$(prompt "JSON report output path" "data/processed/backtracking_report.json")"
+  local md_output_path
+  md_output_path="$(prompt "Markdown summary output path" "data/processed/backtracking_report.md")"
+
+  local cmd=(uv run python scripts/run_backtracking.py
+    --db "$db_path"
+    --output "$output_path"
+    --md-output "$md_output_path"
+  )
+  if [[ -n "$since" ]]; then
+    cmd+=(--since "$since")
+  fi
+
+  if ! run_cmd "${cmd[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  local abs_output="$PROJECT_ROOT/$output_path"
+  REPORT_PATH="$abs_output" uv run python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["REPORT_PATH"]).resolve()
+if not path.exists():
+    print("Result: SUCCESS, but report was not found")
+    raise SystemExit(0)
+
+report = json.loads(path.read_text())
+rc = report.get("regression_checks", {})
+status = "PASS" if rc.get("pass") else "FAIL"
+print("Result: SUCCESS")
+print(
+    f"Summary: confirmed={rc.get('confirmed_vessel_count', 0)}, "
+    f"rewound={rc.get('rewind_vessel_count', 0)}, "
+    f"propagated={rc.get('propagated_entity_count', 0)}, "
+    f"regression={status}"
+)
+print(f"Artifact: {path}")
+PY
+}
+
+run_seed_dev_data() {
+  echo
+  echo "[6] Seed Dev Data"
+
+  local db_path
+  db_path="$(prompt "DuckDB path to also seed (leave blank to update watchlist parquet only)" "data/processed/mpol.duckdb")"
+
+  local cmd=(uv run python scripts/seed_dev_watchlist.py)
+  if [[ -n "$db_path" ]]; then
+    cmd+=(--db "$db_path")
+  fi
+
+  if ! run_cmd "${cmd[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+  print_watchlist_summary "$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+}
+
 main_menu() {
   while true; do
     echo
@@ -227,6 +300,8 @@ main_menu() {
     echo "2) Review-Feedback Evaluation  — compute Precision@K and threshold recommendations from analyst decisions"
     echo "3) Historical Backtesting      — validate scoring against known-positive vessels across all regions"
     echo "4) Demo/Smoke                  — load demo watchlist for fast UI and dashboard testing"
+    echo "5) Delayed-Label Intelligence  — causal rewind + label propagation from confirmed labels"
+    echo "6) Seed Dev Data               — seed watchlist parquet + DuckDB for local testing and backtracking evaluation"
     echo "q) Quit"
 
     local choice
@@ -238,6 +313,8 @@ main_menu() {
       2) run_review_feedback ;;
       3) run_backtesting_public_batch ;;
       4) run_demo_smoke ;;
+      5) run_backtracking ;;
+      6) run_seed_dev_data ;;
       q|quit|exit)
         echo "Bye"
         return
