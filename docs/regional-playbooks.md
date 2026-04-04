@@ -50,6 +50,8 @@ uv run python src/features/ais_behavior.py --window 30
 
 Default weights are tuned for this region (`0.4 × anomaly + 0.4 × graph + 0.2 × identity`). No changes needed.
 
+*Note: when running via `scripts/run_pipeline.py`, the C3 causal model automatically calibrates `w_graph` before Step 8. The value above is the fallback if insufficient AIS data is available.*
+
 **A4 — Bunker barge exclusion (Singapore-specific)**
 
 Singapore waters contain a large population of legitimate service craft: bunker barges (AIS type 51–54), pilot tenders (type 51), and harbour tugs (types 31–32). These vessels loiter at low SOG near anchorages and refuelling points — the same behavioural signature as shadow-fleet STS transfers. Without exclusion, including them in the HDBSCAN training baseline compresses anomaly scores for genuine dark-vessel events.
@@ -140,6 +142,8 @@ Run all other feature scripts with `--db data/processed/japansea.duckdb`.
 **A4 — Composite scoring**
 
 The default weight puts `graph_risk_score` at 40%. For DPRK analysis this is correct — ownership graph proximity to UN-listed entities is the strongest signal. No weight change needed.
+
+*Note: when running via `scripts/run_pipeline.py`, the C3 causal model automatically calibrates `w_graph` before Step 8. The value above is the fallback if insufficient AIS data is available.*
 
 **Dashboard — Filters to apply**
 
@@ -247,6 +251,8 @@ uv run python src/score/composite.py \
   --db data/processed/gulf.duckdb \
   --w-anomaly 0.50 --w-graph 0.30 --w-identity 0.20
 ```
+
+*Note: when running via `scripts/run_pipeline.py`, the C3 causal model automatically calibrates `w_graph` before Step 8. The value above is the fallback if insufficient AIS data is available.*
 
 **Dashboard — Filters to apply**
 
@@ -358,6 +364,8 @@ uv run python src/score/composite.py \
   --db data/processed/europe.duckdb \
   --w-anomaly 0.35 --w-graph 0.35 --w-identity 0.30
 ```
+
+*Note: when running via `scripts/run_pipeline.py`, the C3 causal model automatically calibrates `w_graph` before Step 8. The value above is the fallback if insufficient AIS data is available.*
 
 **Dashboard — Filters to apply**
 
@@ -502,6 +510,8 @@ Run all other feature scripts with `--db data/processed/middleeast.duckdb`.
 **A4 — Composite scoring**
 
 For Iranian crude, all three signal categories are strong. The default weights are appropriate. However, `sanctions_distance` carries outsized predictive power here because Iran operates a tightly-connected network where most vessels are within 2–3 hops of an OFAC-listed entity. No weight change required.
+
+*Note: when running via `scripts/run_pipeline.py`, the C3 causal model automatically calibrates `w_graph` before Step 8. The value above is the fallback if insufficient AIS data is available.*
 
 **Dashboard — Filters to apply**
 

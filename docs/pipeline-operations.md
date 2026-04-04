@@ -56,7 +56,7 @@ See [Backtracking Runbook](backtracking-runbook.md) for full options, output for
 | Europe / Baltic | `europe` | `europe.duckdb` | 6 h | 45 d | 0.35 / 0.35 / 0.30 |
 | US Gulf | `gulf` | `gulf.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
 
-The preset weights are starting points. The C3 causal model automatically calibrates `w_graph` at the start of each scoring cycle.
+The preset weights are starting points. The pipeline auto-calibrates `w_graph` on every run via `_calibrate_graph_weight()`. Calling `src.score.composite` standalone still requires `--w-graph` (or the new `--auto-calibrate` flag). The calibrated value is printed at the end of Step 8 for reference.
 
 ---
 

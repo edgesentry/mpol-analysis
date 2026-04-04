@@ -1,0 +1,27 @@
+regimes:
+  OFAC_Iran:
+    label: "OFAC Iran"
+    list_source_substr: "us_ofac_sdn"
+    flag_filter: ["IR", ""]
+    announcement_dates:
+      - "2012-03-15"
+      - "2019-05-08"
+      - "2020-01-10"
+
+  OFAC_Russia:
+    label: "OFAC Russia"
+    list_source_substr: "us_ofac_sdn"
+    flag_filter: ["RU", ""]
+    announcement_dates:
+      - "2022-02-24"
+      - "2022-09-15"
+      - "2023-02-24"
+
+  UN_DPRK:
+    label: "UN DPRK"
+    list_source_substr: "un_sc_sanctions"
+    flag_filter: ["KP", ""]
+    announcement_dates:
+      - "2017-08-05"
+      - "2017-09-11"
+      - "2017-12-22"

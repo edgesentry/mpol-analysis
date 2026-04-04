@@ -148,7 +148,13 @@ See `config/geopolitical_events.json` for the sample file format.
 
 ## C3 causal weight calibration (`src/score/causal_sanction.py`)
 
-The default `w_graph = 0.40` is calibrated automatically by the C3 Difference-in-Differences model before each scoring cycle. The model estimates the Average Treatment Effect on the Treated (ATT) for three sanction regimes:
+The default `w_graph = 0.40` is calibrated automatically by the C3 Difference-in-Differences model before each scoring cycle. 
+
+The pipeline auto-calibrates `w_graph` on every run via `_calibrate_graph_weight()`.
+Calling `src.score.composite` standalone still requires `--w-graph` (or the new `--auto-calibrate` flag).
+The calibrated value is printed at the end of Step 8 for reference.
+
+The model estimates the Average Treatment Effect on the Treated (ATT) for three sanction regimes (by default):
 
 | Regime | Announcement dates used |
 |---|---|
@@ -159,6 +165,14 @@ The default `w_graph = 0.40` is calibrated automatically by the C3 Difference-in
 If the ATT is positive and statistically significant (p < 0.05) for a regime, the graph risk dimension is predictive → `w_graph` is increased proportionally, up to a cap of 0.65. The remaining weight is redistributed proportionally between `w_anomaly` and `w_identity`.
 
 The calibrated weight and per-regime effect sizes are written to `<region>_causal_effects.parquet`.
+
+### Adding a new sanction regime
+
+Sanction regimes are configured dynamically in `config/sanction_regimes.yaml`. To add a new regime (e.g. EU 14th sanctions package against Russia) without modifying source code, add a new entry to the `regimes` dictionary with the following required fields:
+- `label`: Human-readable name.
+- `list_source_substr`: The string to match in the `list_source` column of the entities table.
+- `flag_filter`: Fallback list of flag strings (e.g. `["RU", ""]`).
+- `announcement_dates`: List of ISO-8601 string dates.
 
 ---
 

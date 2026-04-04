@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -397,7 +398,18 @@ def compute_composite_scores(
     w_graph: float = 0.4,
     w_identity: float = 0.2,
     geo_filter_path: str | None = None,
+    auto_calibrate: bool = False,
 ) -> pl.DataFrame:
+    if auto_calibrate:
+        print("Auto-calibrating graph risk weight using C3 causal model...")
+        try:
+            from src.score.causal_sanction import run_causal_model, calibrate_graph_weight
+            effects = run_causal_model(db_path)
+            w_graph = calibrate_graph_weight(effects)
+            print(f"C3 auto-calibrated graph_risk_score weight: {w_graph:.3f}")
+        except Exception as e:
+            print(f"Warning: Auto-calibration failed ({e}). Falling back to w_graph={w_graph}")
+
     feature_df = load_feature_frame(db_path)
     context_df = load_watchlist_context(db_path)
     if feature_df.is_empty() or context_df.is_empty():
@@ -469,6 +481,8 @@ def main() -> None:
                         help="Weight for graph risk score (default: 0.4)")
     parser.add_argument("--w-identity", type=float, default=0.2,
                         help="Weight for identity score (default: 0.2)")
+    parser.add_argument("--auto-calibrate", action="store_true",
+                        help="Auto-calibrate graph risk weight using C3 causal model")
     parser.add_argument(
         "--geopolitical-event-filter",
         default=None,
@@ -481,12 +495,19 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    w_graph = args.w_graph
+    auto_calibrate = args.auto_calibrate
+    if auto_calibrate and "--w-graph" in sys.argv:
+        print("Warning: Both --auto-calibrate and --w-graph are specified. Preferring --w-graph.")
+        auto_calibrate = False
+
     df = compute_composite_scores(
         args.db,
         args.w_anomaly,
-        args.w_graph,
+        w_graph,
         args.w_identity,
         geo_filter_path=args.geopolitical_event_filter,
+        auto_calibrate=auto_calibrate,
     )
     write_composite_scores(df, args.output)
     print(f"Composite rows written: {df.height}")

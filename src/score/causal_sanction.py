@@ -558,6 +558,7 @@ def run_causal_model(
     db_path: str = DEFAULT_DB_PATH,
     regimes: dict[str, dict] | None = None,
     gap_threshold_h: float = 6.0,
+    regimes_path: str | None = "config/sanction_regimes.yaml",
 ) -> list[CausalEffect]:
     """
     Run the DiD causal model for all sanction regimes.
@@ -577,6 +578,15 @@ def run_causal_model(
     """
     if regimes is None:
         regimes = SANCTION_REGIMES
+        if regimes_path and os.path.exists(regimes_path):
+            try:
+                import yaml
+                with open(regimes_path, "r") as f:
+                    data = yaml.safe_load(f)
+                    if data and "regimes" in data:
+                        regimes = data["regimes"]
+            except Exception as e:
+                print(f"Failed to load regimes from {regimes_path}: {e}")
 
     con = duckdb.connect(db_path, read_only=True)
     effects: list[CausalEffect] = []
@@ -680,10 +690,15 @@ def main() -> None:
         default=6.0,
         help="AIS gap threshold in hours (default 6; use 12 for DPRK/Iran)",
     )
+    parser.add_argument(
+        "--regimes",
+        default="config/sanction_regimes.yaml",
+        help="Path to YAML regimes config",
+    )
     args = parser.parse_args()
 
     print("Running C3 causal sanction-response model …")
-    effects = run_causal_model(args.db, gap_threshold_h=args.gap_threshold_hours)
+    effects = run_causal_model(args.db, gap_threshold_h=args.gap_threshold_hours, regimes_path=args.regimes)
 
     df = effects_to_dataframe(effects)
     write_effects(df, args.output)
