@@ -321,6 +321,65 @@ run_build_sanctions_demo() {
   echo "Artifact: $PROJECT_ROOT/$demo_db"
 }
 
+run_causal_analysis() {
+  echo
+  echo "[9] Causal Analysis & Drift Check"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/singapore.duckdb")"
+  local top_n
+  top_n="$(prompt "Top-N unknown-unknown candidates to show" "5")"
+
+  echo
+  echo "── Drift Monitor ──────────────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/analysis/monitor.py --db "$db_path" --json \
+      2>/dev/null | uv run python - <<PY
+import json, sys
+data = json.load(sys.stdin)
+s = data["summary"]
+print(f"Result: ok={s['ok']}  warning={s['warning']}  critical={s['critical']}")
+for a in data["alerts"]:
+    icon = {"ok": "✓", "warning": "⚠", "critical": "✗"}.get(a["severity"], "?")
+    print(f"  {icon} [{a['severity'].upper()}] {a['check_name']}: {a['message']}")
+PY
+  then
+    echo "Result: FAILED (drift monitor)"
+    return
+  fi
+
+  echo
+  echo "── Unknown-Unknown Causal Reasoner ────────────────────────────────────────────"
+  DB_PATH="$db_path" TOP_N="$top_n" uv run python - <<'PY'
+import os
+from src.analysis.causal import score_unknown_unknowns
+from src.score.causal_sanction import run_causal_model
+
+db = os.environ["DB_PATH"]
+top_n = int(os.environ.get("TOP_N", "5"))
+
+try:
+    effects = run_causal_model(db)
+    sig = sum(1 for e in effects if e.is_significant)
+    print(f"C3 causal effects: {len(effects)} regimes, {sig} significant")
+except Exception as exc:
+    print(f"C3 model unavailable ({exc}), running without causal evidence")
+    effects = []
+
+candidates = score_unknown_unknowns(db_path=db, causal_effects=effects or None)
+print(f"Unknown-unknown candidates: {len(candidates)}")
+if not candidates:
+    print("  (no vessels meet the minimum signal threshold)")
+else:
+    for c in candidates[:top_n]:
+        signals = ", ".join(s.feature for s in c.matching_signals)
+        print(f"  mmsi={c.mmsi}  score={c.causal_score:.3f}  signals=[{signals}]")
+    if candidates:
+        print()
+        print("Sample prompt context for top candidate:")
+        print(candidates[0].prompt_context())
+PY
+}
+
 run_seed_dev_data() {
   echo
   echo "[6] Seed Dev Data"
@@ -384,6 +443,12 @@ main_menu() {
     echo "     When: setting up a local dev environment or testing the backtracking loop"
     echo "      Who: developer, data engineer"
     echo
+    echo "9) Causal Analysis & Drift Check"
+    echo "     What: run drift monitor (data + concept drift) and score unknown-unknown"
+    echo "           evasion candidates against a given DB"
+    echo "     When: after a pipeline run, or to verify issue #63 acceptance criteria"
+    echo "      Who: data scientist, intelligence analyst"
+    echo
     echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
     echo "7) Prepare Sanctions DB"
     echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
@@ -409,6 +474,7 @@ main_menu() {
       4) run_demo_smoke ;;
       5) run_backtracking ;;
       6) run_seed_dev_data ;;
+      9) run_causal_analysis ;;
       7) run_prepare_sanctions_db ;;
       8) run_build_sanctions_demo ;;
       q|quit|exit)
