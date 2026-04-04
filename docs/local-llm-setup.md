@@ -25,45 +25,38 @@ A frontier-class model is not needed. The task is closer to *templated summarisa
 
 ## Recommended Models
 
-Model IDs and full config blocks live in **`.env.example`** — that is the single source of truth. The table below explains which option to pick and why.
+Model IDs and full config blocks live in **`.env.example`** — that is the single source of truth.
 
-| RAM Tier | Model | Why it fits |
-| :--- | :--- | :--- |
-| **≤ 4 GB — Recommended** | Llama 3.2 3B | Strong instruction following at 3B; runs at ~80 tok/s on M-series; well-tested with the brief and chat prompts |
-| **≤ 4 GB — Alternative** | Qwen 2.5 3B | Slightly better structured-output fidelity than Llama at the same size; good fallback if Llama output feels loose |
-| **≤ 8 GB — Higher quality** | Qwen 2.5 7B | Noticeably better at multi-hop reasoning (e.g. connecting an ownership chain to a sanctions regime in chat); use on 16 GB+ machines |
+The recommended model for shadow fleet analysis is **Qwen 2.5 Coder 7B (Instruct 4-bit)** as it provides the best balance of speed and instruction-following for maritime data.
 
 ---
 
 ## Setup
 
-1. **Install prerequisites** for your chosen backend:
+We use the **`mlx-lm-coding-agent-proxy`** to run a local LLM that is compatible with both OpenAI and Anthropic API standards. This allows `arktrace` and `Claude Code` to share the same model instance in memory.
 
-   - **MLX LM** (Apple Silicon only):
-     ```bash
-     uv sync --extra mlx
-     ```
-   - **Ollama** (Intel + Apple Silicon):
-     ```bash
-     brew install ollama
-     ```
+1. **Install and Start the Proxy**:
+   Follow the instructions in the [mlx-lm-coding-agent-proxy](https://github.com/yohei1126/mlx-lm-coding-agent-proxy) repository to install and start the proxy server.
 
-2. **Configure `.env`** — copy the matching block from `.env.example` and uncomment it. Each block is labeled with the backend, model, and RAM tier.
-
-3. **Start the server** — the script reads `LLM_PROVIDER` and `LLM_MODEL` directly from `.env`:
+2. **Configure `.env`**:
+   Uncomment the "Unified Local Proxy" block in your `.env` file:
    ```bash
-   ./scripts/start_llm_server.sh
+   LLM_PROVIDER=mlx
+   LLM_BASE_URL=http://localhost:8888/v1
+   LLM_API_KEY=local
+   LLM_MODEL=mlx-community/Qwen2.5-Coder-7B-Instruct-4bit
    ```
-   For MLX this starts an OpenAI-compatible server on port 8080. For Ollama it pulls the model (if not already cached) then starts the server on port 11434.
+
+3. **Verify Connection**:
+   Once the proxy is running on port 8888, the `arktrace` dashboard will automatically use it for generating briefs and chat responses.
 
 ---
 
 ## Hardware & Performance Notes
 
 ### Memory Requirements
-- **3B models (Llama 3.2 3B, Qwen 2.5 3B):** ~4 GB RAM. Runs comfortably on an 8 GB MacBook Air.
 - **7B models (Qwen 2.5 7B):** ~8 GB RAM. Recommended for 16 GB+ machines.
 
 ### Processor Support
-- **MLX LM:** Native support for **Apple Silicon (M1/M2/M3/M4)** only.
-- **Ollama:** Supports both **Apple Silicon** (Metal) and **Intel** (CPU inference).
+- **Apple Silicon (M1/M2/M3/M4):** Native support via MLX for maximum performance.
+- **Intel:** Not supported by this specific MLX proxy (use Ollama directly if on Intel).
