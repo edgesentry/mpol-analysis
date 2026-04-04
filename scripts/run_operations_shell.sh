@@ -346,14 +346,56 @@ main_menu() {
   while true; do
     echo
     echo "=== arktrace Operations Shell ==="
-    echo "1) Full Screening              — ingest AIS + score vessels → ranked candidate watchlist"
-    echo "2) Review-Feedback Evaluation  — compute Precision@K and threshold recommendations from analyst decisions"
-    echo "3) Historical Backtesting      — validate scoring against known-positive vessels across all regions"
-    echo "4) Demo/Smoke                  — load demo watchlist for fast UI and dashboard testing"
-    echo "5) Delayed-Label Intelligence  — causal rewind + label propagation from confirmed labels"
-    echo "6) Seed Dev Data               — seed watchlist parquet + DuckDB for local testing and backtracking evaluation"
-    echo "7) Prepare Sanctions DB        — download and persist OpenSanctions data into public_eval DuckDB"
-    echo "8) Build Sanctions Demo Sample — create small demo DuckDB from prepared sanctions data for UI testing"
+    echo "  Run this shell on a schedule or ad-hoc to operate the full intelligence pipeline."
+    echo
+    echo "── PRODUCTION ──────────────────────────────────────────────────────────────────"
+    echo "1) Full Screening"
+    echo "     What: ingest live AIS stream, score all vessels, output ranked candidate watchlist"
+    echo "     When: scheduled daily (or on-demand after an AIS feed update)"
+    echo "      Who: ops / data engineer"
+    echo
+    echo "2) Review-Feedback Evaluation"
+    echo "     What: compute Precision@K and analyst agreement metrics from confirmed reviews"
+    echo "     When: after analysts have reviewed a new batch of vessels (weekly or post-sprint)"
+    echo "      Who: data scientist, ML engineer"
+    echo
+    echo "3) Historical Backtesting"
+    echo "     What: replay scoring against known-positive vessels across all regions"
+    echo "     When: after a model change or scoring parameter update, before promoting to prod"
+    echo "      Who: ML engineer, QA"
+    echo
+    echo "5) Delayed-Label Intelligence"
+    echo "     What: retroactively detect precursor signals for newly confirmed vessels;"
+    echo "           propagate risk labels to co-owned/managed/STS-contacted vessels"
+    echo "     When: after analysts confirm new vessels (run weekly or post-batch)"
+    echo "      Who: data scientist, intelligence analyst"
+    echo
+    echo "── DEVELOPMENT / LOCAL TESTING ─────────────────────────────────────────────────"
+    echo "4) Demo/Smoke"
+    echo "     What: load a fixed demo watchlist so the dashboard has realistic data without"
+    echo "           running a full pipeline"
+    echo "     When: preparing a demo, smoke-testing UI changes, or onboarding a new dev"
+    echo "      Who: developer, product"
+    echo
+    echo "6) Seed Dev Data"
+    echo "     What: append dummy vessels to candidate_watchlist.parquet; optionally seed"
+    echo "           DuckDB with confirmed reviews + AIS history + ownership graph so the"
+    echo "           backtracking loop can be evaluated locally"
+    echo "     When: setting up a local dev environment or testing the backtracking loop"
+    echo "      Who: developer, data engineer"
+    echo
+    echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
+    echo "7) Prepare Sanctions DB"
+    echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
+    echo "     When: initial setup, or when the sanctions dataset needs refreshing (monthly)"
+    echo "      Who: data engineer"
+    echo
+    echo "8) Build Sanctions Demo Sample"
+    echo "     What: slice a small demo DuckDB from the full sanctions DB for fast UI testing"
+    echo "     When: after job 7, or when the demo dataset is out of date"
+    echo "      Who: developer, product"
+    echo
+    echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
     local choice
