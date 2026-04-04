@@ -82,8 +82,6 @@ uv run uvicorn src.api.main:app --reload
 
 ```bash
 bash scripts/run_operations_shell.sh
-# or via Python:
-uv run python scripts/run_operations_shell.py
 ```
 
 Covers Full Screening, Review-Feedback Evaluation, Historical Backtesting, and Demo/Smoke. See [`pipeline-operations.md`](pipeline-operations.md).

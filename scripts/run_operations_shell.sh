@@ -30,7 +30,7 @@ prompt_yes_no() {
   fi
 
   read -r -p "$label ($marker): " value
-  value="${value,,}"
+  value="$(tr '[:upper:]' '[:lower:]' <<< "$value")"
 
   if [[ -z "$value" ]]; then
     [[ "$default_value" == "true" ]] && return 0
@@ -79,7 +79,7 @@ run_full_screening() {
 
   local region
   region="$(prompt "Region (singapore/japan/middleeast/europe/gulf)" "singapore")"
-  region="${region,,}"
+  region="$(tr '[:upper:]' '[:lower:]' <<< "$region")"
 
   case "$region" in
     singapore|japan|middleeast|europe|gulf) ;;
@@ -223,15 +223,15 @@ main_menu() {
   while true; do
     echo
     echo "=== arktrace Operations Shell ==="
-    echo "1) Full Screening"
-    echo "2) Review-Feedback Evaluation"
-    echo "3) Historical Backtesting + Public Integration Batch"
-    echo "4) Demo/Smoke"
+    echo "1) Full Screening              — ingest AIS + score vessels → ranked candidate watchlist"
+    echo "2) Review-Feedback Evaluation  — compute Precision@K and threshold recommendations from analyst decisions"
+    echo "3) Historical Backtesting      — validate scoring against known-positive vessels across all regions"
+    echo "4) Demo/Smoke                  — load demo watchlist for fast UI and dashboard testing"
     echo "q) Quit"
 
     local choice
     read -r -p "Select job: " choice
-    choice="${choice,,}"
+    choice="$(tr '[:upper:]' '[:lower:]' <<< "$choice")"
 
     case "$choice" in
       1) run_full_screening ;;
