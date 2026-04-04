@@ -223,6 +223,51 @@ def test_count_ais_gaps_below_threshold(tmp_db):
     assert result["777777777"] == 0
 
 
+def test_count_ais_gaps_utc_consistency(tmp_db, monkeypatch):
+    """Gap counter should return correct counts regardless of host machine timezone."""
+    import time
+    from datetime import timedelta
+
+    # Mock host timezone to a non-UTC offset
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+    con_rw = duckdb.connect(tmp_db)
+    # Force DuckDB session timezone
+    con_rw.execute("SET TimeZone='Asia/Tokyo'")
+
+    # Base date exactly at midnight UTC
+    base = datetime(2025, 4, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Insert 2 positions with 10-hour spacing (gap = 10h > 6h threshold)
+    for i in range(2):
+        ts = base + timedelta(hours=i * 10)
+        con_rw.execute(
+            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status) "
+            "VALUES (?, CAST(? AS TIMESTAMPTZ), 1.0, 103.0, 0.5, 1)",
+            ["UTC_TEST", ts.isoformat()],
+        )
+    con_rw.close()
+
+    # The query bounds in python timezone-aware datetimes
+    start_window = base - timedelta(hours=1)
+    end_window = base + timedelta(hours=12)
+
+    result = count_ais_gaps(
+        duckdb.connect(tmp_db, read_only=True),
+        mmsis=["UTC_TEST"],
+        start=start_window,
+        end=end_window,
+    )
+
+    # Reset monkeypatch if needed, though pytest handles it.
+    # Note: tzset is effective globally, but in a test run it's acceptable.
+    
+    # 1 gap of 10h should be detected
+    assert result["UTC_TEST"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Unit tests — DiD estimator
 # ---------------------------------------------------------------------------

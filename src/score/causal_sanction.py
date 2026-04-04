@@ -40,6 +40,12 @@ Outputs
 
 The calibrated weights can be passed to ``compute_composite_scores()`` via
 ``--w-graph`` (see ``src/score/composite.py``).
+
+Note on Timestamps
+------------------
+All datetime handling in this module assumes UTC. The `ais_positions.timestamp` column
+must be loaded as `TIMESTAMPTZ` in DuckDB (enforced by the schema) to ensure
+announcement window boundaries are evaluated correctly regardless of host timezone.
 """
 
 from __future__ import annotations
