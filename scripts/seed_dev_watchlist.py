@@ -18,10 +18,13 @@ import argparse
 import json
 import os
 from datetime import datetime, timedelta, timezone
+import logging
 
 import duckdb
 import polars as pl
 import pyarrow as pa
+
+logging.basicConfig(level=logging.INFO)
 
 WATCHLIST_PATH = "data/processed/candidate_watchlist.parquet"
 
@@ -143,8 +146,13 @@ def _seed_db(db_path: str) -> None:
                         [_CONFIRMED_MMSI, t, 26.50, 55.50, 0.5, 0],
                     )
                     inserted += 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.warning(
+                        "Failed to insert baseline AIS position for mmsi=%s at %s: %s",
+                        _CONFIRMED_MMSI,
+                        t,
+                        exc,
+                    )
                 t += timedelta(hours=4)
             while t < _CONFIRMED_AT:
                 try:
@@ -154,8 +162,13 @@ def _seed_db(db_path: str) -> None:
                         [_CONFIRMED_MMSI, t, 26.50, 55.50, 0.3, 0],
                     )
                     inserted += 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.warning(
+                        "Failed to insert precursor AIS position for mmsi=%s at %s: %s",
+                        _CONFIRMED_MMSI,
+                        t,
+                        exc,
+                    )
                 t += timedelta(hours=8)
             print(f"  inserted {inserted} AIS positions for {_CONFIRMED_MMSI} "
                   "(275d dense baseline + 90d sparse precursor)")
