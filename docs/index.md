@@ -58,3 +58,4 @@ This project was developed in response to **Cap Vista Accelerator Solicitation 5
 - [Human-in-the-Loop Triage Governance](triage-governance.md): tier taxonomy, evidence policy, escalation lifecycle, and KPI specification used for ranking-to-investigation decisions.
 - [Backtesting Validation](backtesting-validation.md): historical offline evaluation workflow, labels policy, threshold tuning, and periodic reviewed-outcome drift checks.
 - [Pipeline Catalog (Operations View)](pipeline-catalog.md): operations-oriented summary of pipeline types, run timing, and expected outcomes.
+- [Backtracking Runbook](backtracking-runbook.md): delayed-label intelligence loop — causal rewind, label propagation, and incremental adaptation triggered by new confirmed labels.

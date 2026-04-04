@@ -185,7 +185,44 @@ Run a medium-scale end-to-end verification using practical public positive-label
 - Known-case floor is met (when strict mode enabled)
 - Found-vs-missed coverage remains within acceptable bounds
 
-## 6) Demo / Smoke Pipeline
+## 6) Delayed-Label Intelligence (Backtracking) Pipeline
+
+### Purpose
+
+Convert newly confirmed vessel labels into forward-looking detection power without requiring a full model retrain:
+
+1. **Causal rewind** — retroactively scans trailing 12 months of AIS data per confirmed vessel and surfaces precursor signals (AIS gap uplift, STS proxy, low-SOG fraction) that appeared before confirmation.
+2. **Label propagation** — traverses the ownership/STS graph from confirmed MMSIs to identify and risk-uplift related entities (shared owner, shared manager, STS contact).
+
+### When To Run
+
+- After any new `confirmed` label is ingested via the review panel
+- Weekly sweep to catch batch-confirmed outcomes
+- Incremental mode (`--since`) after each shift's review session
+
+### Main Inputs
+
+- `vessel_reviews` table (confirmed-tier entries)
+- Lance Graph ownership/STS datasets
+- `ais_positions` table (trailing 12-month window per vessel)
+
+### Expected Outputs
+
+- `data/processed/backtracking_report.json` — full structured report
+- `data/processed/backtracking_report.md` — human-readable summary with precursor signal table and propagated entity list
+- `regression_checks.pass` field (True = all confirmed vessels successfully rewound)
+
+### Operational Success Criteria
+
+- `regression_checks.pass` is `true` in every run
+- At least one precursor signal detected for vessels with sufficient AIS history
+- Propagated entities are traceable to a specific confirmed seed via `source_mmsi` + `evidence_type`
+
+See [Backtracking Runbook](backtracking-runbook.md) for full CLI reference and demo scenario.
+
+---
+
+## 7) Demo / Smoke Pipeline
 
 ### Purpose
 
@@ -218,6 +255,7 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 | Continuous | Continuous Monitoring | Live situational awareness | Scheduled (always-on service loop) | N/A |
 | Daily or per watch | Full Screening (if non-streaming mode) | Fresh candidate ranking | Scheduled or Event-triggered | Duty operations officer / shift lead |
 | Weekly | Review-Feedback Evaluation | Threshold tuning and drift control | Scheduled | N/A |
+| After each confirmed label | Delayed-Label Intelligence (Backtracking) | Precursor discovery + graph uplift | Event-triggered | Analyst submitting confirmed review / weekly sweep |
 | Pre-release | Historical Backtesting + Public Integration Batch | Quality gate before change promotion | Event-triggered | Release owner / CI pipeline on release candidate |
 | On-demand | Demo/Smoke | Fast verification and incident checks | Event-triggered | Analyst / operator / incident commander |
 
@@ -227,5 +265,6 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 - Need live alerting and near-real-time updates: run Continuous Monitoring.
 - Need evidence-backed quality measurement on historical windows: run Historical Backtesting.
 - Need to tune thresholds from analyst outcomes and check drift: run Review-Feedback Evaluation.
+- Need to convert a new confirmed label into precursor insights and graph uplift: run Backtracking.
 - Need broad post-merge safety check on practical known positives: run Public Data Integration Batch.
 - Need a quick UI/environment confidence check: run Demo/Smoke.

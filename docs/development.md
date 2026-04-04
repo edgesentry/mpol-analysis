@@ -13,12 +13,13 @@ For context on the problem and full architecture, read [`docs/index.md`](index.m
 ```
 _inputs/        Challenge docs (Cap Vista Solicitation 5.0 — do not edit)
 docs/           Project documentation (source of truth for design decisions)
-scripts/        Operator-facing CLI tools (run_pipeline.py)
+scripts/        Operator-facing CLI tools (run_pipeline.py, run_backtracking.py, …)
 src/
   graph/        Lance Graph storage layer (store.py — node/relationship schemas, read/write)
   ingest/       Data ingestion scripts (AIS, sanctions, registry, trade flow)
   features/     Feature engineering (Polars + Lance Graph)
   score/        Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite, causal DiD)
+  analysis/     Post-confirmation intelligence (label_propagation, causal_rewind, backtracking_runner)
   api/          FastAPI + HTMX dashboard (src/api/main.py → http://localhost:8000)
 data/
   raw/          Downloaded raw data (gitignored)
@@ -34,6 +35,9 @@ pyproject.toml
 - **Implementation steps (A1–A5):** [`docs/roadmap.md`](roadmap.md)
 - **Regional deployment playbooks:** [`docs/regional-playbooks.md`](regional-playbooks.md)
 - **Field investigation design (edgesentry OSS):** [`docs/field-investigation.md`](field-investigation.md)
+- **Human-in-the-loop triage governance:** [`docs/triage-governance.md`](triage-governance.md)
+- **Backtesting and feedback evaluation:** [`docs/backtesting-validation.md`](backtesting-validation.md)
+- **Delayed-label intelligence loop:** [`docs/backtracking-runbook.md`](backtracking-runbook.md)
 
 ## Procedures
 
@@ -73,6 +77,26 @@ uv run python src/score/watchlist.py           # output candidate_watchlist.parq
 uv run uvicorn src.api.main:app --reload
 # open http://localhost:8000
 ```
+
+### Run the operations shell (menu-driven jobs)
+
+```bash
+bash scripts/run_operations_shell.sh
+```
+
+Covers Full Screening, Review-Feedback Evaluation, Historical Backtesting, and Demo/Smoke. See [`pipeline-operations.md`](pipeline-operations.md).
+
+### Run the delayed-label intelligence loop (backtracking)
+
+```bash
+# Full pass (all confirmed labels):
+uv run python scripts/run_backtracking.py --db data/processed/mpol.duckdb
+
+# Incremental (only labels confirmed since a checkpoint):
+uv run python scripts/run_backtracking.py --since 2026-04-01T00:00:00Z
+```
+
+See [`backtracking-runbook.md`](backtracking-runbook.md) for full options and output format.
 
 ### Run tests
 
