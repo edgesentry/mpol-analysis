@@ -346,6 +346,27 @@
     .review-pill-tier-cleared { color: #60a5fa; border-color: #1d4ed8; }
     .review-pill-tier-inconclusive { color: #c4b5fd; border-color: #5b21b6; }
 
+    .causal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: rgba(251,191,36,0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.35);
+      margin-top: 0.35rem;
+    }
+    .causal-signals {
+      margin-top: 0.3rem;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
     /* ── Review panel ───────────────────────────────────── */
     #review-panel {
       display: none;
@@ -888,7 +909,28 @@ function renderVesselDetails(meta) {
     `<div><strong>MMSI:</strong> ${_escapeHtml(meta.mmsi)}</div>` +
     `<div><strong>Type:</strong> ${_escapeHtml(meta.vesselType)} &nbsp; <strong>Flag:</strong> ${_escapeHtml(meta.flag)}</div>` +
     `<div><strong>Score:</strong> ${_escapeHtml(score)} &nbsp; <strong>Last seen:</strong> ${_escapeHtml(meta.lastSeen)}</div>` +
-    `<div><strong>Signals:</strong> ${_escapeHtml(meta.signals)}</div>`;
+    `<div><strong>Signals:</strong> ${_escapeHtml(meta.signals)}</div>` +
+    `<div id="causal-badge-area"></div>`;
+
+  fetch(`/api/vessels/${encodeURIComponent(meta.mmsi)}/causal`)
+    .then(r => r.json())
+    .then(data => {
+      const area = document.getElementById('causal-badge-area');
+      if (!area) return;
+      if (!data.is_candidate) {
+        area.innerHTML = '';
+        return;
+      }
+      const signalLines = (data.signals || []).map(s =>
+        `&#x2022; ${_escapeHtml(s.feature)}: recent&nbsp;${s.recent_value.toFixed(1)}, ` +
+        `baseline&nbsp;${s.baseline_value.toFixed(1)}, ` +
+        `uplift&nbsp;&times;${s.uplift_ratio.toFixed(1)}`
+      ).join('<br/>');
+      area.innerHTML =
+        `<div class="causal-badge">&#9888; UNKNOWN-UNKNOWN &nbsp; score&nbsp;${data.causal_score.toFixed(2)}</div>` +
+        (signalLines ? `<div class="causal-signals">${signalLines}</div>` : '');
+    })
+    .catch(() => {});
 }
 
 function renderReviewHistory(items) {

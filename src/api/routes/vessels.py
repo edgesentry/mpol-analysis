@@ -10,6 +10,7 @@ import polars as pl
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from src.analysis.causal import score_unknown_unknowns
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
@@ -135,6 +136,42 @@ def metrics() -> JSONResponse:
         "recall_at_200": m.get("recall_at_200"),
         "auroc": m.get("auroc"),
     })
+
+
+@router.get("/api/vessels/{mmsi}/causal")
+def vessel_causal(mmsi: str) -> JSONResponse:
+    """Return the unknown-unknown causal score and matching signals for a vessel.
+
+    Response shape:
+      { "mmsi": "...", "causal_score": 0.0, "is_candidate": false, "signals": [] }
+    where signals is a list of { feature, recent_value, baseline_value, uplift_ratio }.
+    Returns causal_score=0 and is_candidate=false if the vessel is in the sanctions
+    graph or does not meet the minimum signal threshold.
+    """
+    db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+    try:
+        candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
+    except Exception:
+        return JSONResponse({"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []})
+
+    for candidate in candidates:
+        if candidate.mmsi == mmsi:
+            return JSONResponse({
+                "mmsi": mmsi,
+                "causal_score": candidate.causal_score,
+                "is_candidate": True,
+                "signals": [
+                    {
+                        "feature": s.feature,
+                        "recent_value": s.recent_value,
+                        "baseline_value": s.baseline_value,
+                        "uplift_ratio": s.uplift_ratio,
+                    }
+                    for s in candidate.matching_signals
+                ],
+            })
+
+    return JSONResponse({"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []})
 
 
 @router.get("/api/vessel-types")
