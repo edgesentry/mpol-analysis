@@ -17,7 +17,8 @@ def review_client(tmp_path, monkeypatch):
     importlib.reload(reviews_mod)
     importlib.reload(main_mod)
 
-    return TestClient(main_mod.create_app())
+    with TestClient(main_mod.create_app()) as client:
+        yield client
 
 
 def test_create_and_get_review(review_client: TestClient) -> None:

@@ -11,7 +11,7 @@ import duckdb
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.ingest.schema import DEFAULT_DB_PATH, init_schema
+from src.ingest.schema import DEFAULT_DB_PATH
 
 router = APIRouter()
 
@@ -56,9 +56,7 @@ def _db_path() -> str:
 
 
 def _connect() -> duckdb.DuckDBPyConnection:
-    db_path = _db_path()
-    init_schema(db_path)
-    return duckdb.connect(db_path)
+    return duckdb.connect(_db_path())
 
 
 def _normalize_tier(tier: str) -> str:
