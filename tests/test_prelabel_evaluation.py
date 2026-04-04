@@ -16,7 +16,6 @@ from src.score.prelabel_evaluation import (
     PRE_LABEL_POSITIVE,
     PRE_LABEL_UNCERTAIN,
     _disagreement_report,
-    _filter_prelabels,
     _label_watchlist,
     _ops_thresholds,
     _tier_breakdown,
