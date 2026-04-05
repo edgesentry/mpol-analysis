@@ -6,14 +6,63 @@
 |---|---|---|---|
 | Analytical store | **DuckDB** | ≥ 1.1 | In-process columnar OLAP; queries Parquet natively; no server; edge-deployable |
 | DataFrame / feature engineering | **Polars** | ≥ 1.0 | Lazy evaluation; fast AIS window operations; Arrow-native |
-| Graph DB | **Lance Graph** | ≥ 0.5 | Cypher-capable graph engine built in Rust with Python bindings; embedded in-process, serverless, stores data as Lance columnar files |
+| Graph DB | **Lance Graph** | ≥ 0.5 | Embedded in-process graph engine; stores ownership graph as Lance columnar files; local path or S3-compatible (`s3://`) |
+| Object store | **MinIO** | RELEASE.2025-09-07 | S3-compatible local object store; persists Parquet and Lance datasets; port 9000 (API) / 9001 (console) |
 | ML / clustering | **scikit-learn** | ≥ 1.5 | HDBSCAN, Isolation Forest; no GPU required |
 | Explainability | **SHAP** | ≥ 0.46 | TreeExplainer for Isolation Forest; per-vessel feature attribution |
 | Dashboard | **FastAPI + HTMX** | ≥ 0.115 / — | Production-grade API layer + partial-page updates; SSE alerts; MapLibre GL JS |
+| Local LLM | **Ollama / MLX / LM Studio** | — | Local inference for analyst briefs and chat; no cloud dependency; provider selected via `LLM_PROVIDER` env var |
 | AIS streaming | **websockets** + **httpx** | — | aisstream.io WebSocket; Marine Cadastre HTTP download |
 | Causal inference | **numpy / scipy** (built-in) | — | DiD OLS with HC3 robust SEs; no external causal library required |
 | Language | **Python 3.12** | — | Best ecosystem fit for all above |
 | Packaging | **uv** | — | Fast lockfile-based dependency management |
+
+---
+
+## Local-First Deployment
+
+The full stack runs on a single machine — a field laptop, a shipboard server, or a detached tactical edge node — with no cloud dependency during operation. All data remains on-device. Cloud connectivity is optional and used only for upstream AIS streaming or report export.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  TACTICAL EDGE NODE  (patrol vessel / field laptop)             │
+│                                                                 │
+│  AIS stream (aisstream.io WebSocket)                            │
+│  SAR / EO imagery (offline batch or USB import)                 │
+│         │                                                       │
+│         ▼                                                       │
+│  Scoring Engine (DuckDB + Polars + HDBSCAN + Isolation Forest)  │
+│         │                      │                               │
+│         │              Lance Graph (ownership network)          │
+│         │                      │                               │
+│         ▼                      ▼                               │
+│  HTMX Dashboard  ←─────  Composite Score + SHAP signals        │
+│         │                                                       │
+│         ↕  (context window injection — no external calls)       │
+│         │                                                       │
+│  Ollama / MLX LLM  →  Analyst brief / chat response            │
+│         │                                                       │
+│         ▼                                                       │
+│  Duty Officer                                                   │
+│                                                                 │
+│  Persistence: MinIO (localhost:9000) — Parquet + Lance datasets │
+└─────────────────────────────────────────────────────────────────┘
+          │  optional: report upload / AIS backfill
+          ▼
+   Cloud / HQ network
+```
+
+| Component | Local runtime | Default persistence path | S3 path (when `S3_BUCKET` set) |
+|---|---|---|---|
+| OLAP store | DuckDB in-process | `data/processed/mpol.duckdb` | — (DuckDB file stays local; Parquet outputs go to S3) |
+| Parquet outputs | Polars → local or S3 | `data/processed/*.parquet` | `s3://arktrace/processed/*.parquet` |
+| Ownership graph | Lance embedded | `data/processed/mpol_graph/` | `s3://arktrace/mpol_graph/` |
+| Geopolitical index | Lance embedded | `data/processed/gdelt.lance` | `s3://arktrace/gdelt.lance` |
+| Object store | MinIO `localhost:9000` | `minio_data` Docker volume | — (MinIO is the S3 backend) |
+| Web app | FastAPI `localhost:8000` | — | — |
+| LLM inference | Ollama `localhost:11434` or MLX in-process | — | — |
+
+**Storage backend selection** is automatic: when `S3_BUCKET` is set in the environment, `src/storage/config.py` routes all Parquet and Lance I/O to `s3://<bucket>/…` via MinIO (or any S3-compatible store). When unset, everything writes to local `data/processed/` paths. No code changes are required to switch between the two modes.
 
 ---
 

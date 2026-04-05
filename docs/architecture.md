@@ -66,12 +66,35 @@
 │                                                                 │
 │  data/processed/candidate_watchlist.parquet                     │
 │  FastAPI + HTMX dashboard  (src/api/)  → http://localhost:8000  │
+│                                                                 │
+│         ↕  (context window — no external calls)                 │
+│                                                                 │
+│  Ollama / MLX LLM  →  analyst brief + streaming chat           │
 └─────────────────────────────────────────────────────────────────┘
                            │
                            ▼  handoff
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHYSICAL INVESTIGATION  (edgesentry-app / edgesentry-rs)       │
 │  (out of scope for this repo — see roadmap.md)                  │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  STORAGE LAYER  (cross-cutting; local or S3-compatible)         │
+│                                                                 │
+│  OLAP  — DuckDB + Parquet                                       │
+│    · local:  data/processed/mpol.duckdb                         │
+│    · Parquet outputs: data/processed/*.parquet                  │
+│              or  s3://arktrace/processed/  (MinIO / S3)         │
+│                                                                 │
+│  Graph — Lance (embedded, serverless)                           │
+│    · local:  data/processed/mpol_graph/                         │
+│              data/processed/gdelt.lance                         │
+│    · remote: s3://arktrace/mpol_graph/                          │
+│              s3://arktrace/gdelt.lance  (MinIO / S3)            │
+│                                                                 │
+│  Object store — MinIO  localhost:9000  (docker-compose.yml)     │
+│    · bucket: arktrace  (created by minio_init on first run)     │
+│    · console: localhost:9001                                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -83,6 +106,8 @@
 
 DuckDB is the primary analytical store. It runs in-process with no server and queries Parquet files directly. Multi-region deployments use separate DuckDB files per region (e.g. `data/processed/europe.duckdb`) — every script accepts a `--db` flag to target the correct file. See [regional-playbooks.md](regional-playbooks.md) for per-region paths and bbox values.
 
+**Parquet persistence:** all pipeline output files (watchlist, causal effects, validation metrics) are written by `src/storage/config.py`. When `S3_BUCKET` is set, output goes to `s3://<bucket>/processed/<filename>` via MinIO or any S3-compatible store; otherwise it writes to `data/processed/<filename>` on the local filesystem. No code changes are required to switch between the two modes.
+
 | Table | Key columns | Source |
 |---|---|---|
 | `ais_positions` | `mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type` | aisstream.io (all regions); Marine Cadastre Parquet (US waters only) |
@@ -93,7 +118,9 @@ DuckDB is the primary analytical store. It runs in-process with no server and qu
 
 ### Lance Graph (`data/processed/mpol_graph/`)
 
-Lance Graph stores the vessel ownership graph as columnar Lance datasets on disk — no external server or Docker container required. The graph directory sits alongside the DuckDB file and is written by `src/ingest/vessel_registry.py`, read by `src/features/ownership_graph.py` and `src/features/identity.py`.
+Lance Graph stores the vessel ownership graph as columnar Lance datasets — no external server or Docker container required. The graph directory is written by `src/ingest/vessel_registry.py` and read by `src/features/ownership_graph.py` and `src/features/identity.py`.
+
+**Storage backend:** `src/storage/config.py` exposes `lance_graph_uri(stem)` and `lance_db_uri()` which resolve to local paths (`data/processed/mpol_graph/`, `data/processed/gdelt.lance`) when running without S3, and to `s3://arktrace/mpol_graph/` / `s3://arktrace/gdelt.lance` when `S3_BUCKET` is set. Lance's built-in object store support handles the S3 read/write transparently.
 
 **Node datasets** (one Lance file each):
 - `Vessel {mmsi, imo, name}`
