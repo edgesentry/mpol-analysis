@@ -166,6 +166,88 @@ OLS is estimated with **HC3 heteroskedasticity-robust standard errors** (impleme
 | `OFAC_Russia` | OFAC Russia | 2022-02-24, 2022-09-15, 2023-02-24 |
 | `UN_DPRK` | UN DPRK | 2017-08-05, 2017-09-11, 2017-12-22 |
 
+---
+
+## Verifiable AI & Anti-Hallucination Grounding Pipeline
+
+Defense and intelligence stakeholders require that AI-generated assessments be **auditable, reproducible, and traceable to primary evidence** — not black-box text. Arktrace addresses this through a strict two-phase architecture: all risk decisions are made by deterministic algorithms first; the LLM is only permitted to synthesise text from a pre-computed, structured context window.
+
+### Two-phase architecture
+
+```
+Phase 1 — Deterministic scoring (no LLM)
+─────────────────────────────────────────────────────────────────────
+ AIS + registry + trade data
+       │
+       ├─► HDBSCAN MPOL baseline      → cluster_id, baseline_noise_score
+       ├─► Isolation Forest           → anomaly_score  (sigmoid-calibrated)
+       ├─► SHAP TreeExplainer         → top_signals[]  (feature, value, contribution)
+       ├─► Lance Graph BFS            → sanctions_distance  (0 = direct, 99 = none)
+       └─► C3 Causal DiD (β₃ ATT)    → causal_weight, att_estimate, p_value, 95% CI
+                │
+                ▼
+       Composite score (weighted blend)  →  candidate_watchlist.parquet
+                │
+                ▼  structured context injected into prompt
+Phase 2 — LLM text synthesis (bounded)
+─────────────────────────────────────────────────────────────────────
+ System prompt: vessel profile + SHAP signals + GDELT events + ATT evidence
+       │
+       ▼
+ LLM role: one-paragraph brief, citing specific field values and event dates
+       │
+       ▼
+ Analyst brief / chat response  →  cached in DuckDB (deterministic replay)
+```
+
+### Grounding mechanisms
+
+**SHAP attribution prevents unsupported claims.**
+Every feature contribution is computed by `shap.TreeExplainer` against the calibrated Isolation Forest. The `top_signals` field written to the watchlist Parquet carries the raw feature value alongside its SHAP contribution score. The LLM system prompt receives these as structured triples `(feature, value, contribution)` — not prose — so every claim in the generated brief can be traced back to a specific observable AIS or registry measurement.
+
+```json
+[
+  {"feature": "ais_gap_count_30d", "value": 14, "contribution": 0.34},
+  {"feature": "sanctions_distance", "value": 1,  "contribution": 0.29},
+  {"feature": "flag_changes_2y",   "value": 3,   "contribution": 0.18}
+]
+```
+
+**C3 Causal ATT provides statistically verifiable claims.**
+The DiD model produces a point estimate (β₃ ATT) with 95% confidence intervals and a two-tailed p-value for each sanctions regime. These are injected verbatim into the brief system prompt as `causal_evidence`. The LLM can cite that "AIS gaps increased by X gaps/30-day window (ATT=X.X, 95% CI [X.X, X.X], p<0.05) following the OFAC Iran announcement of 2019-05-08" — a claim that is reproducible from the raw AIS data by any analyst running `src/score/causal_sanction.py`.
+
+**Lance Graph distance makes ownership chains auditable.**
+`sanctions_distance` is a BFS hop count through the Lance Graph ownership tables (`OWNED_BY`, `MANAGED_BY`, `CONTROLLED_BY`). A value of 1 means the vessel's direct registered owner appears in the OFAC SDN or EU/UN sanctions list. The path is materialized as rows in the Lance columnar store and can be queried directly — it is not an inference.
+
+**The LLM system prompt enforces citation and prohibits fabrication.**
+Both the brief endpoint (`src/api/routes/briefs.py`) and the analyst chat endpoint (`src/api/routes/chat.py`) inject the same structured context and instruct the LLM explicitly:
+
+> *"Cite specific field values, GDELT event IDs/dates, or ownership chain hops to ground every claim."*
+
+The LLM has no access to external tools, no internet, and no retrieval beyond what is injected in the context window. It cannot add vessels to the watchlist, change scores, or assert risk signals not already in the structured inputs.
+
+**GDELT RAG anchors geopolitical context to dated, sourced news events.**
+Geopolitical context is retrieved from a Lance columnar GDELT index by flag country and vessel name (`src/ingest/gdelt.py`). Each event record carries `event_date`, `actor1_name`, `actor2_name`, `action_geo`, and `source_url`. The LLM is required to name the date and URL when citing geopolitical context — preventing the substitution of plausible-sounding but unfounded geopolitical narrative.
+
+**DuckDB cache enforces deterministic replay.**
+Completed briefs are written to the `analyst_briefs` table keyed on `(mmsi, watchlist_version)`. Identical inputs always return the same cached output. This means a brief generated before a regulatory review can be reproduced verbatim from the same pipeline run, supporting chain-of-custody requirements.
+
+### What the LLM cannot do
+
+| Prohibited action | Enforcement mechanism |
+|---|---|
+| Assert a risk signal not in `top_signals` | Structured prompt — only listed signals are present in context |
+| Claim a causal relationship without statistical support | ATT + CI + p-value required in prompt; LLM instructed to cite them |
+| Modify a vessel's confidence score | Score is computed deterministically before LLM is called; LLM receives it read-only |
+| Retrieve information from the internet | No tool access; local-first LLM (mlx / Ollama / LM Studio) or API with no browsing |
+| Produce a different answer for the same inputs | DuckDB cache enforces identical output for identical `(mmsi, watchlist_version)` |
+
+### Summary
+
+Arktrace uses the LLM for one task only: converting a deterministic, structured risk assessment into readable English for the analyst. Every claim in a generated brief has a traceable origin — a SHAP contribution, a graph hop count, a DiD ATT estimate, or a dated GDELT source URL. The scoring pipeline can be re-run independently of the LLM and will produce identical numeric outputs, satisfying audit and chain-of-custody requirements for defence and regulatory applications.
+
+---
+
 ## Output Schema
 
 `data/processed/candidate_watchlist.parquet`
