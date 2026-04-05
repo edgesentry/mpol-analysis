@@ -1,61 +1,107 @@
-# Introduction
+# arktrace
 
-## What This Project Does
+**arktrace** identifies ships that are evading international sanctions, ranks them by risk, and hands the highest-priority vessels to patrol officers for physical inspection.
 
-**arktrace** is an open-source Maritime Pattern of Life (MPOL) analysis pipeline that ingests public data to identify and rank candidate shadow fleet vessels — ships that operate in the regulatory grey zone by exploiting AIS spoofing, frequent flag and name changes, and illicit ship-to-ship (STS) transfers to bypass international sanctions.
-
-The output is a ranked `candidate_watchlist.parquet`: a list of vessels with composite confidence scores, per-feature SHAP explanations, and last known positions — ready to hand off to a patrol officer for physical investigation.
+---
 
 ## The Problem
 
-Shadow fleet vessels evade detection by combining multiple evasion techniques simultaneously:
+A shadow fleet vessel moves sanctioned oil or cargo while deliberately hiding what it is doing. It combines several techniques at once, which is why individual tracking tools miss it:
 
-| Technique | What it does |
+| Technique | How it works |
 |---|---|
-| AIS gaps and spoofing | Disappear from tracking or broadcast false positions during STS transfers |
-| Flag hopping | Change flag state frequently to reset port state control history |
-| Name and IMO laundering | Rename vessel and register under new shell companies |
-| Ownership obfuscation | Multi-layer beneficial ownership through jurisdictions with weak disclosure |
-| STS transfers at sea | Transfer cargo vessel-to-vessel beyond port authority oversight |
+| Going dark (AIS off) | Switches off its tracking transponder during cargo transfers so no position record exists |
+| GPS spoofing | Broadcasts a false position while the actual transfer happens elsewhere |
+| Flag hopping | Changes its country of registration frequently to reset port inspection history |
+| Name and identity change | Renames itself and re-registers under new shell companies to break continuity in watchlists |
+| Ship-to-ship transfer at sea | Moves cargo vessel-to-vessel far from any port, leaving no port record |
+| Shell company ownership | Buries beneficial ownership behind 4–6 layers of holding companies across multiple jurisdictions |
 
-Existing tools address one or two of these signals in isolation. This project fuses all of them — plus trade flow mismatch and ownership graph proximity to sanctioned entities — to produce an explainable, ranked candidate list.
+arktrace detects all of these simultaneously, fuses them with ownership network proximity to sanctioned entities and trade flow data, and produces a single ranked list of vessels most likely to be operating on behalf of sanctioned states.
 
-## How It Fits the Full System
+The default area of interest is the Strait of Malacca and Singapore Strait — the world's busiest shipping lane. Five regions are supported: Singapore/Malacca Strait, Japan Sea, Middle East, Europe, and US Gulf.
 
-This repo covers **Phase A: Screening** only.
+---
 
-```
-[arktrace]                         [edgesentry-app / edgesentry-rs]
-  Public data ingestion        →     Physical investigation
-  Feature engineering          →     Close-range measurement
-  Shadow fleet scoring         →     Evidence capture + signing
-  Candidate watchlist output   →     VDES secure reporting
-```
+## How It Works — Four Steps
 
-The physical investigation workflow — remote surveillance, LiDAR hull scanning, OCR identity verification, cryptographic evidence capture, and VDES transmission — is implemented in [edgesentry-rs](https://github.com/edgesentry/edgesentry-rs) and edgesentry-app. See [roadmap.md](roadmap.md) for the full picture.
+**1. Ingest public data**
+The pipeline pulls vessel tracking data (AIS), international sanctions lists (OFAC, EU, UN), vessel ownership records, and bilateral trade statistics from public sources. No proprietary data feeds or costly subscriptions are required.
 
-## Built For
+**2. Compute 19 risk signals per vessel**
+Each vessel is scored on four signal families: how anomalously it moves, how often it changes its identity, how close it sits in the ownership network to a sanctioned entity, and whether its declared trade routes match official trade records. A causal model additionally checks whether the vessel changed its behaviour specifically after major sanction announcements — distinguishing evasion from ordinary commercial route changes.
 
-This project was developed in response to **Cap Vista Accelerator Solicitation 5.0, Challenge 1: Maritime Security Data Analytics** (deadline: 29 April 2026).
+**3. Rank candidates on the watchlist**
+The 19 signals are combined into a single confidence score. The dashboard shows a map and ranked table with a plain-English explanation of the three signals that drove each vessel's score — e.g. *"went dark 12 times last month, one ownership hop from an OFAC-listed company, changed flag 3 times in 2 years"* — so an analyst can immediately understand why a vessel was flagged.
 
-| Cap Vista Criterion | How addressed |
+**4. Hand off to a patrol officer**
+High-scoring vessels are exported as a task file for the patrol vessel. The officer dispatches for close-range inspection. Results (confirmed, cleared, inconclusive) feed back into the model to reduce false positives in future ranking cycles.
+
+---
+
+## How Effective Is It?
+
+| Capability | What to expect |
 |---|---|
-| **Prediction accuracy** | Composite scoring validated against known OFAC-listed vessels as ground truth; Precision@50, Recall@200, AUROC reported |
-| **Computational cost** | DuckDB + Polars run on a laptop; full pipeline ~45 min, no cloud required; edge-deployable |
-| **Granularity** | Per-vessel per-feature scores with SHAP attribution |
-| **Explainability** | SHAP `top_signals` JSON per candidate; human-readable reasoning |
-| **Novel (not just AIS)** | Ownership graph (Lance Graph), trade flow (UN Comtrade), identity volatility, and C3 causal DiD model linking sanction announcements to AIS gap increases — not off-the-shelf AIS tools |
-| **Low cost to scale** | All OSS; no server required for screening layer |
+| **Detection rate** | Precision@50 target ≥ 0.60: at least 30 of the top-50 ranked candidates are confirmed OFAC-listed vessels. AUROC and Recall@200 are also tracked. |
+| **Novel threats** | An unknown-unknown detector surfaces vessels with no current sanctions link but evasion-consistent behaviour — catching threats before they appear on any list. |
+| **False positive reduction** | Geopolitical rerouting filter down-weights anomaly scores for vessels on declared diversion routes (e.g. Cape of Good Hope since 2023), reducing noise from legitimate commercial rerouting. |
+| **Self-improvement** | Patrol outcomes feed back as hard examples. Cleared vessels are never re-flagged. Confirmed vessels trigger a graph-wide backtrack to surface connected threats not yet on any watchlist. |
+| **Explainability** | Every score has a per-feature breakdown. Analysts know exactly what drove each result — there are no black-box verdicts. |
 
-**Explicitly not used** (per challenge spec — insufficient novelty):
-- Real-time vessel monitoring based on AIS alone
-- Anomaly detection based solely on AIS + satellite fusion
-- Off-the-shelf vessel behavior profiling or MMSI risk scoring APIs
-- Geofencing
+---
 
-## Workflow Governance
+## How Efficient Is It?
 
-- [Human-in-the-Loop Triage Governance](triage-governance.md): tier taxonomy, evidence policy, escalation lifecycle, and KPI specification used for ranking-to-investigation decisions.
-- [Backtesting Validation](backtesting-validation.md): historical offline evaluation workflow, labels policy, threshold tuning, and periodic reviewed-outcome drift checks.
-- [Pipeline Catalog (Operations View)](pipeline-catalog.md): operations-oriented summary of pipeline types, run timing, and expected outcomes.
-- [Backtracking Runbook](backtracking-runbook.md): delayed-label intelligence loop — causal rewind, label propagation, and incremental adaptation triggered by new confirmed labels.
+| Resource | Requirement |
+|---|---|
+| **Hardware** | Standard laptop (4 vCPU / 8 GB RAM). No GPU, no cloud, no external server. |
+| **Full pipeline run** | ~45 minutes from raw data to ranked watchlist |
+| **Incremental re-score** | Under 60 seconds per batch during live monitoring |
+| **Live alerting** | Real-time SSE alerts when a vessel crosses a configurable confidence threshold |
+| **Software cost** | Fully open-source. No licensing fees. |
+| **Regions** | Switch between Singapore, Japan Sea, Middle East, Europe, and US Gulf with a single CLI flag — no code changes |
+
+---
+
+## Screening and Physical Investigation
+
+arktrace covers **Phase A — Screening** (this repository). Phase B — Physical Investigation — is the patrol vessel software suite implemented in [edgesentry-rs](https://github.com/edgesentry/edgesentry-rs) and edgesentry-app.
+
+| Phase | What it does | Status |
+|---|---|---|
+| **A — Screening** | Ingest public data → compute risk signals → rank candidates → analyst dashboard | Working |
+| **B — Physical Investigation** | Patrol vessel dispatch → OCR identity check → LiDAR hull scan → cryptographically signed evidence → VDES secure transmission | Design specification complete; implementation begins after trial contract award |
+
+Phase A produces the watchlist. Phase B acts on it. Patrol outcomes flow back into Phase A to improve future rankings.
+
+---
+
+## Human Oversight
+
+The model ranks candidates — humans decide what to do. No automated decision triggers legal or operational action.
+
+- Every candidate is reviewed by an analyst before escalation. Review tiers: Confirmed, Probable, Suspect, Cleared, Inconclusive.
+- "Confirmed" requires at least two independent high-credibility sources, or one official designation with a verified vessel identifier (MMSI/IMO match).
+- Every review decision is recorded with a rationale, evidence references, and reviewer identity.
+
+Full policy: [`docs/triage-governance.md`](triage-governance.md).
+
+---
+
+## Document Index
+
+| To understand… | Read |
+|---|---|
+| Detection signals and scoring formula | [`docs/scoring-model.md`](scoring-model.md) |
+| All 19 features and what each detects | [`docs/feature-engineering.md`](feature-engineering.md) |
+| Causal reasoning and unknown-unknown detection | [`docs/causal-analysis.md`](causal-analysis.md) |
+| Physical vessel investigation (Phase B) | [`docs/field-investigation.md`](field-investigation.md) |
+| Human oversight, evidence policy, tier taxonomy | [`docs/triage-governance.md`](triage-governance.md) |
+| Validation metrics and backtesting methodology | [`docs/backtesting-validation.md`](backtesting-validation.md) |
+| Three operational scenarios (duty officer, analyst, patrol) | [`docs/scenarios.md`](scenarios.md) |
+| Full roadmap (Phase A and Phase B) | [`docs/roadmap.md`](roadmap.md) |
+| Deployment (local, Docker, cloud VM) | [`docs/deployment.md`](deployment.md) |
+| Tech stack and algorithm details | [`docs/technical-solution.md`](technical-solution.md) |
+| Pipeline operations reference | [`docs/pipeline-operations.md`](pipeline-operations.md) |
+| Regional configuration (Singapore, Japan Sea, etc.) | [`docs/regional-playbooks.md`](regional-playbooks.md) |
