@@ -366,6 +366,41 @@ This validation is run in `src/score/validate.py` and reported in the FastAPI + 
 
 ---
 
+## Sensor Fusion and Electro-Optics
+
+### Phase A — open-source data fusion (screening layer)
+
+The screening layer fuses four independent open-source data streams rather than relying on a single signal:
+
+| Signal | Source | What it detects |
+|---|---|---|
+| AIS behaviour | aisstream.io / Marine Cadastre | Dark periods, spoofing, STS events, loitering |
+| Ownership graph | Equasis + OpenSanctions | Proximity to sanctioned entities, shell-company layers |
+| Trade flow | UN Comtrade+ | Route/cargo mismatch, declared vs. estimated volume |
+| Geopolitical events | GDELT | Sanction announcements, flag-state risk changes |
+
+No electro-optical (EO) or SAR satellite imagery is required at the screening layer. Open-source AIS and ownership data alone deliver a **6× lift** over the base rate of sanctioned vessels (Precision@50 = 0.62 vs. base rate ≈ 0.10). Satellite EO imagery is expensive per-scene and adds the most value when a specific high-confidence target has already been identified — exactly what Phase A produces.
+
+### Phase B — EO sensors at close range (investigation layer)
+
+Once Phase A identifies a high-confidence candidate, Phase B deploys tiered electro-optical sensors from a patrol vessel:
+
+| Tier | EO sensor | Capability |
+|---|---|---|
+| Tier 1 | Hi-res camera (Sony RX100 / GoPro) | Vessel identity: IMO number, name, flag OCR |
+| Tier 2 | LiDAR (Livox Mid-360 / Ouster OS0-32) | Hull shape deviation, waterline / draught, 3D point cloud |
+| Tier 3 | FLIR Boson+ thermal + hyperspectral | Engine heat signature, night operation, cargo type proxy |
+
+Phase B sensor output feeds the `edgesentry-app` evidence bundle — GPS-tagged, Ed25519-signed, BLAKE3 hash-chained — and is transmitted to the Port Operations Centre via VDES. See [docs/field-investigation.md](field-investigation.md) for full hardware specifications and cost breakdown.
+
+### Roadmap — satellite SAR / EO integration
+
+Wide-area persistent EO coverage (satellite SAR for dark vessel detection; optical for identity confirmation at anchor) is tracked in issue [#84](https://github.com/edgesentry/arktrace/issues/84). The intended integration point is Phase A feature engineering: SAR-derived vessel detections would add a `sar_dark_period_count` feature alongside the existing AIS gap features, feeding the same Isolation Forest scoring pipeline.
+
+This is not required for the screening layer to meet the Precision@50 ≥ 0.60 target. It becomes valuable at global scale where AIS receiver coverage is sparse (open ocean, polar regions).
+
+---
+
 ## Computational Requirements
 
 The full pipeline (historical AIS + scoring) runs on a standard laptop:
