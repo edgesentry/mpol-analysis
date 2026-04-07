@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="40">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#0e2a4a"/>
+    </linearGradient>
+  </defs>
+  <rect width="920" height="40" fill="url(#bg)"/>
+  <!-- left accent bar -->
+  <rect x="0" y="0" width="4" height="40" fill="#00b4d8"/>
+  <!-- title -->
+  <text x="18" y="26" font-family="'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#ffffff" letter-spacing="0.5">arktrace</text>
+  <!-- separator -->
+  <text x="100" y="26" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#4a6fa5">|</text>
+  <!-- tagline -->
+  <text x="114" y="26" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#93c5fd">Causal Inference Engine for Shadow Fleet Prediction</text>
+  <!-- right badge -->
+  <rect x="740" y="8" width="168" height="24" rx="4" fill="#00b4d8" fill-opacity="0.15" stroke="#00b4d8" stroke-width="1"/>
+  <text x="824" y="24" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#00b4d8" text-anchor="middle">Cap Vista Solicitation 5.0</text>
+</svg>
