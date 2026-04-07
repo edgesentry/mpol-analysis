@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -29,15 +29,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-DEFAULT_OUTPUT_PATH = os.getenv(
-    "CAUSAL_REWIND_OUTPUT_PATH", "data/processed/causal_rewind.json"
-)
+DEFAULT_OUTPUT_PATH = os.getenv("CAUSAL_REWIND_OUTPUT_PATH", "data/processed/causal_rewind.json")
 
 REWIND_DAYS = 365
 PRECURSOR_WINDOW_DAYS = 90
 SNAPSHOT_INTERVAL_DAYS = 30
 GAP_THRESHOLD_H = 6.0
-PRECURSOR_UPLIFT_THRESHOLD = 1.5   # 50 % uplift triggers a signal
+PRECURSOR_UPLIFT_THRESHOLD = 1.5  # 50 % uplift triggers a signal
 
 FEATURE_KEYS = ["ais_gap_count", "sts_candidate_proxy", "low_sog_fraction"]
 
@@ -119,9 +117,7 @@ def compute_monthly_snapshots(
             {
                 "window_start": cursor.isoformat(),
                 "window_end": window_end.isoformat(),
-                "days_before_confirmation": int(
-                    (confirmed_at - cursor).total_seconds() / 86400
-                ),
+                "days_before_confirmation": int((confirmed_at - cursor).total_seconds() / 86400),
                 **features,
             }
         )
@@ -170,7 +166,7 @@ def rewind_vessel(
 ) -> dict[str, Any]:
     """Run causal rewind for a single confirmed vessel."""
     if confirmed_at.tzinfo is None:
-        confirmed_at = confirmed_at.replace(tzinfo=timezone.utc)
+        confirmed_at = confirmed_at.replace(tzinfo=UTC)
     start_dt = confirmed_at - timedelta(days=rewind_days)
     ais_df = _load_ais_for_vessel(db_path, mmsi, start_dt, confirmed_at)
     snapshots = compute_monthly_snapshots(ais_df, confirmed_at, rewind_days)
@@ -193,7 +189,7 @@ def run_causal_rewind(
     rewind_days: int = REWIND_DAYS,
 ) -> dict[str, Any]:
     """Run causal rewind for all confirmed vessels (or a specific list)."""
-    cutoff = as_of_utc or datetime.now(timezone.utc).isoformat()
+    cutoff = as_of_utc or datetime.now(UTC).isoformat()
     con = duckdb.connect(db_path, read_only=True)
     try:
         seeds_df = con.execute(
@@ -213,9 +209,7 @@ def run_causal_rewind(
         seeds_df = seeds_df.filter(pl.col("mmsi").is_in(mmsis))
 
     if not seeds_df.is_empty() and seeds_df["confirmed_at"].dtype != pl.Datetime("us", "UTC"):
-        seeds_df = seeds_df.with_columns(
-            pl.col("confirmed_at").dt.convert_time_zone("UTC")
-        )
+        seeds_df = seeds_df.with_columns(pl.col("confirmed_at").dt.convert_time_zone("UTC"))
 
     vessel_results = []
     for row in seeds_df.iter_rows(named=True):
@@ -223,7 +217,7 @@ def run_causal_rewind(
         if isinstance(confirmed_dt, str):
             confirmed_dt = datetime.fromisoformat(confirmed_dt)
         if confirmed_dt.tzinfo is None:
-            confirmed_dt = confirmed_dt.replace(tzinfo=timezone.utc)
+            confirmed_dt = confirmed_dt.replace(tzinfo=UTC)
         vessel_results.append(rewind_vessel(db_path, row["mmsi"], confirmed_dt, rewind_days))
 
     report: dict[str, Any] = {
@@ -239,9 +233,7 @@ def run_causal_rewind(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Causal rewind analysis for confirmed vessels"
-    )
+    parser = argparse.ArgumentParser(description="Causal rewind analysis for confirmed vessels")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     parser.add_argument(
@@ -254,9 +246,7 @@ def main() -> None:
     args = parser.parse_args()
 
     mmsis = [m.strip() for m in args.mmsis.split(",")] if args.mmsis else None
-    report = run_causal_rewind(
-        args.db, args.output, mmsis, args.as_of_utc, args.rewind_days
-    )
+    report = run_causal_rewind(args.db, args.output, mmsis, args.as_of_utc, args.rewind_days)
     print(f"Vessel count: {report['vessel_count']}")
     print(f"Artifact: {args.output}")
 

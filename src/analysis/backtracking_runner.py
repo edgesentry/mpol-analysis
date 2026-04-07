@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -46,7 +46,7 @@ DEFAULT_REWIND_DAYS = 365
 def _fetch_confirmed_since(
     db_path: str, since_utc: str | None, as_of_utc: str | None
 ) -> list[tuple[str, Any]]:
-    as_of = as_of_utc or datetime.now(timezone.utc).isoformat()
+    as_of = as_of_utc or datetime.now(UTC).isoformat()
     con = duckdb.connect(db_path, read_only=True)
     try:
         if since_utc:
@@ -102,9 +102,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
                 else "none detected"
             )
             confirmed_short = str(v["confirmed_at"])[:10]
-            lines.append(
-                f"- **{v['mmsi']}** (confirmed {confirmed_short}): {signal_str}"
-            )
+            lines.append(f"- **{v['mmsi']}** (confirmed {confirmed_short}): {signal_str}")
 
     lines += ["", "## Propagated Entities", ""]
     propagated = [v for v in report["propagation"].get("vessels", []) if v["hop"] > 0]
@@ -124,8 +122,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Regression Checks",
         "",
-        f"| Check | Value |",
-        f"|---|---|",
+        "| Check | Value |",
+        "|---|---|",
         f"| Confirmed vessels | {rc['confirmed_vessel_count']} |",
         f"| Rewound vessels | {rc['rewind_vessel_count']} |",
         f"| Propagated entities | {rc['propagated_entity_count']} |",
@@ -158,7 +156,7 @@ def run_backtracking(
     Returns:
         Combined report dict.
     """
-    generated_at = as_of_utc or datetime.now(timezone.utc).isoformat()
+    generated_at = as_of_utc or datetime.now(UTC).isoformat()
     confirmed_rows = _fetch_confirmed_since(db_path, since_utc, as_of_utc)
     confirmed_mmsis = [r[0] for r in confirmed_rows]
     confirmed_at_map: dict[str, Any] = {r[0]: r[1] for r in confirmed_rows}
@@ -172,10 +170,8 @@ def run_backtracking(
             else confirmed_at_raw
         )
         if confirmed_dt.tzinfo is None:
-            confirmed_dt = confirmed_dt.replace(tzinfo=timezone.utc)
-        vessel_rewind_results.append(
-            rewind_vessel(db_path, mmsi, confirmed_dt, rewind_days)
-        )
+            confirmed_dt = confirmed_dt.replace(tzinfo=UTC)
+        vessel_rewind_results.append(rewind_vessel(db_path, mmsi, confirmed_dt, rewind_days))
 
     rewind_section: dict[str, Any] = {
         "as_of_utc": generated_at,
@@ -222,9 +218,7 @@ def run_backtracking(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run delayed-label intelligence loop (Issue #67)"
-    )
+    parser = argparse.ArgumentParser(description="Run delayed-label intelligence loop (Issue #67)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     parser.add_argument("--md-output", default=DEFAULT_MD_OUTPUT_PATH)

@@ -30,7 +30,9 @@ from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
+    "candidate_watchlist.parquet"
+)
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ RECENT GEOPOLITICAL CONTEXT:
 
 # ── request / response models ───────────────────────────────────────────────
 
+
 class _Msg(BaseModel):
     role: str
     content: str
@@ -88,6 +91,7 @@ class ChatRequest(BaseModel):
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
+
 
 def _watchlist_version() -> str:
     try:
@@ -114,9 +118,7 @@ def _read_cache(key: str) -> str | None:
         return None
     try:
         con = duckdb.connect(path)
-        rows = con.execute(
-            "SELECT response FROM chat_cache WHERE cache_key = ?", [key]
-        ).fetchall()
+        rows = con.execute("SELECT response FROM chat_cache WHERE cache_key = ?", [key]).fetchall()
         con.close()
         return rows[0][0] if rows else None
     except Exception:
@@ -172,11 +174,14 @@ def _format_signals(top_signals_json: str | None) -> str:
         return "  No signal data."
     try:
         sigs = json.loads(top_signals_json)
-        return "\n".join(
-            f"  • {s.get('feature','?')}: {s.get('value','?')} "
-            f"(contribution {s.get('contribution', 0):.2f})"
-            for s in sigs[:3]
-        ) or "  No signals."
+        return (
+            "\n".join(
+                f"  • {s.get('feature', '?')}: {s.get('value', '?')} "
+                f"(contribution {s.get('contribution', 0):.2f})"
+                for s in sigs[:3]
+            )
+            or "  No signals."
+        )
     except Exception:
         return str(top_signals_json)[:200]
 
@@ -190,8 +195,8 @@ def _format_gdelt(events: list[dict]) -> str:
         if len(date) == 8:
             date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
         lines.append(
-            f"  • [{date}] {ev.get('actor1_name','?')} → {ev.get('actor2_name','?')} "
-            f"in {ev.get('action_geo','')}. {ev.get('source_url','')}"
+            f"  • [{date}] {ev.get('actor1_name', '?')} → {ev.get('actor2_name', '?')} "
+            f"in {ev.get('action_geo', '')}. {ev.get('source_url', '')}"
         )
     return "\n".join(lines)
 
@@ -200,6 +205,7 @@ def _query_graph_ownership(mmsi: str) -> str:
     """Return a text summary of the 2-hop ownership subgraph. Fails gracefully."""
     try:
         import polars as pl
+
         from src.graph.store import load_tables
 
         db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
@@ -228,13 +234,11 @@ def _query_graph_ownership(mmsi: str) -> str:
         frames2 = []
         if len(ob):
             frames2.append(
-                ob.filter(pl.col("src_id").is_in(direct_companies["dst_id"]))
-                .select("dst_id")
+                ob.filter(pl.col("src_id").is_in(direct_companies["dst_id"])).select("dst_id")
             )
         if len(mb):
             frames2.append(
-                mb.filter(pl.col("src_id").is_in(direct_companies["dst_id"]))
-                .select("dst_id")
+                mb.filter(pl.col("src_id").is_in(direct_companies["dst_id"])).select("dst_id")
             )
 
         all_company_ids = direct_companies
@@ -254,7 +258,7 @@ def _query_graph_ownership(mmsi: str) -> str:
 
         lines: list[str] = []
         for row in company_info.iter_rows(named=True):
-            sanction = f" [SANCTIONED]" if row["id"] in sanctioned_ids else ""
+            sanction = " [SANCTIONED]" if row["id"] in sanctioned_ids else ""
             name = row.get("name") or "?"
             country = row.get("country") or "?"
             lines.append(f"  • {name} ({country}){sanction}")
@@ -312,6 +316,7 @@ def _build_system(vessel: dict | None, df: pl.DataFrame) -> str:
 
 # ── endpoint ────────────────────────────────────────────────────────────────
 
+
 @router.post("/api/chat")
 async def analyst_chat(body: ChatRequest) -> StreamingResponse:
     """Stream an LLM response for an analyst question with optional vessel context.
@@ -329,6 +334,7 @@ async def analyst_chat(body: ChatRequest) -> StreamingResponse:
 
     cached = _read_cache(key)
     if cached:
+
         async def _cached():
             words = cached.split(" ")
             for i, w in enumerate(words):

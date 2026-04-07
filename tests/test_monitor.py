@@ -47,9 +47,7 @@ def _seed_ais(db_path: str, mmsi: str, timestamps: list[datetime]) -> None:
 def _seed_vessel_features(db_path: str, mmsi: str, high_risk_flag_ratio: float) -> None:
     con = duckdb.connect(db_path)
     try:
-        con.execute(
-            "INSERT OR IGNORE INTO vessel_meta (mmsi, flag) VALUES (?, 'XX')", [mmsi]
-        )
+        con.execute("INSERT OR IGNORE INTO vessel_meta (mmsi, flag) VALUES (?, 'XX')", [mmsi])
         con.execute(
             "INSERT OR REPLACE INTO vessel_features (mmsi, high_risk_flag_ratio, sanctions_distance) "
             "VALUES (?, ?, 99)",
@@ -98,24 +96,33 @@ def test_severity_negative_change():
 
 def test_make_alert_fields():
     alert = _make_alert(
-        "test_check", "test_metric",
-        current=1.3, reference=1.0,
-        warn=0.10, crit=0.30,
+        "test_check",
+        "test_metric",
+        current=1.3,
+        reference=1.0,
+        warn=0.10,
+        crit=0.30,
     )
     assert alert.check_name == "test_check"
     assert alert.metric_name == "test_metric"
     assert alert.current_value == pytest.approx(1.3)
     assert alert.reference_value == pytest.approx(1.0)
-    assert alert.severity == SEVERITY_WARNING   # 30% change == warning threshold
+    assert alert.severity == SEVERITY_WARNING  # 30% change == warning threshold
     assert isinstance(alert.checked_at, str)
 
 
 def test_drift_alert_str_contains_severity():
     alert = DriftAlert(
-        check_name="foo", severity=SEVERITY_WARNING,
-        metric_name="bar", current_value=0.5, reference_value=0.4,
-        relative_change=0.25, threshold_warning=0.1, threshold_critical=0.3,
-        message="test", checked_at="2026-04-04T00:00:00+00:00",
+        check_name="foo",
+        severity=SEVERITY_WARNING,
+        metric_name="bar",
+        current_value=0.5,
+        reference_value=0.4,
+        relative_change=0.25,
+        threshold_warning=0.1,
+        threshold_critical=0.3,
+        message="test",
+        checked_at="2026-04-04T00:00:00+00:00",
     )
     assert "WARNING" in str(alert)
     assert "foo" in str(alert)
@@ -255,8 +262,7 @@ def test_watchlist_score_shift_detects_drop(monitor_db):
     ]
     # Recent period: all cleared (score 0.10)
     recent_entries = [
-        (f"R{i:02d}", "cleared", (as_of - timedelta(days=30 - i * 3)).isoformat())
-        for i in range(8)
+        (f"R{i:02d}", "cleared", (as_of - timedelta(days=30 - i * 3)).isoformat()) for i in range(8)
     ]
     _seed_reviews(monitor_db, early_entries + recent_entries)
     con = duckdb.connect(monitor_db, read_only=True)
@@ -288,15 +294,21 @@ def test_concept_drift_stable_precision(monitor_db):
     # Both windows: mostly confirmed → stable hit rate
     entries = []
     for i in range(6):
-        entries.append((
-            f"CD{i:02d}", "confirmed",
-            (as_of - timedelta(days=150 + i * 10)).isoformat(),
-        ))
+        entries.append(
+            (
+                f"CD{i:02d}",
+                "confirmed",
+                (as_of - timedelta(days=150 + i * 10)).isoformat(),
+            )
+        )
     for i in range(6):
-        entries.append((
-            f"CD{i + 10:02d}", "confirmed",
-            (as_of - timedelta(days=50 + i * 10)).isoformat(),
-        ))
+        entries.append(
+            (
+                f"CD{i + 10:02d}",
+                "confirmed",
+                (as_of - timedelta(days=50 + i * 10)).isoformat(),
+            )
+        )
     _seed_reviews(monitor_db, entries)
     con = duckdb.connect(monitor_db, read_only=True)
     try:
@@ -339,8 +351,10 @@ def test_run_drift_checks_returns_four_alerts(monitor_db):
     assert len(alerts) == 4
     check_names = {a.check_name for a in alerts}
     assert check_names == {
-        "ais_gap_rate", "flag_distribution",
-        "watchlist_score_shift", "concept_drift_proxy",
+        "ais_gap_rate",
+        "flag_distribution",
+        "watchlist_score_shift",
+        "concept_drift_proxy",
     }
 
 

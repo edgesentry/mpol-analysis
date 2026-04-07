@@ -46,13 +46,21 @@ def _seed_ais(db_path: str, mmsi: str, timestamps: list[datetime]) -> None:
 
 # ── Unit tests for compute_monthly_snapshots ─────────────────────────────────
 
+
 def test_monthly_snapshots_empty_ais():
     import polars as pl
 
     confirmed_at = datetime(2026, 4, 1, tzinfo=UTC)
-    empty_df = pl.DataFrame(schema={"mmsi": pl.Utf8, "timestamp": pl.Datetime("us", "UTC"),
-                                    "lat": pl.Float64, "lon": pl.Float64,
-                                    "sog": pl.Float32, "nav_status": pl.Int8})
+    empty_df = pl.DataFrame(
+        schema={
+            "mmsi": pl.Utf8,
+            "timestamp": pl.Datetime("us", "UTC"),
+            "lat": pl.Float64,
+            "lon": pl.Float64,
+            "sog": pl.Float32,
+            "nav_status": pl.Int8,
+        }
+    )
     snapshots = compute_monthly_snapshots(empty_df, confirmed_at, rewind_days=60, interval_days=30)
     assert len(snapshots) == 2
     for s in snapshots:
@@ -70,14 +78,16 @@ def test_monthly_snapshots_count():
         confirmed_at - timedelta(days=50),
         confirmed_at - timedelta(days=10),
     ]
-    df = pl.DataFrame({
-        "mmsi": ["X"] * 3,
-        "timestamp": ts_list,
-        "lat": [1.0] * 3,
-        "lon": [103.0] * 3,
-        "sog": [0.5] * 3,
-        "nav_status": [0] * 3,
-    }).with_columns(pl.col("timestamp").dt.convert_time_zone("UTC"))
+    df = pl.DataFrame(
+        {
+            "mmsi": ["X"] * 3,
+            "timestamp": ts_list,
+            "lat": [1.0] * 3,
+            "lon": [103.0] * 3,
+            "sog": [0.5] * 3,
+            "nav_status": [0] * 3,
+        }
+    ).with_columns(pl.col("timestamp").dt.convert_time_zone("UTC"))
 
     snapshots = compute_monthly_snapshots(df, confirmed_at, rewind_days=90, interval_days=30)
     assert len(snapshots) == 3
@@ -87,11 +97,16 @@ def test_monthly_snapshots_count():
 
 # ── Unit tests for detect_precursor_signals ───────────────────────────────────
 
+
 def test_no_precursor_signals_uniform_data():
     # All windows have the same gap count — no uplift
     snapshots = [
-        {"days_before_confirmation": d, "ais_gap_count": 2.0,
-         "sts_candidate_proxy": 1.0, "low_sog_fraction": 0.2}
+        {
+            "days_before_confirmation": d,
+            "ais_gap_count": 2.0,
+            "sts_candidate_proxy": 1.0,
+            "low_sog_fraction": 0.2,
+        }
         for d in [300, 240, 180, 120, 90, 60, 30]
     ]
     signals = detect_precursor_signals(snapshots)
@@ -100,15 +115,23 @@ def test_no_precursor_signals_uniform_data():
 
 def test_precursor_signal_detected_on_gap_uplift():
     # Baseline (days > 90): 0 gaps. Precursor (days <= 90): high gap count.
-    snapshots = (
-        [{"days_before_confirmation": d, "ais_gap_count": 0.0,
-          "sts_candidate_proxy": 0.0, "low_sog_fraction": 0.0}
-         for d in [330, 300, 270, 240, 210, 180, 150, 120, 91]]
-        +
-        [{"days_before_confirmation": d, "ais_gap_count": 10.0,
-          "sts_candidate_proxy": 0.0, "low_sog_fraction": 0.0}
-         for d in [60, 30, 1]]
-    )
+    snapshots = [
+        {
+            "days_before_confirmation": d,
+            "ais_gap_count": 0.0,
+            "sts_candidate_proxy": 0.0,
+            "low_sog_fraction": 0.0,
+        }
+        for d in [330, 300, 270, 240, 210, 180, 150, 120, 91]
+    ] + [
+        {
+            "days_before_confirmation": d,
+            "ais_gap_count": 10.0,
+            "sts_candidate_proxy": 0.0,
+            "low_sog_fraction": 0.0,
+        }
+        for d in [60, 30, 1]
+    ]
     signals = detect_precursor_signals(snapshots)
     features_detected = {s["feature"] for s in signals}
     assert "ais_gap_count" in features_detected
@@ -120,20 +143,29 @@ def test_precursor_signal_detected_on_gap_uplift():
 
 def test_precursor_signal_not_triggered_below_threshold():
     # Uplift < 1.5 should not trigger
-    snapshots = (
-        [{"days_before_confirmation": d, "ais_gap_count": 2.0,
-          "sts_candidate_proxy": 0.0, "low_sog_fraction": 0.0}
-         for d in [200, 150, 100]]
-        +
-        [{"days_before_confirmation": d, "ais_gap_count": 2.5,
-          "sts_candidate_proxy": 0.0, "low_sog_fraction": 0.0}
-         for d in [60, 30]]
-    )
+    snapshots = [
+        {
+            "days_before_confirmation": d,
+            "ais_gap_count": 2.0,
+            "sts_candidate_proxy": 0.0,
+            "low_sog_fraction": 0.0,
+        }
+        for d in [200, 150, 100]
+    ] + [
+        {
+            "days_before_confirmation": d,
+            "ais_gap_count": 2.5,
+            "sts_candidate_proxy": 0.0,
+            "low_sog_fraction": 0.0,
+        }
+        for d in [60, 30]
+    ]
     signals = detect_precursor_signals(snapshots)
     assert signals == []
 
 
 # ── Integration tests for rewind_vessel ──────────────────────────────────────
+
 
 def test_rewind_vessel_no_ais_data(rewind_db):
     confirmed_at = datetime(2026, 4, 1, tzinfo=UTC)
@@ -151,10 +183,7 @@ def test_rewind_vessel_detects_precursor_signal(rewind_db):
 
     # Baseline period (days -365 to -91): 1 record per window start → no gaps
     baseline_start = confirmed_at - timedelta(days=365)
-    baseline_timestamps = [
-        baseline_start + timedelta(days=30 * i)
-        for i in range(9)
-    ]
+    baseline_timestamps = [baseline_start + timedelta(days=30 * i) for i in range(9)]
 
     # Precursor period (days -90 to 0): 3 records with 8-hour gaps per window
     precursor_start = confirmed_at - timedelta(days=90)
@@ -184,6 +213,7 @@ def test_rewind_vessel_12month_snapshot_count(rewind_db):
 
 # ── Integration tests for run_causal_rewind ───────────────────────────────────
 
+
 def test_run_causal_rewind_empty_db(rewind_db, tmp_path):
     output = str(tmp_path / "rewind_out.json")
     report = run_causal_rewind(rewind_db, output)
@@ -196,9 +226,7 @@ def test_run_causal_rewind_empty_db(rewind_db, tmp_path):
 def test_run_causal_rewind_writes_artifact(rewind_db, tmp_path):
     _seed_confirmed(rewind_db, "ART1", "2026-03-01T00:00:00Z")
     output = str(tmp_path / "rewind_art.json")
-    report = run_causal_rewind(
-        rewind_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=90
-    )
+    report = run_causal_rewind(rewind_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=90)
 
     assert report["vessel_count"] == 1
     assert report["vessels"][0]["mmsi"] == "ART1"
@@ -209,9 +237,7 @@ def test_run_causal_rewind_mmsis_filter(rewind_db, tmp_path):
     _seed_confirmed(rewind_db, "F11", "2026-02-01T00:00:00Z")
     _seed_confirmed(rewind_db, "F22", "2026-02-01T00:00:00Z")
     output = str(tmp_path / "filt.json")
-    report = run_causal_rewind(
-        rewind_db, output, mmsis=["F11"], as_of_utc="2026-04-01T00:00:00Z"
-    )
+    report = run_causal_rewind(rewind_db, output, mmsis=["F11"], as_of_utc="2026-04-01T00:00:00Z")
     assert report["vessel_count"] == 1
     assert report["vessels"][0]["mmsi"] == "F11"
 

@@ -18,7 +18,7 @@ import asyncio
 import json
 import os
 import signal
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -63,9 +63,7 @@ def _parse_position_report(msg: dict[str, Any]) -> dict[str, Any] | None:
         # aisstream.io format: "2024-04-02 10:15:30.123 +0000 UTC"
         # Strip optional milliseconds and timezone suffix before parsing.
         ts = time_str.split(" +")[0].split(".")[0]  # → "2024-04-02 10:15:30"
-        timestamp = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=timezone.utc
-        )
+        timestamp = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -90,7 +88,7 @@ def _flush_batch(batch: list[dict], db_path: str) -> int:
 
     import polars as pl
 
-    df = pl.DataFrame(batch).with_columns(
+    df = pl.DataFrame(batch).with_columns(  # noqa: F841 — referenced by DuckDB via `FROM df`
         pl.col("nav_status").cast(pl.Int8),
         pl.col("ship_type").cast(pl.Int8),
         pl.col("sog").cast(pl.Float32),
@@ -152,7 +150,9 @@ async def stream(
     print(f"Connecting to {WEBSOCKET_URL} …")
     async with websockets.connect(WEBSOCKET_URL) as ws:
         await ws.send(json.dumps(subscription))
-        print(f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s")
+        print(
+            f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s"
+        )
         last_flush = loop.time()
 
         while not stop_event.is_set():
@@ -162,7 +162,7 @@ async def stream(
             recv_timeout = min(1.0, deadline - loop.time()) if deadline is not None else 1.0
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=max(recv_timeout, 0.1))
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except websockets.ConnectionClosed:
                 break
@@ -199,17 +199,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Stream live AIS from aisstream.io into DuckDB")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
-    parser.add_argument("--flush-interval", type=float, default=DEFAULT_FLUSH_INTERVAL,
-                        help="Max seconds between flushes")
+    parser.add_argument(
+        "--flush-interval",
+        type=float,
+        default=DEFAULT_FLUSH_INTERVAL,
+        help="Max seconds between flushes",
+    )
     parser.add_argument(
         "--bbox",
-        type=float, nargs=4,
+        type=float,
+        nargs=4,
         metavar=("LAT_MIN", "LON_MIN", "LAT_MAX", "LON_MAX"),
         help="Bounding box override, e.g. --bbox 25 120 50 150 for seas near Japan",
     )
     parser.add_argument(
         "--duration",
-        type=float, default=0,
+        type=float,
+        default=0,
         metavar="SECONDS",
         help="Stop streaming after this many seconds (default: 0 = run until Ctrl-C)",
     )
@@ -220,5 +226,13 @@ if __name__ == "__main__":
         raise SystemExit("AISSTREAM_API_KEY not set — add it to .env or the environment")
 
     bbox = [[args.bbox[0], args.bbox[1]], [args.bbox[2], args.bbox[3]]] if args.bbox else BBOX
-    asyncio.run(stream(api_key, db_path=args.db, bbox=bbox, batch_size=args.batch_size,
-                       flush_interval=args.flush_interval, duration=args.duration))
+    asyncio.run(
+        stream(
+            api_key,
+            db_path=args.db,
+            bbox=bbox,
+            batch_size=args.batch_size,
+            flush_interval=args.flush_interval,
+            duration=args.duration,
+        )
+    )

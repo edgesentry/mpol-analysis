@@ -14,7 +14,9 @@ from src.storage.config import write_parquet as write_parquet_uri
 
 load_dotenv()
 
-DEFAULT_OUTPUT_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
+DEFAULT_OUTPUT_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
+    "candidate_watchlist.parquet"
+)
 
 
 def build_candidate_watchlist(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:

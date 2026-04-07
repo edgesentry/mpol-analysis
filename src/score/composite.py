@@ -96,11 +96,12 @@ class _GeoCorridorBbox:
 @dataclass
 class GeoEvent:
     """A declared geopolitical rerouting event."""
+
     name: str
     active_from: date
     active_to: date
     corridors: list[_GeoCorridorBbox] = field(default_factory=list)
-    down_weight: float = 0.5   # multiplier on anomaly_score for affected vessels
+    down_weight: float = 0.5  # multiplier on anomaly_score for affected vessels
 
     def is_active(self, reference_date: date | None = None) -> bool:
         ref = reference_date or date.today()
@@ -131,13 +132,15 @@ def load_geopolitical_filter(json_path: str) -> list[GeoEvent]:
             )
             for c in ev.get("corridors", [])
         ]
-        events.append(GeoEvent(
-            name=ev["name"],
-            active_from=date.fromisoformat(ev["active_from"]),
-            active_to=date.fromisoformat(ev["active_to"]),
-            corridors=corridors,
-            down_weight=float(ev.get("down_weight", 0.5)),
-        ))
+        events.append(
+            GeoEvent(
+                name=ev["name"],
+                active_from=date.fromisoformat(ev["active_from"]),
+                active_to=date.fromisoformat(ev["active_to"]),
+                corridors=corridors,
+                down_weight=float(ev.get("down_weight", 0.5)),
+            )
+        )
     return events
 
 
@@ -167,9 +170,7 @@ def apply_geopolitical_filter(
                 anomaly_scores[i] = float(anomaly_scores[i]) * ev.down_weight
                 break  # apply the most relevant active event only
 
-    return scored_df.with_columns(
-        pl.Series("anomaly_score", anomaly_scores, dtype=pl.Float32)
-    )
+    return scored_df.with_columns(pl.Series("anomaly_score", anomaly_scores, dtype=pl.Float32))
 
 
 # ITU Maritime Identification Digits (MID) → ISO 3166-1 alpha-2 country code.
@@ -177,17 +178,26 @@ def apply_geopolitical_filter(
 # relevant to shadow-fleet regions; unknown prefixes return empty string.
 _MID_TO_FLAG: dict[str, str] = {
     # North Asia
-    "412": "CN", "413": "CN", "414": "CN",
-    "431": "JP", "432": "JP", "433": "JP",
-    "440": "KR", "441": "KR",
+    "412": "CN",
+    "413": "CN",
+    "414": "CN",
+    "431": "JP",
+    "432": "JP",
+    "433": "JP",
+    "440": "KR",
+    "441": "KR",
     "445": "KP",
     "477": "HK",
     # South-East Asia
     "525": "ID",
     "533": "MY",
-    "563": "SG", "564": "SG", "565": "SG", "566": "SG", "567": "SG",
-    "574": "VN", "576": "VN",
+    "563": "SG",
+    "564": "SG",
+    "565": "SG",
+    "566": "SG",
     "567": "SG",
+    "574": "VN",
+    "576": "VN",
     # South Asia
     "419": "IN",
     "403": "SA",
@@ -195,29 +205,57 @@ _MID_TO_FLAG: dict[str, str] = {
     "422": "IR",
     "447": "KW",
     "466": "QA",
-    "470": "AE", "471": "AE",
+    "470": "AE",
+    "471": "AE",
     # Russia / CIS
     "273": "RU",
     "272": "UA",
     # Europe
-    "209": "CY", "210": "CY",
-    "232": "GB", "233": "GB", "234": "GB", "235": "GB",
-    "237": "GR", "239": "GR", "240": "GR", "241": "GR",
-    "248": "MT", "249": "MT",
-    "257": "NO", "258": "NO", "259": "NO",
+    "209": "CY",
+    "210": "CY",
+    "232": "GB",
+    "233": "GB",
+    "234": "GB",
+    "235": "GB",
+    "237": "GR",
+    "239": "GR",
+    "240": "GR",
+    "241": "GR",
+    "248": "MT",
+    "249": "MT",
+    "257": "NO",
+    "258": "NO",
+    "259": "NO",
     "271": "TR",
     # Flag-of-convenience / open registries
-    "308": "BS", "309": "BS", "310": "BS", "311": "BS",
-    "351": "PA", "352": "PA", "353": "PA", "354": "PA",
-    "355": "PA", "356": "PA", "357": "PA",
-    "370": "PA", "371": "PA", "372": "PA", "373": "PA", "374": "PA",
+    "308": "BS",
+    "309": "BS",
+    "310": "BS",
+    "311": "BS",
+    "351": "PA",
+    "352": "PA",
+    "353": "PA",
+    "354": "PA",
+    "355": "PA",
+    "356": "PA",
+    "357": "PA",
+    "370": "PA",
+    "371": "PA",
+    "372": "PA",
+    "373": "PA",
+    "374": "PA",
     "538": "MH",
     "636": "LR",
     "667": "SL",
     # Africa
     "613": "CM",
     # Americas
-    "303": "US", "338": "US", "366": "US", "367": "US", "368": "US", "369": "US",
+    "303": "US",
+    "338": "US",
+    "366": "US",
+    "367": "US",
+    "368": "US",
+    "369": "US",
     "305": "AG",
     "710": "BR",
     "725": "CL",
@@ -225,7 +263,6 @@ _MID_TO_FLAG: dict[str, str] = {
     "734": "VE",
     # Additional open registries / flag-of-convenience
     "205": "BE",
-    "209": "CY", "210": "CY",
     "212": "CY",
     "219": "DK",
     "253": "IE",
@@ -287,10 +324,12 @@ def load_watchlist_context(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
 
     # Fallback: derive flag from MMSI prefix (ITU MID) when registry data is absent
     return df.with_columns(
-        pl.struct(["mmsi", "flag"]).map_elements(
+        pl.struct(["mmsi", "flag"])
+        .map_elements(
             lambda r: r["flag"] if r["flag"] else _mmsi_to_flag(r["mmsi"]),
             return_dtype=pl.Utf8,
-        ).alias("flag")
+        )
+        .alias("flag")
     )
 
 
@@ -403,7 +442,8 @@ def compute_composite_scores(
     if auto_calibrate:
         print("Auto-calibrating graph risk weight using C3 causal model...")
         try:
-            from src.score.causal_sanction import run_causal_model, calibrate_graph_weight
+            from src.score.causal_sanction import calibrate_graph_weight, run_causal_model
+
             effects = run_causal_model(db_path)
             w_graph = calibrate_graph_weight(effects)
             print(f"C3 auto-calibrated graph_risk_score weight: {w_graph:.3f}")
@@ -420,51 +460,63 @@ def compute_composite_scores(
     scaled = scaler.transform(feature_df.select(ANOMALY_FEATURE_COLUMNS).fill_null(0).to_numpy())
     top_signals = _compute_top_signals(feature_df, model, scaled)
 
-    scored = context_df.join(anomaly_df, on="mmsi", how="left").with_columns([
-        _compute_graph_risk(context_df),
-        _compute_identity_score(context_df),
-        top_signals,
-    ])
+    scored = context_df.join(anomaly_df, on="mmsi", how="left").with_columns(
+        [
+            _compute_graph_risk(context_df),
+            _compute_identity_score(context_df),
+            top_signals,
+        ]
+    )
 
     # Apply geopolitical rerouting filter before computing confidence
     if geo_filter_path:
         geo_events = load_geopolitical_filter(geo_filter_path)
         scored = apply_geopolitical_filter(scored, geo_events)
 
-    scored = scored.with_columns([
-        (w_anomaly * pl.col("anomaly_score") + w_graph * pl.col("graph_risk_score") + w_identity * pl.col("identity_score"))
-        .clip(0.0, 1.0)
-        .alias("confidence"),
-        pl.col("ship_type").map_elements(_ship_type_label, return_dtype=pl.Utf8).alias("vessel_type"),
-    ])
+    scored = scored.with_columns(
+        [
+            (
+                w_anomaly * pl.col("anomaly_score")
+                + w_graph * pl.col("graph_risk_score")
+                + w_identity * pl.col("identity_score")
+            )
+            .clip(0.0, 1.0)
+            .alias("confidence"),
+            pl.col("ship_type")
+            .map_elements(_ship_type_label, return_dtype=pl.Utf8)
+            .alias("vessel_type"),
+        ]
+    )
 
-    return scored.select([
-        "mmsi",
-        "imo",
-        "vessel_name",
-        "vessel_type",
-        "flag",
-        "confidence",
-        "anomaly_score",
-        "graph_risk_score",
-        "identity_score",
-        "top_signals",
-        "last_lat",
-        "last_lon",
-        "last_seen",
-        "ais_gap_count_30d",
-        "ais_gap_max_hours",
-        "position_jump_count",
-        "sts_candidate_count",
-        "flag_changes_2y",
-        "name_changes_2y",
-        "owner_changes_2y",
-        "sanctions_distance",
-        "shared_address_centrality",
-        "sts_hub_degree",
-        "cluster_label",
-        "baseline_noise_score",
-    ]).sort("confidence", descending=True)
+    return scored.select(
+        [
+            "mmsi",
+            "imo",
+            "vessel_name",
+            "vessel_type",
+            "flag",
+            "confidence",
+            "anomaly_score",
+            "graph_risk_score",
+            "identity_score",
+            "top_signals",
+            "last_lat",
+            "last_lon",
+            "last_seen",
+            "ais_gap_count_30d",
+            "ais_gap_max_hours",
+            "position_jump_count",
+            "sts_candidate_count",
+            "flag_changes_2y",
+            "name_changes_2y",
+            "owner_changes_2y",
+            "sanctions_distance",
+            "shared_address_centrality",
+            "sts_hub_degree",
+            "cluster_label",
+            "baseline_noise_score",
+        ]
+    ).sort("confidence", descending=True)
 
 
 def write_composite_scores(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> None:
@@ -475,14 +527,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compute composite watchlist scores")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
-    parser.add_argument("--w-anomaly", type=float, default=0.4,
-                        help="Weight for anomaly score (default: 0.4)")
-    parser.add_argument("--w-graph", type=float, default=0.4,
-                        help="Weight for graph risk score (default: 0.4)")
-    parser.add_argument("--w-identity", type=float, default=0.2,
-                        help="Weight for identity score (default: 0.2)")
-    parser.add_argument("--auto-calibrate", action="store_true",
-                        help="Auto-calibrate graph risk weight using C3 causal model")
+    parser.add_argument(
+        "--w-anomaly", type=float, default=0.4, help="Weight for anomaly score (default: 0.4)"
+    )
+    parser.add_argument(
+        "--w-graph", type=float, default=0.4, help="Weight for graph risk score (default: 0.4)"
+    )
+    parser.add_argument(
+        "--w-identity", type=float, default=0.2, help="Weight for identity score (default: 0.2)"
+    )
+    parser.add_argument(
+        "--auto-calibrate",
+        action="store_true",
+        help="Auto-calibrate graph risk weight using C3 causal model",
+    )
     parser.add_argument(
         "--geopolitical-event-filter",
         default=None,

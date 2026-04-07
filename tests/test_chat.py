@@ -9,26 +9,28 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── fixtures ───────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def watchlist_parquet(tmp_path):
-    df = pl.DataFrame({
-        "mmsi": ["123456789", "987654321"],
-        "vessel_name": ["OCEAN GLORY", "DARK STAR"],
-        "vessel_type": ["Tanker", "Bulk Carrier"],
-        "flag": ["KH", "PW"],
-        "imo": ["IMO1234567", "IMO9876543"],
-        "confidence": [0.83, 0.45],
-        "last_lat": [1.15, 1.30],
-        "last_lon": [103.6, 104.0],
-        "last_seen": ["2026-04-01T06:00:00", "2026-04-01T12:00:00"],
-        "top_signals": [
-            json.dumps([{"feature": "ais_gap_count_30d", "value": 12, "contribution": 0.34}]),
-            json.dumps([{"feature": "sanctions_distance", "value": 2, "contribution": 0.20}]),
-        ],
-    })
+    df = pl.DataFrame(
+        {
+            "mmsi": ["123456789", "987654321"],
+            "vessel_name": ["OCEAN GLORY", "DARK STAR"],
+            "vessel_type": ["Tanker", "Bulk Carrier"],
+            "flag": ["KH", "PW"],
+            "imo": ["IMO1234567", "IMO9876543"],
+            "confidence": [0.83, 0.45],
+            "last_lat": [1.15, 1.30],
+            "last_lon": [103.6, 104.0],
+            "last_seen": ["2026-04-01T06:00:00", "2026-04-01T12:00:00"],
+            "top_signals": [
+                json.dumps([{"feature": "ais_gap_count_30d", "value": 12, "contribution": 0.34}]),
+                json.dumps([{"feature": "sanctions_distance", "value": 2, "contribution": 0.20}]),
+            ],
+        }
+    )
     path = str(tmp_path / "candidate_watchlist.parquet")
     df.write_parquet(path)
     return path
@@ -45,29 +47,37 @@ def client(watchlist_parquet, tmp_db, monkeypatch):
     monkeypatch.setenv("DB_PATH", tmp_db)
 
     import importlib
-    import src.api.routes.chat as chat_mod
-    import src.api.routes.briefs as briefs_mod
-    import src.api.routes.vessels as vessels_mod
+
     import src.api.routes.alerts as alerts_mod
+    import src.api.routes.briefs as briefs_mod
+    import src.api.routes.chat as chat_mod
+    import src.api.routes.vessels as vessels_mod
+
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
     importlib.reload(briefs_mod)
     importlib.reload(chat_mod)
 
     from src.api.main import create_app
+
     return TestClient(create_app())
 
 
 # ── POST /api/chat — vessel-specific ──────────────────────────────────────
 
+
 def test_chat_vessel_streams_tokens(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _fake_stream
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_graph_ownership", return_value="No graph."):
-        resp = client.post("/api/chat", json={"message": "Why is this vessel flagged?", "mmsi": "123456789"})
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("src.api.routes.chat._query_graph_ownership", return_value="No graph."),
+    ):
+        resp = client.post(
+            "/api/chat", json={"message": "Why is this vessel flagged?", "mmsi": "123456789"}
+        )
 
     assert resp.status_code == 200
     assert "text/event-stream" in resp.headers["content-type"]
@@ -87,12 +97,21 @@ def test_chat_vessel_context_in_system_prompt(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _capturing_stream
 
-    gdelt_events = [{"event_date": "20260401", "actor1_name": "Cambodia",
-                     "actor2_name": "Iran", "action_geo": "SCS", "source_url": "http://x.com"}]
+    gdelt_events = [
+        {
+            "event_date": "20260401",
+            "actor1_name": "Cambodia",
+            "actor2_name": "Iran",
+            "action_geo": "SCS",
+            "source_url": "http://x.com",
+        }
+    ]
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=gdelt_events), \
-         patch("src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"):
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=gdelt_events),
+        patch("src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"),
+    ):
         client.post("/api/chat", json={"message": "Explain risk.", "mmsi": "123456789"})
 
     assert captured, "stream_messages never called"
@@ -106,13 +125,18 @@ def test_chat_vessel_context_in_system_prompt(client):
 
 # ── POST /api/chat — cross-vessel (no mmsi) ───────────────────────────────
 
+
 def test_chat_cross_vessel_no_mmsi(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _fake_stream
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]):
-        resp = client.post("/api/chat", json={"message": "Which vessels share the same owner network?"})
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+    ):
+        resp = client.post(
+            "/api/chat", json={"message": "Which vessels share the same owner network?"}
+        )
 
     assert resp.status_code == 200
     lines = [l for l in resp.text.split("\n") if l.startswith("data: ")]
@@ -129,8 +153,10 @@ def test_chat_cross_vessel_fleet_overview_in_prompt(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _cap
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+    ):
         client.post("/api/chat", json={"message": "Cross vessel question"})
 
     assert captured
@@ -139,6 +165,7 @@ def test_chat_cross_vessel_fleet_overview_in_prompt(client):
 
 
 # ── response caching ──────────────────────────────────────────────────────
+
 
 def test_chat_response_cached_after_first_call(client, tmp_db):
     call_count = 0
@@ -151,9 +178,11 @@ def test_chat_response_cached_after_first_call(client, tmp_db):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _counting_stream
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+    ):
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
 
@@ -171,9 +200,11 @@ def test_chat_different_questions_not_shared_cache(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _counting_stream
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+    ):
         client.post("/api/chat", json={"message": "Question A", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Question B", "mmsi": "123456789"})
 
@@ -181,6 +212,7 @@ def test_chat_different_questions_not_shared_cache(client):
 
 
 # ── unknown vessel ────────────────────────────────────────────────────────
+
 
 def test_chat_unknown_mmsi_falls_back_to_fleet_context(client):
     captured: list[str] = []
@@ -192,8 +224,10 @@ def test_chat_unknown_mmsi_falls_back_to_fleet_context(client):
     mock_llm = MagicMock()
     mock_llm.stream_messages = _cap
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+    ):
         resp = client.post("/api/chat", json={"message": "Any info?", "mmsi": "000000000"})
 
     assert resp.status_code == 200
@@ -204,6 +238,7 @@ def test_chat_unknown_mmsi_falls_back_to_fleet_context(client):
 
 
 # ── multi-turn history ────────────────────────────────────────────────────
+
 
 def test_chat_history_forwarded_to_llm(client):
     forwarded_messages: list[list[dict]] = []
@@ -220,14 +255,19 @@ def test_chat_history_forwarded_to_llm(client):
         {"role": "assistant", "content": "First answer"},
     ]
 
-    with patch("src.api.routes.chat.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.chat.query_gdelt_context", return_value=[]), \
-         patch("src.api.routes.chat._query_graph_ownership", return_value="none"):
-        client.post("/api/chat", json={
-            "message": "Follow-up",
-            "mmsi": "123456789",
-            "history": history,
-        })
+    with (
+        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+    ):
+        client.post(
+            "/api/chat",
+            json={
+                "message": "Follow-up",
+                "mmsi": "123456789",
+                "history": history,
+            },
+        )
 
     assert forwarded_messages
     msgs = forwarded_messages[0]

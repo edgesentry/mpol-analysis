@@ -10,10 +10,10 @@ import pyarrow as pa
 
 from src.ingest.vessel_registry import build_graph_tables
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _seed_vessel_meta(db_path: str, rows: list[tuple]) -> None:
     """Insert (mmsi, imo, name) rows into vessel_meta."""
@@ -40,10 +40,19 @@ def _seed_sanctions(db_path: str, rows: list[tuple]) -> None:
 
 def _write_equasis_csv(path: Path, rows: list[dict]) -> None:
     fieldnames = [
-        "mmsi", "imo", "vessel_name",
-        "owner_id", "owner_name", "owner_country", "owner_address_id", "owner_address",
-        "manager_id", "manager_name", "manager_country",
-        "since", "until",
+        "mmsi",
+        "imo",
+        "vessel_name",
+        "owner_id",
+        "owner_name",
+        "owner_country",
+        "owner_address_id",
+        "owner_address",
+        "manager_id",
+        "manager_name",
+        "manager_country",
+        "since",
+        "until",
     ]
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -54,6 +63,7 @@ def _write_equasis_csv(path: Path, rows: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 # build_graph_tables — vessels
 # ---------------------------------------------------------------------------
+
 
 def test_build_graph_empty_db(tmp_db):
     tables = build_graph_tables(tmp_db)
@@ -80,6 +90,7 @@ def test_build_graph_vessel_imo_name(tmp_db):
 # build_graph_tables — sanctions
 # ---------------------------------------------------------------------------
 
+
 def test_build_graph_sanctions_empty(tmp_db):
     tables = build_graph_tables(tmp_db)
     assert len(tables["SANCTIONED_BY"]) == 0
@@ -87,9 +98,12 @@ def test_build_graph_sanctions_empty(tmp_db):
 
 
 def test_build_graph_sanctions_company(tmp_db):
-    _seed_sanctions(tmp_db, [
-        ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
-    ])
+    _seed_sanctions(
+        tmp_db,
+        [
+            ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
+        ],
+    )
     tables = build_graph_tables(tmp_db)
     assert len(tables["Company"]) == 1
     assert "co-001" in tables["Company"]["id"].to_pylist()
@@ -99,27 +113,36 @@ def test_build_graph_sanctions_company(tmp_db):
 
 def test_build_graph_sanctions_vessel_by_mmsi(tmp_db):
     _seed_vessel_meta(tmp_db, [("123456789", "IMO001", "SHADOW")])
-    _seed_sanctions(tmp_db, [
-        ("v-001", "SHADOW SHIP", "123456789", "IMO001", "KP", "Vessel", "ofac_sdn"),
-    ])
+    _seed_sanctions(
+        tmp_db,
+        [
+            ("v-001", "SHADOW SHIP", "123456789", "IMO001", "KP", "Vessel", "ofac_sdn"),
+        ],
+    )
     tables = build_graph_tables(tmp_db)
     sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
     assert "123456789" in sb_src
 
 
 def test_build_graph_regime_nodes(tmp_db):
-    _seed_sanctions(tmp_db, [
-        ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
-    ])
+    _seed_sanctions(
+        tmp_db,
+        [
+            ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
+        ],
+    )
     tables = build_graph_tables(tmp_db)
     regime_names = tables["SanctionsRegime"]["name"].to_pylist()
     assert "ofac_sdn" in regime_names
 
 
 def test_build_graph_registered_in(tmp_db):
-    _seed_sanctions(tmp_db, [
-        ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
-    ])
+    _seed_sanctions(
+        tmp_db,
+        [
+            ("co-001", "EVIL CORP", None, None, "KP", "Company", "ofac_sdn"),
+        ],
+    )
     tables = build_graph_tables(tmp_db)
     ri_src = tables["REGISTERED_IN"]["src_id"].to_pylist()
     assert "co-001" in ri_src
@@ -131,15 +154,29 @@ def test_build_graph_registered_in(tmp_db):
 # build_graph_tables — equasis CSV
 # ---------------------------------------------------------------------------
 
+
 def test_build_graph_equasis_ownership(tmp_db, tmp_path):
     csv_path = tmp_path / "equasis.csv"
-    _write_equasis_csv(csv_path, [{
-        "mmsi": "123456789", "imo": "IMO001", "vessel_name": "SHIP A",
-        "owner_id": "co-001", "owner_name": "ACME LTD", "owner_country": "PA",
-        "owner_address_id": "addr-001", "owner_address": "PO Box 1, Panama",
-        "manager_id": "mgr-001", "manager_name": "MGMT CO", "manager_country": "SG",
-        "since": "2022-01-01", "until": "",
-    }])
+    _write_equasis_csv(
+        csv_path,
+        [
+            {
+                "mmsi": "123456789",
+                "imo": "IMO001",
+                "vessel_name": "SHIP A",
+                "owner_id": "co-001",
+                "owner_name": "ACME LTD",
+                "owner_country": "PA",
+                "owner_address_id": "addr-001",
+                "owner_address": "PO Box 1, Panama",
+                "manager_id": "mgr-001",
+                "manager_name": "MGMT CO",
+                "manager_country": "SG",
+                "since": "2022-01-01",
+                "until": "",
+            }
+        ],
+    )
     tables = build_graph_tables(tmp_db, equasis_csv=str(csv_path))
     assert len(tables["OWNED_BY"]) == 1
     assert tables["OWNED_BY"]["src_id"][0].as_py() == "123456789"
@@ -150,20 +187,30 @@ def test_build_graph_equasis_ownership(tmp_db, tmp_path):
 
 def test_build_graph_equasis_skips_missing_mmsi(tmp_db, tmp_path):
     csv_path = tmp_path / "equasis.csv"
-    _write_equasis_csv(csv_path, [
-        {"mmsi": "", "owner_id": "co-001"},
-        {"mmsi": "123456789", "owner_id": "co-002", "owner_name": "X"},
-    ])
+    _write_equasis_csv(
+        csv_path,
+        [
+            {"mmsi": "", "owner_id": "co-001"},
+            {"mmsi": "123456789", "owner_id": "co-002", "owner_name": "X"},
+        ],
+    )
     tables = build_graph_tables(tmp_db, equasis_csv=str(csv_path))
     assert len(tables["OWNED_BY"]) == 1
 
 
 def test_build_graph_equasis_no_address_if_id_missing(tmp_db, tmp_path):
     csv_path = tmp_path / "equasis.csv"
-    _write_equasis_csv(csv_path, [{
-        "mmsi": "123456789", "owner_id": "co-001", "owner_name": "X",
-        "owner_address_id": "",
-        "owner_address": "Some street",
-    }])
+    _write_equasis_csv(
+        csv_path,
+        [
+            {
+                "mmsi": "123456789",
+                "owner_id": "co-001",
+                "owner_name": "X",
+                "owner_address_id": "",
+                "owner_address": "Some street",
+            }
+        ],
+    )
     tables = build_graph_tables(tmp_db, equasis_csv=str(csv_path))
     assert len(tables["REGISTERED_AT"]) == 0

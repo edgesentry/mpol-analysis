@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
 import logging
+from datetime import UTC, datetime, timedelta
 
 import duckdb
 import polars as pl
@@ -28,81 +28,164 @@ logging.basicConfig(level=logging.INFO)
 WATCHLIST_PATH = "data/processed/candidate_watchlist.parquet"
 
 DUMMY_MMSIS = {
-    "352001369", "314856000", "372979000", "312171000", "352898820",
-    "352002316", "626152000", "352001298", "314925000", "352001565"
+    "352001369",
+    "314856000",
+    "372979000",
+    "312171000",
+    "352898820",
+    "352002316",
+    "626152000",
+    "352001298",
+    "314925000",
+    "352001565",
 }
 
 NEW_VESSELS = pl.DataFrame(
     {
-        "mmsi": ["352001369", "314856000", "372979000", "312171000", "352898820", "352002316", "626152000", "352001298", "314925000", "352001565"],
-        "imo": ["9305609", "9292486", "9219056", "9354521", "9280873", "9308778", "9162928", "9292228", "9289491", "9417490"],
-        "vessel_name": ["CELINE", "ELINE", "REX 1", "ANHONA", "AVENTUS I", "SATINA", "ASTRA", "CRYSTAL ROSE", "BENDIGO", "ARABIAN ENERGY"],
-        "vessel_type": ["Tanker", "Tanker", "Tanker", "Tanker", "Tanker", "Tanker", "Tanker", "Tanker", "Tanker", "Tanker"],
+        "mmsi": [
+            "352001369",
+            "314856000",
+            "372979000",
+            "312171000",
+            "352898820",
+            "352002316",
+            "626152000",
+            "352001298",
+            "314925000",
+            "352001565",
+        ],
+        "imo": [
+            "9305609",
+            "9292486",
+            "9219056",
+            "9354521",
+            "9280873",
+            "9308778",
+            "9162928",
+            "9292228",
+            "9289491",
+            "9417490",
+        ],
+        "vessel_name": [
+            "CELINE",
+            "ELINE",
+            "REX 1",
+            "ANHONA",
+            "AVENTUS I",
+            "SATINA",
+            "ASTRA",
+            "CRYSTAL ROSE",
+            "BENDIGO",
+            "ARABIAN ENERGY",
+        ],
+        "vessel_type": [
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+            "Tanker",
+        ],
         "flag": ["PA", "BB", "PA", "BZ", "PA", "PA", "GA", "PA", "BB", "PA"],
         "confidence": [0.91, 0.87, 0.79, 0.72, 0.83, 0.75, 0.88, 0.82, 0.65, 0.95],
         "anomaly_score": [0.88, 0.84, 0.70, 0.55, 0.81, 0.68, 0.85, 0.79, 0.55, 0.92],
         "graph_risk_score": [0.92, 0.80, 0.75, 0.65, 0.78, 0.72, 0.82, 0.75, 0.60, 0.88],
         "identity_score": [0.75, 0.70, 0.25, 0.40, 0.69, 0.55, 0.72, 0.65, 0.45, 0.85],
         "top_signals": [
-            json.dumps([
-                {"feature": "ais_gap_count_30d", "value": 14, "contribution": 0.38},
-                {"feature": "sanctions_distance", "value": 0, "contribution": 0.28},
-                {"feature": "flag_changes_2y", "value": 2, "contribution": 0.15},
-            ]),
-            json.dumps([
-                {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.42},
-                {"feature": "position_jump_count", "value": 3, "contribution": 0.25},
-                {"feature": "high_risk_flag_ratio", "value": 0.80, "contribution": 0.18},
-            ]),
-            json.dumps([
-                {"feature": "sts_hub_degree", "value": 6, "contribution": 0.30},
-                {"feature": "shared_address_centrality", "value": 5, "contribution": 0.22},
-                {"feature": "cluster_sanctions_ratio", "value": 0.40, "contribution": 0.18},
-            ]),
-            json.dumps([
-                {"feature": "ownership_depth", "value": 5, "contribution": 0.28},
-                {"feature": "sanctions_distance", "value": 0, "contribution": 0.24},
-                {"feature": "name_changes_2y", "value": 1, "contribution": 0.12},
-            ]),
-            json.dumps([
-                {"feature": "ais_gap_count_30d", "value": 15, "contribution": 0.33},
-                {"feature": "sts_candidate_count", "value": 4, "contribution": 0.24},
-                {"feature": "position_jump_count", "value": 2, "contribution": 0.14},
-            ]),
-            json.dumps([
-                {"feature": "ais_gap_count_30d", "value": 9, "contribution": 0.25},
-                {"feature": "flag_changes_2y", "value": 1, "contribution": 0.20},
-            ]),
-            json.dumps([
-                {"feature": "sanctions_distance", "value": 0, "contribution": 0.40},
-                {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.30},
-            ]),
-            json.dumps([
-                {"feature": "ais_gap_count_30d", "value": 13, "contribution": 0.35},
-                {"feature": "sts_candidate_count", "value": 3, "contribution": 0.25},
-            ]),
-            json.dumps([
-                {"feature": "identity_score", "value": 0.45, "contribution": 0.20},
-            ]),
-            json.dumps([
-                {"feature": "sanctions_distance", "value": 0, "contribution": 0.45},
-                {"feature": "ais_gap_count_30d", "value": 16, "contribution": 0.30},
-            ]),
+            json.dumps(
+                [
+                    {"feature": "ais_gap_count_30d", "value": 14, "contribution": 0.38},
+                    {"feature": "sanctions_distance", "value": 0, "contribution": 0.28},
+                    {"feature": "flag_changes_2y", "value": 2, "contribution": 0.15},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.42},
+                    {"feature": "position_jump_count", "value": 3, "contribution": 0.25},
+                    {"feature": "high_risk_flag_ratio", "value": 0.80, "contribution": 0.18},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "sts_hub_degree", "value": 6, "contribution": 0.30},
+                    {"feature": "shared_address_centrality", "value": 5, "contribution": 0.22},
+                    {"feature": "cluster_sanctions_ratio", "value": 0.40, "contribution": 0.18},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "ownership_depth", "value": 5, "contribution": 0.28},
+                    {"feature": "sanctions_distance", "value": 0, "contribution": 0.24},
+                    {"feature": "name_changes_2y", "value": 1, "contribution": 0.12},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "ais_gap_count_30d", "value": 15, "contribution": 0.33},
+                    {"feature": "sts_candidate_count", "value": 4, "contribution": 0.24},
+                    {"feature": "position_jump_count", "value": 2, "contribution": 0.14},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "ais_gap_count_30d", "value": 9, "contribution": 0.25},
+                    {"feature": "flag_changes_2y", "value": 1, "contribution": 0.20},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "sanctions_distance", "value": 0, "contribution": 0.40},
+                    {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.30},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "ais_gap_count_30d", "value": 13, "contribution": 0.35},
+                    {"feature": "sts_candidate_count", "value": 3, "contribution": 0.25},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "identity_score", "value": 0.45, "contribution": 0.20},
+                ]
+            ),
+            json.dumps(
+                [
+                    {"feature": "sanctions_distance", "value": 0, "contribution": 0.45},
+                    {"feature": "ais_gap_count_30d", "value": 16, "contribution": 0.30},
+                ]
+            ),
         ],
         # Realistic last-known positions
         "last_lat": [1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15],
-        "last_lon": [103.85, 103.95, 104.05, 104.15, 104.25, 104.35, 104.45, 104.55, 104.65, 104.75],
+        "last_lon": [
+            103.85,
+            103.95,
+            104.05,
+            104.15,
+            104.25,
+            104.35,
+            104.45,
+            104.55,
+            104.65,
+            104.75,
+        ],
         "last_seen": [
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
-            datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
+            datetime(2026, 3, 15, 0, 0, tzinfo=UTC),
         ],
         "ais_gap_count_30d": [14, 12, 10, 8, 15, 9, 11, 13, 7, 16],
         "ais_gap_max_hours": [22.0, 18.0, 15.0, 12.0, 25.0, 14.0, 20.0, 21.0, 10.0, 28.0],
@@ -121,8 +204,8 @@ NEW_VESSELS = pl.DataFrame(
 
 
 _CONFIRMED_MMSI = "352001369"  # CELINE — used as confirmed seed
-_PEER_MMSI = "314856000"       # ELINE — uplifted by propagation
-_CONFIRMED_AT = datetime(2026, 4, 1, tzinfo=timezone.utc)
+_PEER_MMSI = "314856000"  # ELINE — uplifted by propagation
+_CONFIRMED_AT = datetime(2026, 4, 1, tzinfo=UTC)
 
 
 def _seed_db(db_path: str) -> None:
@@ -191,8 +274,10 @@ def _seed_db(db_path: str) -> None:
                         exc,
                     )
                 t += timedelta(hours=8)
-            print(f"  inserted {inserted} AIS positions for {_CONFIRMED_MMSI} "
-                  "(275d dense baseline + 90d sparse precursor)")
+            print(
+                f"  inserted {inserted} AIS positions for {_CONFIRMED_MMSI} "
+                "(275d dense baseline + 90d sparse precursor)"
+            )
         else:
             print(f"  {_CONFIRMED_MMSI} already has {existing_ais} AIS rows — skipping")
     finally:
@@ -223,40 +308,42 @@ def main() -> None:
         "--db",
         default=None,
         help="Also seed this DuckDB with confirmed review + AIS history + ownership graph "
-             "for local backtracking evaluation (default: parquet only)",
+        "for local backtracking evaluation (default: parquet only)",
     )
     args = parser.parse_args()
 
     try:
         existing = pl.read_parquet(WATCHLIST_PATH)
     except Exception:
-        existing = pl.DataFrame(schema={
-            "mmsi": pl.Utf8,
-            "imo": pl.Utf8,
-            "vessel_name": pl.Utf8,
-            "vessel_type": pl.Utf8,
-            "flag": pl.Utf8,
-            "confidence": pl.Float32,
-            "anomaly_score": pl.Float32,
-            "graph_risk_score": pl.Float32,
-            "identity_score": pl.Float32,
-            "top_signals": pl.Utf8,
-            "last_lat": pl.Float64,
-            "last_lon": pl.Float64,
-            "last_seen": pl.Datetime(time_unit="us", time_zone="UTC"),
-            "ais_gap_count_30d": pl.Int64,
-            "ais_gap_max_hours": pl.Float32,
-            "position_jump_count": pl.Int64,
-            "sts_candidate_count": pl.Int64,
-            "flag_changes_2y": pl.Int64,
-            "name_changes_2y": pl.Int64,
-            "owner_changes_2y": pl.Int64,
-            "sanctions_distance": pl.Int64,
-            "shared_address_centrality": pl.Int64,
-            "sts_hub_degree": pl.Int64,
-            "cluster_label": pl.Int64,
-            "baseline_noise_score": pl.Float32,
-        })
+        existing = pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "imo": pl.Utf8,
+                "vessel_name": pl.Utf8,
+                "vessel_type": pl.Utf8,
+                "flag": pl.Utf8,
+                "confidence": pl.Float32,
+                "anomaly_score": pl.Float32,
+                "graph_risk_score": pl.Float32,
+                "identity_score": pl.Float32,
+                "top_signals": pl.Utf8,
+                "last_lat": pl.Float64,
+                "last_lon": pl.Float64,
+                "last_seen": pl.Datetime(time_unit="us", time_zone="UTC"),
+                "ais_gap_count_30d": pl.Int64,
+                "ais_gap_max_hours": pl.Float32,
+                "position_jump_count": pl.Int64,
+                "sts_candidate_count": pl.Int64,
+                "flag_changes_2y": pl.Int64,
+                "name_changes_2y": pl.Int64,
+                "owner_changes_2y": pl.Int64,
+                "sanctions_distance": pl.Int64,
+                "shared_address_centrality": pl.Int64,
+                "sts_hub_degree": pl.Int64,
+                "cluster_label": pl.Int64,
+                "baseline_noise_score": pl.Float32,
+            }
+        )
 
     # Remove any prior seeded rows so re-running is idempotent
     existing = existing.filter(~pl.col("mmsi").is_in(list(DUMMY_MMSIS)))
@@ -280,7 +367,9 @@ def main() -> None:
             cast_exprs.append(pl.col(col).cast(dtype))
     new = new.with_columns(cast_exprs)
 
-    combined = pl.concat([existing, new], how="vertical_relaxed").sort("confidence", descending=True)
+    combined = pl.concat([existing, new], how="vertical_relaxed").sort(
+        "confidence", descending=True
+    )
     combined.write_parquet(WATCHLIST_PATH)
     print(f"Watchlist updated: {combined.height} vessels ({len(DUMMY_MMSIS)} dummy added)")
     print(combined.select(["vessel_name", "flag", "confidence"]))

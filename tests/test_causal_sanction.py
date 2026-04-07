@@ -8,15 +8,13 @@ and require no network access.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import duckdb
 import numpy as np
 import polars as pl
-import pytest
 
 from src.score.causal_sanction import (
-    ALPHA,
     SANCTION_REGIMES,
     CausalEffect,
     _did_estimate,
@@ -28,7 +26,6 @@ from src.score.causal_sanction import (
     run_causal_model,
     write_effects,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,13 +86,14 @@ def _seed_causal_data(db_path: str) -> None:
         # Base timestamps for control vessels (2 gaps each period, uniform)
         # for treated vessels: 2 gaps pre, 12 gaps post (large treatment effect)
 
-        pre_ann = datetime(2019, 4, 8, tzinfo=timezone.utc)   # day before pre-window end
-        post_ann = datetime(2019, 5, 9, tzinfo=timezone.utc)  # day after announcement
+        _pre_ann = datetime(2019, 4, 8, tzinfo=UTC)  # day before pre-window end
+        _post_ann = datetime(2019, 5, 9, tzinfo=UTC)  # day after announcement
 
         def _insert_positions(mmsi: str, base: datetime, gap_hours: float, n_obs: int):
             """Insert n_obs observations with regular gap_hours spacing."""
             ts = base
             from datetime import timedelta
+
             for _ in range(n_obs):
                 con.execute(
                     """
@@ -103,19 +101,19 @@ def _seed_causal_data(db_path: str) -> None:
                         (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    [mmsi, ts.isoformat(), 26.5, 55.5, 0.5, 1, 82]
+                    [mmsi, ts.isoformat(), 26.5, 55.5, 0.5, 1, 82],
                 )
                 ts = ts + timedelta(hours=gap_hours)
 
         # Pre-period: all vessels, 2 gaps each (gap = 8h so each counts once)
-        for mmsi in ['TR1', 'TR2', 'TR3', 'TR4', 'CT1', 'CT2', 'CT3', 'CT4']:
-            _insert_positions(mmsi, datetime(2019, 4, 8, tzinfo=timezone.utc), 8.0, 3)
+        for mmsi in ["TR1", "TR2", "TR3", "TR4", "CT1", "CT2", "CT3", "CT4"]:
+            _insert_positions(mmsi, datetime(2019, 4, 8, tzinfo=UTC), 8.0, 3)
 
         # Post-period: treated get 12 gaps, control get 2 gaps
-        for mmsi in ['TR1', 'TR2', 'TR3', 'TR4']:
-            _insert_positions(mmsi, datetime(2019, 5, 8, tzinfo=timezone.utc), 7.0, 13)
-        for mmsi in ['CT1', 'CT2', 'CT3', 'CT4']:
-            _insert_positions(mmsi, datetime(2019, 5, 8, tzinfo=timezone.utc), 8.0, 3)
+        for mmsi in ["TR1", "TR2", "TR3", "TR4"]:
+            _insert_positions(mmsi, datetime(2019, 5, 8, tzinfo=UTC), 7.0, 13)
+        for mmsi in ["CT1", "CT2", "CT3", "CT4"]:
+            _insert_positions(mmsi, datetime(2019, 5, 8, tzinfo=UTC), 8.0, 3)
 
     finally:
         con.close()
@@ -166,8 +164,8 @@ def test_count_ais_gaps_empty(tmp_db):
     result = count_ais_gaps(
         duckdb.connect(tmp_db, read_only=True),
         mmsis=["999999999"],
-        start=datetime(2025, 1, 1, tzinfo=timezone.utc),
-        end=datetime(2025, 2, 1, tzinfo=timezone.utc),
+        start=datetime(2025, 1, 1, tzinfo=UTC),
+        end=datetime(2025, 2, 1, tzinfo=UTC),
     )
     assert result == {"999999999": 0}
 
@@ -177,7 +175,7 @@ def test_count_ais_gaps_detects_gaps(tmp_db):
     from datetime import timedelta
 
     con_rw = duckdb.connect(tmp_db)
-    base = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    base = datetime(2025, 1, 1, tzinfo=UTC)
     # Insert 3 positions with 8-hour spacing (gap > 6h threshold)
     for i in range(3):
         ts = base + timedelta(hours=i * 8)
@@ -203,7 +201,7 @@ def test_count_ais_gaps_below_threshold(tmp_db):
     from datetime import timedelta
 
     con_rw = duckdb.connect(tmp_db)
-    base = datetime(2025, 3, 1, tzinfo=timezone.utc)
+    base = datetime(2025, 3, 1, tzinfo=UTC)
     # Insert 4 positions with 3-hour spacing (gap < 6h threshold)
     for i in range(4):
         ts = base + timedelta(hours=i * 3)
@@ -238,7 +236,7 @@ def test_count_ais_gaps_utc_consistency(tmp_db, monkeypatch):
     con_rw.execute("SET TimeZone='Asia/Tokyo'")
 
     # Base date exactly at midnight UTC
-    base = datetime(2025, 4, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2025, 4, 1, 0, 0, 0, tzinfo=UTC)
 
     # Insert 2 positions with 10-hour spacing (gap = 10h > 6h threshold)
     for i in range(2):
@@ -263,7 +261,7 @@ def test_count_ais_gaps_utc_consistency(tmp_db, monkeypatch):
 
     # Reset monkeypatch if needed, though pytest handles it.
     # Note: tzset is effective globally, but in a test run it's acceptable.
-    
+
     # 1 gap of 10h should be detected
     assert result["UTC_TEST"] == 1
 
@@ -275,7 +273,7 @@ def test_count_ais_gaps_utc_consistency(tmp_db, monkeypatch):
 
 def test_did_estimate_insufficient_data(tmp_db):
     """DiD should return None when there are fewer than 2 vessels."""
-    ann = datetime(2019, 5, 8, tzinfo=timezone.utc)
+    ann = datetime(2019, 5, 8, tzinfo=UTC)
     con = duckdb.connect(tmp_db, read_only=True)
     result = _did_estimate(["TR1"], [], ann, con)
     con.close()
@@ -285,7 +283,7 @@ def test_did_estimate_insufficient_data(tmp_db):
 def test_did_estimate_with_seeded_data(tmp_db):
     """DiD should return a non-None result with sufficient seeded data."""
     _seed_causal_data(tmp_db)
-    ann = datetime(2019, 5, 8, tzinfo=timezone.utc)
+    ann = datetime(2019, 5, 8, tzinfo=UTC)
     con = duckdb.connect(tmp_db, read_only=True)
     result = _did_estimate(
         ["TR1", "TR2", "TR3", "TR4"],
@@ -312,19 +310,30 @@ class TestPoolEstimates:
         assert pooled["p"] == 1.0
 
     def test_single_result_passthrough(self):
-        pooled = _pool_estimates([
-            {"att": 5.0, "se": 1.0, "t": 5.0, "p": 0.001,
-             "n_treated": 10, "n_control": 10}
-        ])
+        pooled = _pool_estimates(
+            [{"att": 5.0, "se": 1.0, "t": 5.0, "p": 0.001, "n_treated": 10, "n_control": 10}]
+        )
         assert abs(pooled["att"] - 5.0) < 0.01
 
     def test_inverse_variance_weighting(self):
         """More precise estimates should dominate the pooled result."""
         results = [
-            {"att": 10.0, "se": 0.1, "t": 100.0, "p": 0.0,
-             "n_treated": 5, "n_control": 5},   # very precise
-            {"att": 0.0, "se": 10.0, "t": 0.0, "p": 1.0,
-             "n_treated": 5, "n_control": 5},   # very noisy
+            {
+                "att": 10.0,
+                "se": 0.1,
+                "t": 100.0,
+                "p": 0.0,
+                "n_treated": 5,
+                "n_control": 5,
+            },  # very precise
+            {
+                "att": 0.0,
+                "se": 10.0,
+                "t": 0.0,
+                "p": 1.0,
+                "n_treated": 5,
+                "n_control": 5,
+            },  # very noisy
         ]
         pooled = _pool_estimates(results)
         # Pooled ATT should be much closer to 10 than to 0
@@ -399,9 +408,16 @@ def test_effects_to_dataframe_schema(tmp_db):
     effects = run_causal_model(tmp_db)
     df = effects_to_dataframe(effects)
     required_cols = {
-        "regime", "label", "n_treated", "n_control",
-        "att_estimate", "att_ci_lower", "att_ci_upper",
-        "p_value", "is_significant", "calibrated_weight",
+        "regime",
+        "label",
+        "n_treated",
+        "n_control",
+        "att_estimate",
+        "att_ci_lower",
+        "att_ci_upper",
+        "p_value",
+        "is_significant",
+        "calibrated_weight",
     }
     assert required_cols <= set(df.columns)
     assert df.height == len(SANCTION_REGIMES)
@@ -420,8 +436,6 @@ def test_write_effects(tmp_db, tmp_path):
     df = effects_to_dataframe(effects)
     out = str(tmp_path / "causal_effects.parquet")
     write_effects(df, out)
-
-    import polars as pl
 
     loaded = pl.read_parquet(out)
     assert loaded.height == len(SANCTION_REGIMES)

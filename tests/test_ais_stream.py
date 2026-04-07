@@ -1,7 +1,6 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import duckdb
-import polars as pl
 
 from src.ingest.ais_stream import _flush_batch, _parse_position_report
 
@@ -38,7 +37,7 @@ def test_parse_position_report_basic():
     assert record["sog"] == 12.5
     assert record["nav_status"] == 0
     assert record["ship_type"] == 80
-    assert record["timestamp"] == datetime(2024, 6, 1, 8, 0, 0, tzinfo=timezone.utc)
+    assert record["timestamp"] == datetime(2024, 6, 1, 8, 0, 0, tzinfo=UTC)
 
 
 def test_parse_ignores_non_position_messages():

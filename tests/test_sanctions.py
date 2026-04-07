@@ -1,13 +1,14 @@
 import json
-import duckdb
 from pathlib import Path
 
-from src.ingest.sanctions import _flush_batch, load_jsonl_to_duckdb, parse_ftm_entity
+import duckdb
 
+from src.ingest.sanctions import _flush_batch, load_jsonl_to_duckdb, parse_ftm_entity
 
 # ---------------------------------------------------------------------------
 # parse_ftm_entity
 # ---------------------------------------------------------------------------
+
 
 def _vessel_entity(
     entity_id="ofac-vessel-001",
@@ -73,8 +74,13 @@ def test_parse_missing_name_returns_none():
 
 
 def test_parse_missing_id_returns_none():
-    entity = {"id": "", "schema": "Vessel", "caption": "SHIP",
-              "properties": {"name": ["SHIP"]}, "datasets": []}
+    entity = {
+        "id": "",
+        "schema": "Vessel",
+        "caption": "SHIP",
+        "properties": {"name": ["SHIP"]},
+        "datasets": [],
+    }
     assert parse_ftm_entity(entity) is None
 
 
@@ -102,6 +108,7 @@ def test_parse_uses_caption_as_fallback_name():
 # ---------------------------------------------------------------------------
 # _flush_batch + load_jsonl_to_duckdb
 # ---------------------------------------------------------------------------
+
 
 def test_flush_batch_inserts(tmp_db):
     con = duckdb.connect(tmp_db)
@@ -138,11 +145,14 @@ def _write_jsonl(path: Path, entities: list) -> None:
 
 def test_load_jsonl_to_duckdb(tmp_path, tmp_db):
     jsonl = tmp_path / "test.jsonl"
-    _write_jsonl(jsonl, [
-        _vessel_entity(entity_id="v1"),
-        _company_entity(entity_id="c1"),
-        {"id": "skip", "schema": "Event", "properties": {}, "datasets": []},
-    ])
+    _write_jsonl(
+        jsonl,
+        [
+            _vessel_entity(entity_id="v1"),
+            _company_entity(entity_id="c1"),
+            {"id": "skip", "schema": "Event", "properties": {}, "datasets": []},
+        ],
+    )
     n = load_jsonl_to_duckdb(jsonl, tmp_db)
     assert n == 2
 

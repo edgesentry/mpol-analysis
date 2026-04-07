@@ -27,7 +27,7 @@ import argparse
 import json
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -51,7 +51,7 @@ FLAG_JS_WARNING = 0.10
 FLAG_JS_CRITICAL = 0.25
 
 # AIS gap rate shift (recent 30d vs baseline 90d)
-GAP_RATE_WARNING = 0.30   # 30% relative change
+GAP_RATE_WARNING = 0.30  # 30% relative change
 GAP_RATE_CRITICAL = 0.60
 
 # Watchlist score shift: mean score change
@@ -76,7 +76,7 @@ class DriftAlert:
     """A single drift check result."""
 
     check_name: str
-    severity: str        # "ok" | "warning" | "critical"
+    severity: str  # "ok" | "warning" | "critical"
     metric_name: str
     current_value: float
     reference_value: float
@@ -122,9 +122,7 @@ def _make_alert(
 ) -> DriftAlert:
     rel = (current - reference) / (abs(reference) + 1e-9)
     sev = _severity(rel, warn, crit)
-    msg = message_template or (
-        f"relative change {rel:+.2%} vs reference"
-    )
+    msg = message_template or (f"relative change {rel:+.2%} vs reference")
     return DriftAlert(
         check_name=check_name,
         severity=sev,
@@ -135,7 +133,7 @@ def _make_alert(
         threshold_warning=warn,
         threshold_critical=crit,
         message=msg,
-        checked_at=checked_at or datetime.now(timezone.utc).isoformat(),
+        checked_at=checked_at or datetime.now(UTC).isoformat(),
     )
 
 
@@ -224,7 +222,7 @@ def check_flag_distribution(
             threshold_warning=FLAG_JS_WARNING,
             threshold_critical=FLAG_JS_CRITICAL,
             message="Insufficient data (<5 vessels with flag features)",
-            checked_at=datetime.now(timezone.utc).isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
         )
 
     values = [float(r[0]) for r in rows]
@@ -293,7 +291,7 @@ def check_watchlist_score_shift(
             threshold_warning=SCORE_SHIFT_WARNING,
             threshold_critical=SCORE_SHIFT_CRITICAL,
             message="Insufficient review history for score shift check",
-            checked_at=datetime.now(timezone.utc).isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
         )
 
     scores = [float(r[0]) for r in rows]
@@ -367,13 +365,10 @@ def check_concept_drift_proxy(
             threshold_warning=PRECISION_DROP_WARNING,
             threshold_critical=PRECISION_DROP_CRITICAL,
             message="Insufficient review data for concept drift check (< 5 reviews per window)",
-            checked_at=datetime.now(timezone.utc).isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
         )
 
-    msg = (
-        f"Confirmed/probable ratio: recent={p_recent:.4f} vs "
-        f"prior 90d={p_baseline:.4f}"
-    )
+    msg = f"Confirmed/probable ratio: recent={p_recent:.4f} vs prior 90d={p_baseline:.4f}"
     return _make_alert(
         "concept_drift_proxy",
         "confirmed_probable_ratio",
@@ -412,7 +407,7 @@ def run_drift_checks(
     (one per check).  Callers should filter by severity as needed.
     """
     if as_of is None:
-        as_of = datetime.now(timezone.utc)
+        as_of = datetime.now(UTC)
 
     con = duckdb.connect(db_path)
     try:
@@ -431,7 +426,7 @@ def run_drift_checks(
 def alerts_to_dict(alerts: list[DriftAlert]) -> dict[str, Any]:
     """Serialise alerts to a JSON-compatible dict."""
     return {
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
         "summary": {
             "ok": sum(1 for a in alerts if a.severity == SEVERITY_OK),
             "warning": sum(1 for a in alerts if a.severity == SEVERITY_WARNING),
@@ -453,24 +448,22 @@ def main() -> None:
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--as-of-utc", default=None, help="Reference datetime (ISO 8601 UTC)")
     parser.add_argument(
-        "--gap-threshold-hours", type=float, default=6.0,
+        "--gap-threshold-hours",
+        type=float,
+        default=6.0,
         help="AIS gap threshold in hours (default 6)",
     )
     parser.add_argument("--json", action="store_true", help="Output JSON")
     args = parser.parse_args()
 
-    as_of = (
-        datetime.fromisoformat(args.as_of_utc).replace(tzinfo=timezone.utc)
-        if args.as_of_utc
-        else None
-    )
+    as_of = datetime.fromisoformat(args.as_of_utc).replace(tzinfo=UTC) if args.as_of_utc else None
     alerts = run_drift_checks(args.db, as_of, args.gap_threshold_hours)
 
     if args.json:
         print(json.dumps(alerts_to_dict(alerts), indent=2))
         return
 
-    print(f"Drift check results ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')})\n")
+    print(f"Drift check results ({datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')})\n")
     any_nonok = False
     for alert in alerts:
         print(alert)

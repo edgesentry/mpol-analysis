@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import os
+
 import duckdb
 from dotenv import load_dotenv
 

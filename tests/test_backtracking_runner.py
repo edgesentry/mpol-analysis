@@ -44,6 +44,7 @@ def _seed_ais(db_path: str, mmsi: str, base_dt: datetime, count: int = 5) -> Non
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
+
 def test_backtracking_empty_db(bt_db, tmp_path):
     output = str(tmp_path / "report.json")
     report = run_backtracking(bt_db, output)
@@ -58,9 +59,7 @@ def test_backtracking_single_confirmed_vessel(bt_db, tmp_path):
     _seed_confirmed(bt_db, "M11", "2026-03-01T00:00:00Z")
     output = str(tmp_path / "report.json")
 
-    report = run_backtracking(
-        bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=90
-    )
+    report = run_backtracking(bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=90)
 
     assert report["rewind"]["vessel_count"] == 1
     assert report["rewind"]["vessels"][0]["mmsi"] == "M11"
@@ -75,9 +74,7 @@ def test_backtracking_regression_check_pass(bt_db, tmp_path):
     _seed_confirmed(bt_db, "R02", "2026-02-15T00:00:00Z")
     output = str(tmp_path / "reg.json")
 
-    report = run_backtracking(
-        bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=30
-    )
+    report = run_backtracking(bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=30)
 
     rc = report["regression_checks"]
     assert rc["confirmed_vessel_count"] == 2
@@ -121,9 +118,7 @@ def test_backtracking_with_graph_propagation(bt_db, tmp_path):
     write_tables(bt_db, {"OWNED_BY": table})
 
     output = str(tmp_path / "graph_report.json")
-    report = run_backtracking(
-        bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=30
-    )
+    report = run_backtracking(bt_db, output, as_of_utc="2026-04-01T00:00:00Z", rewind_days=30)
 
     assert report["propagation"]["propagated_count"] == 1
     propagated = [v for v in report["propagation"]["vessels"] if v["hop"] > 0]

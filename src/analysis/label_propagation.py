@@ -20,7 +20,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
@@ -32,9 +32,7 @@ from src.graph.store import load_tables
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-DEFAULT_OUTPUT_PATH = os.getenv(
-    "PROPAGATION_OUTPUT_PATH", "data/processed/label_propagation.json"
-)
+DEFAULT_OUTPUT_PATH = os.getenv("PROPAGATION_OUTPUT_PATH", "data/processed/label_propagation.json")
 
 CONFIDENCE_DIRECT = 1.0
 CONFIDENCE_SHARED_OWNER = 0.65
@@ -51,7 +49,7 @@ class PropagationResult:
 
 
 def _fetch_confirmed_mmsis(db_path: str, as_of_utc: str | None = None) -> pl.DataFrame:
-    cutoff = as_of_utc or datetime.now(timezone.utc).isoformat()
+    cutoff = as_of_utc or datetime.now(UTC).isoformat()
     con = duckdb.connect(db_path, read_only=True)
     try:
         return con.execute(
@@ -110,9 +108,7 @@ def propagate_labels(
 
     # ── Shared-owner propagation ─────────────────────────────────────────────
     if len(ob) > 0 and seed_mmsis:
-        ob_df = ob.select(["src_id", "dst_id"]).rename(
-            {"src_id": "vessel", "dst_id": "company"}
-        )
+        ob_df = ob.select(["src_id", "dst_id"]).rename({"src_id": "vessel", "dst_id": "company"})
         seed_companies = (
             ob_df.filter(pl.col("vessel").is_in(seed_mmsis))
             .select(["vessel", "company"])
@@ -139,9 +135,7 @@ def propagate_labels(
 
     # ── Shared-manager propagation ───────────────────────────────────────────
     if len(mb) > 0 and seed_mmsis:
-        mb_df = mb.select(["src_id", "dst_id"]).rename(
-            {"src_id": "vessel", "dst_id": "company"}
-        )
+        mb_df = mb.select(["src_id", "dst_id"]).rename({"src_id": "vessel", "dst_id": "company"})
         seed_companies_m = (
             mb_df.filter(pl.col("vessel").is_in(seed_mmsis))
             .select(["vessel", "company"])
@@ -214,7 +208,7 @@ def propagate_labels(
         seed_count=len(seed_mmsis),
         propagated_count=propagated_count,
         total_vessels=len(all_rows),
-        as_of_utc=as_of_utc or datetime.now(timezone.utc).isoformat(),
+        as_of_utc=as_of_utc or datetime.now(UTC).isoformat(),
     )
     return result_df, result
 

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -93,7 +93,7 @@ class UnknownUnknownCandidate:
     """A vessel scored as a potential unknown-unknown evasion candidate."""
 
     mmsi: str
-    causal_score: float                          # [0, 1]
+    causal_score: float  # [0, 1]
     matching_signals: list[CausalSignal] = field(default_factory=list)
     causal_evidence: list[CausalEvidence] = field(default_factory=list)
 
@@ -135,15 +135,11 @@ class UnknownUnknownCandidate:
 
 def _fetch_unsanctioned_mmsis(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Return MMSIs with sanctions_distance = 99 (no graph link)."""
-    rows = con.execute(
-        "SELECT mmsi FROM vessel_features WHERE sanctions_distance >= 99"
-    ).fetchall()
+    rows = con.execute("SELECT mmsi FROM vessel_features WHERE sanctions_distance >= 99").fetchall()
     return [r[0] for r in rows]
 
 
-def _fetch_vessel_features(
-    con: duckdb.DuckDBPyConnection, mmsis: list[str]
-) -> pl.DataFrame:
+def _fetch_vessel_features(con: duckdb.DuckDBPyConnection, mmsis: list[str]) -> pl.DataFrame:
     """Load vessel_features rows for the given MMSIs."""
     if not mmsis:
         return pl.DataFrame()
@@ -275,7 +271,7 @@ def score_unknown_unknowns(
     ``causal_score``.
     """
     if as_of is None:
-        as_of = datetime.now(timezone.utc)
+        as_of = datetime.now(UTC)
 
     con = duckdb.connect(db_path)
     try:
