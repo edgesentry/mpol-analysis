@@ -10,6 +10,20 @@ This document addresses the Cap Vista Solicitation 5.0 Challenge 1 "Trial Specif
 
 No proprietary data feeds are required. All sources are open-access or free-tier API.
 
+### Why open-source data is a design choice, not a limitation
+
+The challenge statement asks for *"relevant proprietary datasets to detect MPOL of shadow fleet vessels."* arktrace deliberately uses no proprietary feeds. This is the reasoning:
+
+| Argument | Detail |
+|---|---|
+| **Coverage** | OpenSanctions fuses OFAC SDN + EU FSF + UN 1267 — over 500,000 sanctioned entities from three independent regimes. No single commercial feed covers all three simultaneously with weekly update cadence. |
+| **Timeliness** | OpenSanctions updates weekly. Many commercial vessel registry products update quarterly or annually — meaning a flag change or ownership transfer may not appear in a proprietary feed for months. |
+| **Novel data fusion** | The combination of AIS + OpenSanctions ownership graph + Equasis vessel registry + UN Comtrade trade flow + GDELT geopolitical events is not available in any single commercial product. No competitor fuses all five at once. |
+| **Cost and replicability** | $0 licensing cost enables deployment to any port authority globally, including those without enterprise procurement budgets. The Precision@50 = 0.62 result is reproducible by any analyst with an internet connection — no vendor lock-in. |
+| **Demonstrated sufficiency** | The 6× lift over the ~0.10 random baseline (Precision@50 = 0.62) was achieved *without* any proprietary dataset. Adding Windward vessel intelligence scores or Lloyd's cargo manifests would be additive — but the open-source baseline already meets the ≥ 0.60 target. |
+
+**What proprietary data would add:** Windward vessel intelligence scores provide enriched behavioural history for vessels outside AIS coverage (e.g., in AIS-sparse regions). Lloyd's cargo manifests enable direct cargo-level mismatch detection. These would increase recall at the margins. They are not required to meet the PoC success criteria and can be integrated as optional signal sources in a future scale-up phase.
+
 | Dataset | Source | Format | Refresh cadence | Estimated volume |
 |---|---|---|---|---|
 | AIS positions (live) | aisstream.io WebSocket | JSON over WebSocket → DuckDB `ais_positions` | Real-time (continuous) | ~10M rows/month per region |

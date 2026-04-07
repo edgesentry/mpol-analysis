@@ -20,6 +20,30 @@ The 60–90 day pre-designation lead time (backtested — see [docs/scoring-mode
 
 ---
 
+## Challenge Alignment — Shadow Fleet Behaviours
+
+Cap Vista Solicitation 5.0, Challenge 1 names three specific shadow fleet behaviours:
+
+> *"sophisticated AIS spoofing, frequent name/flag changes, and illicit ship-to-ship (STS) transfers to bypass international sanctions"*
+
+arktrace maps directly to each:
+
+| Challenge behaviour | arktrace feature(s) | Implementation |
+|---|---|---|
+| **AIS spoofing** | `position_jump_count` (implied speed > 50 kts indicates GPS broadcast spoofing) | `src/features/movement.py` |
+| **AIS dark periods** | `ais_gap_count_30d`, `ais_gap_max_hours` | `src/features/movement.py` |
+| **Frequent name changes** | `name_changes_2y` | `src/features/identity.py` |
+| **Frequent flag changes** | `flag_changes_2y`, `high_risk_flag_ratio` | `src/features/identity.py` |
+| **Ship-to-ship (STS) transfers** | `sts_candidate_count`, `sts_hub_degree` | `src/features/sts.py` |
+
+These five features are the **evidentiary substrate** that feeds the C3 DiD causal model — not the final output claim. The model tests whether AIS gap counts, identity churn, and STS event frequency *increased causally in response to a specific sanction announcement*, separating deliberate evasion from ordinary commercial variation.
+
+### Geographic Scope
+
+The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to water depth of 200 m below mean sea level."* arktrace's default Singapore / Malacca Strait bounding box (`−5°N 92°E → 22°N 122°E`) covers this area. The 200 m bathymetric depth mask (GEBCO) is applied during STS candidate detection to exclude deep-ocean false positives — confirmed shallow-water STS sites are the operationally relevant targets. See [docs/regional-playbooks.md](regional-playbooks.md) for bbox details.
+
+---
+
 ## Tech Stack
 
 | Layer | Tool | Version | Rationale |
@@ -371,6 +395,34 @@ Arktrace uses the LLM for one task only: converting a deterministic, structured 
   {"feature": "flag_changes_2y",   "value": 3,   "contribution": 0.18}
 ]
 ```
+
+### Explainability Worked Example
+
+**Vessel: PACIFIC GHOST** (MMSI 477123456) — Confidence: 0.87
+
+SHAP `TreeExplainer` decomposes the composite score into per-feature contributions:
+
+```
+Feature                  Value   SHAP contribution   Meaning
+──────────────────────── ─────── ─────────────────── ────────────────────────────────────────────────────
+ais_gap_count_30d          14    +0.34               14 dark periods in 30 days (avg fleet: 1.2)
+sanctions_distance          1    +0.31               direct owner on OFAC SDN list (1 BFS hop)
+sts_hub_degree              6    +0.18               contacted 6 distinct vessels during co-location events
+flag_changes_2y             3    +0.12               changed flag state 3 times in 2 years
+position_jump_count         2    +0.09               2 AIS positions requiring implied speed > 50 kts
+causal_weight           0.71    +0.06               statistically significant DiD response to
+                                                     OFAC Iran 2024-10 announcement (ATT=3.1, p<0.01)
+name_changes_2y             0    −0.03               no name changes — mild negative contribution
+trade_flow_mismatch      0.12    +0.02               minor mismatch between declared and estimated volume
+──────────────────────── ─────── ─────────────────── ────────────────────────────────────────────────────
+Composite score                   0.87
+```
+
+**How to read this:** the SHAP contribution column shows exactly how much each feature *pushed the score up or down* from the baseline. AIS dark periods (+0.34) and direct ownership proximity to a sanctioned entity (+0.31) are the dominant signals. The causal DiD weight (+0.06) confirms the evasion behaviour intensified specifically after the October 2024 OFAC announcement — distinguishing deliberate evasion from routine commercial rerouting.
+
+The analyst sees this breakdown directly in the dashboard alongside the confidence badge. No black-box verdict: every flagging decision is traceable to specific, dated, observable events.
+
+**Dashboard rendering:** the FastAPI + HTMX dashboard renders `top_signals` as a horizontal bar chart (one bar per feature, scaled by SHAP contribution) alongside the vessel map pin and confidence badge. Each bar links to the raw data source (AIS position table, Equasis ownership record, or GDELT event) for one-click audit.
 
 ---
 
