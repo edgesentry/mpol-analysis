@@ -14,8 +14,12 @@ from src.analysis.causal import score_unknown_unknowns
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
-DEFAULT_VALIDATION_PATH = os.getenv("VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
+    "candidate_watchlist.parquet"
+)
+DEFAULT_VALIDATION_PATH = os.getenv(
+    "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
+)
 
 router = APIRouter()
 
@@ -56,20 +60,31 @@ def vessels_geojson(
 
     features = []
     for row in filtered.select(
-        ["mmsi", "vessel_name", "flag", "vessel_type", "confidence", "last_lat", "last_lon", "last_seen"]
+        [
+            "mmsi",
+            "vessel_name",
+            "flag",
+            "vessel_type",
+            "confidence",
+            "last_lat",
+            "last_lon",
+            "last_seen",
+        ]
     ).to_dicts():
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [row["last_lon"], row["last_lat"]]},
-            "properties": {
-                "mmsi": row["mmsi"],
-                "vessel_name": row["vessel_name"],
-                "flag": row["flag"],
-                "vessel_type": row["vessel_type"],
-                "confidence": row["confidence"],
-                "last_seen": row["last_seen"],
-            },
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [row["last_lon"], row["last_lat"]]},
+                "properties": {
+                    "mmsi": row["mmsi"],
+                    "vessel_name": row["vessel_name"],
+                    "flag": row["flag"],
+                    "vessel_type": row["vessel_type"],
+                    "confidence": row["confidence"],
+                    "last_seen": row["last_seen"],
+                },
+            }
+        )
 
     return JSONResponse({"type": "FeatureCollection", "features": features})
 
@@ -91,7 +106,9 @@ def watchlist_top(
     rows_html = []
     for row in filtered.head(top_n).with_columns(pl.col("last_seen").cast(pl.Utf8)).to_dicts():
         conf = row["confidence"]
-        badge_class = "badge-red" if conf >= 0.7 else "badge-yellow" if conf >= 0.4 else "badge-green"
+        badge_class = (
+            "badge-red" if conf >= 0.7 else "badge-yellow" if conf >= 0.4 else "badge-green"
+        )
         vessel_name = str(row["vessel_name"])
         safe_name_attr = vessel_name.replace("'", "&#39;")
         try:
@@ -131,12 +148,14 @@ def metrics() -> JSONResponse:
     m = _load_metrics()
     if m is None:
         return JSONResponse({"available": False})
-    return JSONResponse({
-        "available": True,
-        "precision_at_50": m.get("precision_at_50"),
-        "recall_at_200": m.get("recall_at_200"),
-        "auroc": m.get("auroc"),
-    })
+    return JSONResponse(
+        {
+            "available": True,
+            "precision_at_50": m.get("precision_at_50"),
+            "recall_at_200": m.get("recall_at_200"),
+            "auroc": m.get("auroc"),
+        }
+    )
 
 
 @router.get("/api/vessels/causal-candidates")
@@ -151,12 +170,9 @@ def causal_candidates() -> JSONResponse:
         candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
     except Exception:
         return JSONResponse({"candidates": []})
-    return JSONResponse({
-        "candidates": [
-            {"mmsi": c.mmsi, "causal_score": c.causal_score}
-            for c in candidates
-        ]
-    })
+    return JSONResponse(
+        {"candidates": [{"mmsi": c.mmsi, "causal_score": c.causal_score} for c in candidates]}
+    )
 
 
 @router.get("/api/vessels/{mmsi}/causal")
@@ -173,24 +189,28 @@ def vessel_causal(mmsi: str) -> JSONResponse:
     try:
         candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
     except Exception:
-        return JSONResponse({"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []})
+        return JSONResponse(
+            {"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []}
+        )
 
     for candidate in candidates:
         if candidate.mmsi == mmsi:
-            return JSONResponse({
-                "mmsi": mmsi,
-                "causal_score": candidate.causal_score,
-                "is_candidate": True,
-                "signals": [
-                    {
-                        "feature": s.feature,
-                        "recent_value": s.recent_value,
-                        "baseline_value": s.baseline_value,
-                        "uplift_ratio": s.uplift_ratio,
-                    }
-                    for s in candidate.matching_signals
-                ],
-            })
+            return JSONResponse(
+                {
+                    "mmsi": mmsi,
+                    "causal_score": candidate.causal_score,
+                    "is_candidate": True,
+                    "signals": [
+                        {
+                            "feature": s.feature,
+                            "recent_value": s.recent_value,
+                            "baseline_value": s.baseline_value,
+                            "uplift_ratio": s.uplift_ratio,
+                        }
+                        for s in candidate.matching_signals
+                    ],
+                }
+            )
 
     return JSONResponse({"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []})
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from src.ingest.gdelt import _parse_csv, _RELEVANT_ROOT_CODES
-
+from src.ingest.gdelt import _RELEVANT_ROOT_CODES, _parse_csv
 
 # ── CSV generation helpers ─────────────────────────────────────────────────
+
 
 def _make_gdelt_row(
     event_id="1",
@@ -56,11 +56,12 @@ def _write_csv(tmp_path: Path, rows: list[list[str]]) -> Path:
 
 # ── _parse_csv ─────────────────────────────────────────────────────────────
 
+
 def test_parse_csv_returns_relevant_events(tmp_path):
     rows = [
-        _make_gdelt_row(event_root="16"),   # REDUCE RELATIONS — relevant
-        _make_gdelt_row(event_root="19"),   # FIGHT — relevant
-        _make_gdelt_row(event_root="05"),   # ENGAGE IN DIPLOMATIC COOPERATION — not relevant
+        _make_gdelt_row(event_root="16"),  # REDUCE RELATIONS — relevant
+        _make_gdelt_row(event_root="19"),  # FIGHT — relevant
+        _make_gdelt_row(event_root="05"),  # ENGAGE IN DIPLOMATIC COOPERATION — not relevant
     ]
     path = _write_csv(tmp_path, rows)
     records = _parse_csv(path)
@@ -97,8 +98,16 @@ def test_parse_csv_records_contain_required_fields(tmp_path):
     records = _parse_csv(path)
     assert len(records) == 1
     r = records[0]
-    for field in ["event_id", "event_date", "actor1_country", "actor2_country",
-                  "event_code", "quad_class", "description", "source_url"]:
+    for field in [
+        "event_id",
+        "event_date",
+        "actor1_country",
+        "actor2_country",
+        "event_code",
+        "quad_class",
+        "description",
+        "source_url",
+    ]:
         assert field in r, f"Missing field: {field}"
 
 

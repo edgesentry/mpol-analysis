@@ -53,8 +53,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Sequence
+from datetime import UTC, datetime, timedelta
 
 import duckdb
 import numpy as np
@@ -81,7 +80,7 @@ SANCTION_REGIMES: dict[str, dict] = {
     "OFAC_Iran": {
         "label": "OFAC Iran",
         "list_source_substr": "us_ofac_sdn",
-        "flag_filter": ["IR", ""],       # vessels flagged Iran or unknown
+        "flag_filter": ["IR", ""],  # vessels flagged Iran or unknown
         "announcement_dates": [
             "2012-03-15",  # EU oil embargo enforcement
             "2019-05-08",  # US OFAC maximum-pressure re-designation wave
@@ -134,12 +133,12 @@ class CausalEffect:
     label: str
     n_treated: int
     n_control: int
-    att_estimate: float          # ATT coefficient (β₃)
-    att_ci_lower: float          # lower bound of 95% CI
-    att_ci_upper: float          # upper bound of 95% CI
+    att_estimate: float  # ATT coefficient (β₃)
+    att_ci_lower: float  # lower bound of 95% CI
+    att_ci_upper: float  # upper bound of 95% CI
     p_value: float
-    is_significant: bool         # p < ALPHA
-    calibrated_weight: float     # suggested graph_risk_score weight
+    is_significant: bool  # p < ALPHA
+    calibrated_weight: float  # suggested graph_risk_score weight
 
 
 # ---------------------------------------------------------------------------
@@ -147,9 +146,7 @@ class CausalEffect:
 # ---------------------------------------------------------------------------
 
 
-def _ols_hc3(
-    X: np.ndarray, y: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _ols_hc3(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     OLS with HC3 heteroskedasticity-robust covariance matrix.
 
@@ -160,9 +157,9 @@ def _ols_hc3(
     resid = y - X @ beta
     n, k = X.shape
     # HC3: leverage-adjusted residuals
-    H = X @ XtX_inv @ X.T              # hat matrix (n × n)
-    h = np.diag(H)                      # leverage scores
-    e2 = (resid / (1.0 - h)) ** 2      # HC3 adjustment
+    H = X @ XtX_inv @ X.T  # hat matrix (n × n)
+    h = np.diag(H)  # leverage scores
+    e2 = (resid / (1.0 - h)) ** 2  # HC3 adjustment
     meat = X.T @ np.diag(e2) @ X
     V_hc3 = XtX_inv @ meat @ XtX_inv
     se = np.sqrt(np.abs(np.diag(V_hc3)))
@@ -172,6 +169,7 @@ def _ols_hc3(
 def _t_to_p(t_stat: float, dof: int) -> float:
     """Two-tailed p-value from a t-statistic (approximated via normal CDF for dof ≥ 30)."""
     from math import erfc, sqrt
+
     # Use normal approximation; accurate for dof ≥ 30
     z = abs(t_stat)
     p = erfc(z / sqrt(2.0))
@@ -249,7 +247,6 @@ def _identify_treatment_groups(
     populated (test environments), falls back to flag-state heuristic:
     treated = vessels whose flag matches ``flag_filter``.
     """
-    substr = regime["list_source_substr"]
     flag_filter = regime.get("flag_filter", [])
 
     try:
@@ -282,14 +279,14 @@ def _identify_treatment_groups(
         treated_rows = con.execute(
             f"""
             SELECT DISTINCT mmsi FROM vessel_meta
-            WHERE flag IN ({', '.join(f"'{f}'" for f in flag_filter if f)})
+            WHERE flag IN ({", ".join(f"'{f}'" for f in flag_filter if f)})
             """,
         ).fetchall()
         treated = [r[0] for r in treated_rows]
         control_rows = con.execute(
             f"""
             SELECT DISTINCT mmsi FROM vessel_meta
-            WHERE flag NOT IN ({', '.join(f"'{f}'" for f in flag_filter if f) or "''"})
+            WHERE flag NOT IN ({", ".join(f"'{f}'" for f in flag_filter if f) or "''"})
             """,
         ).fetchall()
         control = [r[0] for r in control_rows]
@@ -302,9 +299,7 @@ def _identify_treatment_groups(
 # ---------------------------------------------------------------------------
 
 
-def _vessel_type_fe(
-    con: duckdb.DuckDBPyConnection, mmsis: list[str]
-) -> dict[str, int]:
+def _vessel_type_fe(con: duckdb.DuckDBPyConnection, mmsis: list[str]) -> dict[str, int]:
     """Return vessel ship_type (int) for each MMSI (0 = unknown)."""
     if not mmsis:
         return {}
@@ -318,9 +313,7 @@ def _vessel_type_fe(
     return result
 
 
-def _route_corridor_fe(
-    con: duckdb.DuckDBPyConnection, mmsis: list[str]
-) -> dict[str, int]:
+def _route_corridor_fe(con: duckdb.DuckDBPyConnection, mmsis: list[str]) -> dict[str, int]:
     """
     Assign a route corridor code based on the last known position of each vessel.
 
@@ -412,15 +405,17 @@ def _did_estimate(
         for post in (0, 1):
             gaps = post_gaps if post else pre_gaps
             for m in mmsis:
-                rows.append({
-                    "mmsi": m,
-                    "treated": treated,
-                    "post": post,
-                    "did": treated * post,    # interaction term
-                    "outcome": float(gaps.get(m, 0)),
-                    "vtype": vtype.get(m, 0),
-                    "rcorr": rcorr.get(m, 0),
-                })
+                rows.append(
+                    {
+                        "mmsi": m,
+                        "treated": treated,
+                        "post": post,
+                        "did": treated * post,  # interaction term
+                        "outcome": float(gaps.get(m, 0)),
+                        "vtype": vtype.get(m, 0),
+                        "rcorr": rcorr.get(m, 0),
+                    }
+                )
         return rows
 
     rows = _build_rows(treated_mmsis, 1) + _build_rows(control_mmsis, 0)
@@ -430,7 +425,7 @@ def _did_estimate(
     n = len(rows)
     # Build design matrix: intercept, treated, post, did (ATT), vessel-type FEs,
     # route-corridor FEs
-    k_vtype = max(len(vtypes) - 1, 0)   # drop first level (reference)
+    k_vtype = max(len(vtypes) - 1, 0)  # drop first level (reference)
     k_rcorr = max(len(rcorrs) - 1, 0)
     k_total = 4 + k_vtype + k_rcorr
 
@@ -438,10 +433,10 @@ def _did_estimate(
     y = np.zeros(n, dtype=np.float64)
 
     for i, r in enumerate(rows):
-        X[i, 0] = 1.0           # intercept
+        X[i, 0] = 1.0  # intercept
         X[i, 1] = r["treated"]
         X[i, 2] = r["post"]
-        X[i, 3] = r["did"]      # ← ATT coefficient (β₃)
+        X[i, 3] = r["did"]  # ← ATT coefficient (β₃)
         # Vessel-type FEs (drop first level)
         for j, vt in enumerate(vtypes[1:], start=4):
             X[i, j] = float(r["vtype"] == vt)
@@ -491,8 +486,14 @@ def _pool_estimates(results: list[dict]) -> dict:
     """
     valid = [r for r in results if r is not None and r["se"] > 0]
     if not valid:
-        return {"att": 0.0, "ci_lower": 0.0, "ci_upper": 0.0, "p": 1.0,
-                "n_treated": 0, "n_control": 0}
+        return {
+            "att": 0.0,
+            "ci_lower": 0.0,
+            "ci_upper": 0.0,
+            "p": 1.0,
+            "n_treated": 0,
+            "n_control": 0,
+        }
 
     weights = np.array([1.0 / (r["se"] ** 2) for r in valid])
     atts = np.array([r["att"] for r in valid])
@@ -586,8 +587,9 @@ def run_causal_model(
         regimes = SANCTION_REGIMES
         if regimes_path and os.path.exists(regimes_path):
             try:
-                import yaml
-                with open(regimes_path, "r") as f:
+                import yaml  # type: ignore[import-untyped]
+
+                with open(regimes_path) as f:
                     data = yaml.safe_load(f)
                     if data and "regimes" in data:
                         regimes = data["regimes"]
@@ -603,12 +605,8 @@ def run_causal_model(
 
             per_date: list[dict | None] = []
             for date_str in regime.get("announcement_dates", []):
-                ann_date = datetime.strptime(date_str, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
-                )
-                result = _did_estimate(
-                    treated, control, ann_date, con, gap_threshold_h
-                )
+                ann_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
+                result = _did_estimate(treated, control, ann_date, con, gap_threshold_h)
                 per_date.append(result)
 
             pooled = _pool_estimates([r for r in per_date if r is not None])
@@ -633,8 +631,8 @@ def run_causal_model(
 
     # Calibrate weight using all regimes together
     calibrated_w = calibrate_graph_weight(effects)
-    for e in effects:
-        e.calibrated_weight = calibrated_w
+    for eff in effects:
+        eff.calibrated_weight = calibrated_w
 
     return effects
 
@@ -683,13 +681,9 @@ def write_effects(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> N
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="C3: Causal sanction-response model (DiD)"
-    )
+    parser = argparse.ArgumentParser(description="C3: Causal sanction-response model (DiD)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
-    parser.add_argument(
-        "--output", default=DEFAULT_OUTPUT_PATH, help="Output Parquet path"
-    )
+    parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH, help="Output Parquet path")
     parser.add_argument(
         "--gap-threshold-hours",
         type=float,
@@ -704,13 +698,17 @@ def main() -> None:
     args = parser.parse_args()
 
     print("Running C3 causal sanction-response model …")
-    effects = run_causal_model(args.db, gap_threshold_h=args.gap_threshold_hours, regimes_path=args.regimes)
+    effects = run_causal_model(
+        args.db, gap_threshold_h=args.gap_threshold_hours, regimes_path=args.regimes
+    )
 
     df = effects_to_dataframe(effects)
     write_effects(df, args.output)
 
-    print(f"\n{'Regime':<18} {'N_trt':>6} {'N_ctl':>6} {'ATT':>8} "
-          f"{'CI_lo':>8} {'CI_hi':>8} {'p':>7} {'sig':>4}")
+    print(
+        f"\n{'Regime':<18} {'N_trt':>6} {'N_ctl':>6} {'ATT':>8} "
+        f"{'CI_lo':>8} {'CI_hi':>8} {'p':>7} {'sig':>4}"
+    )
     print("-" * 72)
     for e in effects:
         sig_mark = "✓" if e.is_significant else " "
@@ -726,9 +724,7 @@ def main() -> None:
     if effects:
         w = effects[0].calibrated_weight  # same for all
         print(f"Calibrated graph_risk_score weight: {w:.3f}")
-        print(
-            f"  → Pass --w-graph {w:.3f} to src/score/composite.py to apply calibration"
-        )
+        print(f"  → Pass --w-graph {w:.3f} to src/score/composite.py to apply calibration")
 
     print(f"\nEffects written to: {args.output}")
 

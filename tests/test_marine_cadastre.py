@@ -2,7 +2,6 @@ import csv
 from pathlib import Path
 
 import duckdb
-import polars as pl
 
 from src.ingest.marine_cadastre import BBOX, _parse_bbox, _parse_range, load_csv_to_duckdb
 
@@ -15,9 +14,17 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def _make_row(mmsi="123456789", lat=1.3, lon=103.8, sog=12.0, cog=180.0,
-              status=0, vessel_type=80, vessel_name="TEST VESSEL",
-              dt="2024-06-01T08:00:00"):
+def _make_row(
+    mmsi="123456789",
+    lat=1.3,
+    lon=103.8,
+    sog=12.0,
+    cog=180.0,
+    status=0,
+    vessel_type=80,
+    vessel_name="TEST VESSEL",
+    dt="2024-06-01T08:00:00",
+):
     return {
         "MMSI": mmsi,
         "BaseDateTime": dt,
@@ -73,9 +80,9 @@ def test_load_csv_deduplicates(tmp_path, tmp_db):
 def test_load_csv_mixed_bbox(tmp_path, tmp_db):
     csv_path = tmp_path / "test.csv"
     rows = [
-        _make_row(mmsi="111111111", lat=1.3, lon=103.8),   # inside
+        _make_row(mmsi="111111111", lat=1.3, lon=103.8),  # inside
         _make_row(mmsi="222222222", lat=37.8, lon=-122.4),  # outside
-        _make_row(mmsi="333333333", lat=5.0, lon=100.0),    # inside
+        _make_row(mmsi="333333333", lat=5.0, lon=100.0),  # inside
     ]
     _write_csv(csv_path, rows)
 
@@ -88,8 +95,8 @@ def test_load_csv_custom_bbox_gulf(tmp_path, tmp_db):
     csv_path = tmp_path / "test.csv"
     gulf_bbox = {"lat_min": 8.0, "lat_max": 32.0, "lon_min": -98.0, "lon_max": -60.0}
     rows = [
-        _make_row(mmsi="366123456", lat=25.0, lon=-90.0),   # Gulf of Mexico — inside gulf bbox
-        _make_row(mmsi="566724000", lat=1.3,  lon=103.8),   # Singapore — outside gulf bbox
+        _make_row(mmsi="366123456", lat=25.0, lon=-90.0),  # Gulf of Mexico — inside gulf bbox
+        _make_row(mmsi="566724000", lat=1.3, lon=103.8),  # Singapore — outside gulf bbox
     ]
     _write_csv(csv_path, rows)
 

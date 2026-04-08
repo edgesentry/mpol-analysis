@@ -22,13 +22,13 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMClient(Protocol):
-    async def chat(self, system: str, user: str) -> AsyncIterator[str]:
+    def chat(self, system: str, user: str) -> AsyncIterator[str]:
         """Stream response tokens for a system + user message pair."""
-        pass
+        ...
 
-    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
+    def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
         """Stream response tokens for a multi-turn conversation."""
-        pass
+        ...
 
 
 class OpenAICompatClient:
@@ -39,11 +39,11 @@ class OpenAICompatClient:
         self._api_key = api_key
         self._model = model
 
-    async def chat(self, system: str, user: str) -> AsyncIterator[str]:  # type: ignore[override]
+    async def chat(self, system: str, user: str) -> AsyncIterator[str]:
         async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
             yield token
 
-    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:  # type: ignore[override]
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
         import httpx
 
         url = f"{self._base_url}/chat/completions"
@@ -82,11 +82,11 @@ class AnthropicClient:
         self._api_key = api_key
         self._model = model
 
-    async def chat(self, system: str, user: str) -> AsyncIterator[str]:  # type: ignore[override]
+    async def chat(self, system: str, user: str) -> AsyncIterator[str]:
         async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
             yield token
 
-    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:  # type: ignore[override]
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
         import httpx
 
         payload = {

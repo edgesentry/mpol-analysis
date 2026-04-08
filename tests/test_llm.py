@@ -9,8 +9,8 @@ import pytest
 
 from src.api.llm import AnthropicClient, OpenAICompatClient, get_llm_client
 
-
 # ── helpers ────────────────────────────────────────────────────────────────
+
 
 async def _async_iter(items):
     for item in items:
@@ -28,9 +28,7 @@ def _make_openai_lines(tokens: list[str]) -> list[str]:
 def _make_anthropic_lines(tokens: list[str]) -> list[str]:
     lines = []
     for t in tokens:
-        lines.append(
-            f"data: {json.dumps({'type': 'content_block_delta', 'delta': {'text': t}})}"
-        )
+        lines.append(f"data: {json.dumps({'type': 'content_block_delta', 'delta': {'text': t}})}")
     lines.append(f"data: {json.dumps({'type': 'message_stop'})}")
     return lines
 
@@ -56,6 +54,7 @@ def _mock_httpx_stream(lines: list[str]):
 
 
 # ── OpenAICompatClient ─────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_openai_compat_streams_tokens():
@@ -103,6 +102,7 @@ async def test_openai_compat_skips_empty_delta():
 
 # ── AnthropicClient ────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_anthropic_client_streams_tokens():
     lines = _make_anthropic_lines(["Hello", " world"])
@@ -133,6 +133,7 @@ async def test_anthropic_client_ignores_non_delta_events():
 
 
 # ── get_llm_client factory ─────────────────────────────────────────────────
+
 
 def test_get_llm_client_default_is_openai_compat(monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def is_s3() -> bool:
     """True when S3_BUCKET is set in the environment."""
     return bool(os.getenv("S3_BUCKET"))
@@ -39,6 +40,7 @@ def _bucket() -> str:
 # ---------------------------------------------------------------------------
 # Storage options for each library
 # ---------------------------------------------------------------------------
+
 
 def polars_storage_options() -> dict[str, str] | None:
     """Storage options for Polars read_parquet / scan_parquet (object_store format)."""
@@ -75,6 +77,7 @@ def lance_storage_options() -> dict[str, str] | None:
 # ---------------------------------------------------------------------------
 # URI resolution
 # ---------------------------------------------------------------------------
+
 
 def graph_uri(db_path: str) -> str:
     """Lance Graph root URI.
@@ -115,6 +118,7 @@ def output_uri(filename: str) -> str:
 # Parquet I/O helpers
 # ---------------------------------------------------------------------------
 
+
 def write_parquet(df: pl.DataFrame, uri: str) -> None:
     """Write a Polars DataFrame to Parquet at a local path or S3 URI."""
     if uri.startswith("s3://"):
@@ -129,7 +133,7 @@ def _write_parquet_s3(df: pl.DataFrame, uri: str) -> None:
     import pyarrow.fs as pafs
     import pyarrow.parquet as pq
 
-    without_scheme = uri[len("s3://"):]
+    without_scheme = uri[len("s3://") :]
     bucket, _, key = without_scheme.partition("/")
 
     endpoint = os.getenv("S3_ENDPOINT", "")

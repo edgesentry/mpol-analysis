@@ -69,6 +69,7 @@ def _write_sts_contact(db_path: str, edges: list[tuple[str, str]]) -> None:
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
+
 def test_propagation_no_confirmed_labels(prop_db):
     df, result = propagate_labels(prop_db)
     assert result.seed_count == 0

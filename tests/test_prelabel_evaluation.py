@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 import duckdb
@@ -24,7 +23,6 @@ from src.score.prelabel_evaluation import (
     run_prelabel_evaluation,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -40,15 +38,26 @@ def prelabel_db(tmp_path):
 @pytest.fixture
 def watchlist_parquet(tmp_path):
     """Write a small fake watchlist parquet."""
-    df = pl.DataFrame({
-        "mmsi": ["111111111", "222222222", "333333333", "444444444", "555555555",
-                  "666666666", "777777777", "888888888", "999999999", "000000001"],
-        "imo": ["IMO1", "IMO2", "IMO3", "IMO4", "IMO5",
-                "IMO6", "IMO7", "IMO8", "IMO9", "IMO0"],
-        "vessel_name": [f"VESSEL_{i}" for i in range(10)],
-        "vessel_type": ["tanker"] * 10,
-        "confidence": [0.95, 0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05],
-    })
+    df = pl.DataFrame(
+        {
+            "mmsi": [
+                "111111111",
+                "222222222",
+                "333333333",
+                "444444444",
+                "555555555",
+                "666666666",
+                "777777777",
+                "888888888",
+                "999999999",
+                "000000001",
+            ],
+            "imo": ["IMO1", "IMO2", "IMO3", "IMO4", "IMO5", "IMO6", "IMO7", "IMO8", "IMO9", "IMO0"],
+            "vessel_name": [f"VESSEL_{i}" for i in range(10)],
+            "vessel_type": ["tanker"] * 10,
+            "confidence": [0.95, 0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05],
+        }
+    )
     path = tmp_path / "watchlist.parquet"
     df.write_parquet(path)
     return str(path)
@@ -59,46 +68,70 @@ def prelabel_csv(tmp_path):
     """Write a pre-label CSV with 6 entries across confidence tiers."""
     rows = [
         {
-            "mmsi": "111111111", "imo": "IMO1",
-            "pre_label": "suspected-positive", "confidence_tier": "high",
+            "mmsi": "111111111",
+            "imo": "IMO1",
+            "pre_label": "suspected-positive",
+            "confidence_tier": "high",
             "region": "singapore",
-            "evidence_notes": "Dark ship detection", "source_urls": "https://example.test/1",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-01T00:00:00+00:00",
+            "evidence_notes": "Dark ship detection",
+            "source_urls": "https://example.test/1",
+            "analyst_id": "analyst-a",
+            "evidence_timestamp": "2025-10-01T00:00:00+00:00",
         },
         {
-            "mmsi": "222222222", "imo": "IMO2",
-            "pre_label": "suspected-positive", "confidence_tier": "medium",
+            "mmsi": "222222222",
+            "imo": "IMO2",
+            "pre_label": "suspected-positive",
+            "confidence_tier": "medium",
             "region": "singapore",
-            "evidence_notes": "STS event detected", "source_urls": "",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-05T00:00:00+00:00",
+            "evidence_notes": "STS event detected",
+            "source_urls": "",
+            "analyst_id": "analyst-a",
+            "evidence_timestamp": "2025-10-05T00:00:00+00:00",
         },
         {
-            "mmsi": "333333333", "imo": "IMO3",
-            "pre_label": "suspected-positive", "confidence_tier": "weak",
+            "mmsi": "333333333",
+            "imo": "IMO3",
+            "pre_label": "suspected-positive",
+            "confidence_tier": "weak",
             "region": "singapore",
-            "evidence_notes": "Single AIS gap", "source_urls": "",
-            "analyst_id": "analyst-b", "evidence_timestamp": "2025-10-10T00:00:00+00:00",
+            "evidence_notes": "Single AIS gap",
+            "source_urls": "",
+            "analyst_id": "analyst-b",
+            "evidence_timestamp": "2025-10-10T00:00:00+00:00",
         },
         {
-            "mmsi": "444444444", "imo": "IMO4",
-            "pre_label": "analyst-negative", "confidence_tier": "high",
+            "mmsi": "444444444",
+            "imo": "IMO4",
+            "pre_label": "analyst-negative",
+            "confidence_tier": "high",
             "region": "singapore",
-            "evidence_notes": "Cleared via MPA inspection", "source_urls": "https://example.test/4",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-09-15T00:00:00+00:00",
+            "evidence_notes": "Cleared via MPA inspection",
+            "source_urls": "https://example.test/4",
+            "analyst_id": "analyst-a",
+            "evidence_timestamp": "2025-09-15T00:00:00+00:00",
         },
         {
-            "mmsi": "555555555", "imo": "IMO5",
-            "pre_label": "analyst-negative", "confidence_tier": "medium",
+            "mmsi": "555555555",
+            "imo": "IMO5",
+            "pre_label": "analyst-negative",
+            "confidence_tier": "medium",
             "region": "singapore",
-            "evidence_notes": "Legitimate ferry route", "source_urls": "",
-            "analyst_id": "analyst-b", "evidence_timestamp": "2025-09-20T00:00:00+00:00",
+            "evidence_notes": "Legitimate ferry route",
+            "source_urls": "",
+            "analyst_id": "analyst-b",
+            "evidence_timestamp": "2025-09-20T00:00:00+00:00",
         },
         {
-            "mmsi": "666666666", "imo": "IMO6",
-            "pre_label": "uncertain", "confidence_tier": "medium",
+            "mmsi": "666666666",
+            "imo": "IMO6",
+            "pre_label": "uncertain",
+            "confidence_tier": "medium",
             "region": "singapore",
-            "evidence_notes": "Under review", "source_urls": "",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-20T00:00:00+00:00",
+            "evidence_notes": "Under review",
+            "source_urls": "",
+            "analyst_id": "analyst-a",
+            "evidence_timestamp": "2025-10-20T00:00:00+00:00",
         },
     ]
     path = tmp_path / "prelabels.csv"
@@ -118,9 +151,17 @@ def _seed_prelabels(db_path: str, rows: list[dict]) -> None:
                 "(mmsi, imo, pre_label, confidence_tier, region, "
                 " evidence_notes, source_urls_json, analyst_id, evidence_timestamp) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [row["mmsi"], row.get("imo"), row["pre_label"], row["confidence_tier"],
-                 row.get("region"), row.get("evidence_notes"), row.get("source_urls"),
-                 row["analyst_id"], row["evidence_timestamp"]],
+                [
+                    row["mmsi"],
+                    row.get("imo"),
+                    row["pre_label"],
+                    row["confidence_tier"],
+                    row.get("region"),
+                    row.get("evidence_notes"),
+                    row.get("source_urls"),
+                    row["analyst_id"],
+                    row["evidence_timestamp"],
+                ],
             )
     finally:
         con.close()
@@ -189,16 +230,25 @@ def test_load_db_empty(prelabel_db):
 
 
 def test_load_db_returns_latest_per_mmsi(prelabel_db):
-    _seed_prelabels(prelabel_db, [
-        {
-            "mmsi": "111111111", "pre_label": "suspected-positive", "confidence_tier": "medium",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-09-01T00:00:00+00:00",
-        },
-        {
-            "mmsi": "111111111", "pre_label": "analyst-negative", "confidence_tier": "high",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-01T00:00:00+00:00",
-        },
-    ])
+    _seed_prelabels(
+        prelabel_db,
+        [
+            {
+                "mmsi": "111111111",
+                "pre_label": "suspected-positive",
+                "confidence_tier": "medium",
+                "analyst_id": "analyst-a",
+                "evidence_timestamp": "2025-09-01T00:00:00+00:00",
+            },
+            {
+                "mmsi": "111111111",
+                "pre_label": "analyst-negative",
+                "confidence_tier": "high",
+                "analyst_id": "analyst-a",
+                "evidence_timestamp": "2025-10-01T00:00:00+00:00",
+            },
+        ],
+    )
     df, _ = load_prelabels_from_db(prelabel_db)
     assert df.height == 1
     assert df["pre_label"][0] == "analyst-negative"
@@ -211,11 +261,13 @@ def test_load_db_returns_latest_per_mmsi(prelabel_db):
 
 def test_label_watchlist_maps_positive():
     watchlist = pl.DataFrame({"mmsi": ["A", "B", "C"], "confidence": [0.9, 0.5, 0.1]})
-    labels = pl.DataFrame({
-        "mmsi": ["A", "B"],
-        "pre_label": [PRE_LABEL_POSITIVE, PRE_LABEL_NEGATIVE],
-        "confidence_tier": ["high", "high"],
-    })
+    labels = pl.DataFrame(
+        {
+            "mmsi": ["A", "B"],
+            "pre_label": [PRE_LABEL_POSITIVE, PRE_LABEL_NEGATIVE],
+            "confidence_tier": ["high", "high"],
+        }
+    )
     result = _label_watchlist(watchlist, labels)
     y_true = {row["mmsi"]: row["y_true"] for row in result.iter_rows(named=True)}
     assert y_true["A"] == 1
@@ -225,11 +277,13 @@ def test_label_watchlist_maps_positive():
 
 def test_label_watchlist_uncertain_excluded():
     watchlist = pl.DataFrame({"mmsi": ["X"], "confidence": [0.8]})
-    labels = pl.DataFrame({
-        "mmsi": ["X"],
-        "pre_label": [PRE_LABEL_UNCERTAIN],
-        "confidence_tier": ["medium"],
-    })
+    labels = pl.DataFrame(
+        {
+            "mmsi": ["X"],
+            "pre_label": [PRE_LABEL_UNCERTAIN],
+            "confidence_tier": ["medium"],
+        }
+    )
     result = _label_watchlist(watchlist, labels)
     assert result["y_true"][0] is None
 
@@ -246,11 +300,13 @@ def test_label_watchlist_empty_prelabels():
 
 
 def test_disagreement_report_finds_high_model_analyst_negative():
-    df = pl.DataFrame({
-        "mmsi": ["A", "B", "C"],
-        "confidence": [0.9, 0.8, 0.2],
-        "y_true": pl.Series([0, 1, 1], dtype=pl.Int8),
-    })
+    df = pl.DataFrame(
+        {
+            "mmsi": ["A", "B", "C"],
+            "confidence": [0.9, 0.8, 0.2],
+            "y_true": pl.Series([0, 1, 1], dtype=pl.Int8),
+        }
+    )
     report = _disagreement_report(df, threshold=0.7, display_cols=["mmsi", "confidence", "y_true"])
     # A: model high (0.9 >= 0.7), analyst negative (y_true=0) → model_high_analyst_negative
     assert len(report["model_high_analyst_negative"]) == 1
@@ -258,11 +314,13 @@ def test_disagreement_report_finds_high_model_analyst_negative():
 
 
 def test_disagreement_report_finds_low_model_analyst_positive():
-    df = pl.DataFrame({
-        "mmsi": ["A", "B", "C"],
-        "confidence": [0.9, 0.8, 0.2],
-        "y_true": pl.Series([0, 1, 1], dtype=pl.Int8),
-    })
+    df = pl.DataFrame(
+        {
+            "mmsi": ["A", "B", "C"],
+            "confidence": [0.9, 0.8, 0.2],
+            "y_true": pl.Series([0, 1, 1], dtype=pl.Int8),
+        }
+    )
     report = _disagreement_report(df, threshold=0.7, display_cols=["mmsi", "confidence", "y_true"])
     # C: model low (0.2 < 0.7), analyst positive (y_true=1) → model_low_analyst_positive
     assert len(report["model_low_analyst_positive"]) == 1
@@ -275,10 +333,12 @@ def test_disagreement_report_finds_low_model_analyst_positive():
 
 
 def test_ops_thresholds_basic():
-    df = pl.DataFrame({
-        "confidence": [0.9, 0.8, 0.5, 0.3],
-        "y_true": pl.Series([1, 0, 1, 0], dtype=pl.Int8),
-    })
+    df = pl.DataFrame(
+        {
+            "confidence": [0.9, 0.8, 0.5, 0.3],
+            "y_true": pl.Series([1, 0, 1, 0], dtype=pl.Int8),
+        }
+    )
     thresholds = _ops_thresholds(df, capacities=[2, 4])
     assert thresholds[0]["review_capacity"] == 2
     assert thresholds[1]["review_capacity"] == 4
@@ -290,11 +350,13 @@ def test_ops_thresholds_basic():
 
 
 def test_tier_breakdown_groups_by_tier():
-    df = pl.DataFrame({
-        "confidence": [0.9, 0.8, 0.4],
-        "y_true": pl.Series([1, 0, 1], dtype=pl.Int8),
-        "confidence_tier": ["high", "high", "medium"],
-    })
+    df = pl.DataFrame(
+        {
+            "confidence": [0.9, 0.8, 0.4],
+            "y_true": pl.Series([1, 0, 1], dtype=pl.Int8),
+            "confidence_tier": ["high", "high", "medium"],
+        }
+    )
     breakdown = _tier_breakdown(df)
     assert "high" in breakdown
     assert "medium" in breakdown
@@ -306,9 +368,7 @@ def test_tier_breakdown_groups_by_tier():
 # ---------------------------------------------------------------------------
 
 
-def test_run_prelabel_evaluation_csv_produces_report(
-    tmp_path, watchlist_parquet, prelabel_csv
-):
+def test_run_prelabel_evaluation_csv_produces_report(tmp_path, watchlist_parquet, prelabel_csv):
     output = str(tmp_path / "prelabel_eval.json")
     report = run_prelabel_evaluation(
         watchlist_path=watchlist_parquet,
@@ -341,9 +401,7 @@ def test_run_prelabel_evaluation_excludes_uncertain_from_metrics(
     assert report["result"]["metrics"]["labeled_count"] == 5
 
 
-def test_run_prelabel_evaluation_leakage_filter(
-    tmp_path, watchlist_parquet, prelabel_csv
-):
+def test_run_prelabel_evaluation_leakage_filter(tmp_path, watchlist_parquet, prelabel_csv):
     report = run_prelabel_evaluation(
         watchlist_path=watchlist_parquet,
         output_path=str(tmp_path / "out.json"),
@@ -382,19 +440,26 @@ def test_run_prelabel_evaluation_raises_if_no_source(tmp_path, watchlist_parquet
 # ---------------------------------------------------------------------------
 
 
-def test_run_prelabel_evaluation_db_mode(
-    tmp_path, watchlist_parquet, prelabel_db
-):
-    _seed_prelabels(prelabel_db, [
-        {
-            "mmsi": "111111111", "pre_label": "suspected-positive", "confidence_tier": "high",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-01T00:00:00+00:00",
-        },
-        {
-            "mmsi": "444444444", "pre_label": "analyst-negative", "confidence_tier": "high",
-            "analyst_id": "analyst-a", "evidence_timestamp": "2025-10-01T00:00:00+00:00",
-        },
-    ])
+def test_run_prelabel_evaluation_db_mode(tmp_path, watchlist_parquet, prelabel_db):
+    _seed_prelabels(
+        prelabel_db,
+        [
+            {
+                "mmsi": "111111111",
+                "pre_label": "suspected-positive",
+                "confidence_tier": "high",
+                "analyst_id": "analyst-a",
+                "evidence_timestamp": "2025-10-01T00:00:00+00:00",
+            },
+            {
+                "mmsi": "444444444",
+                "pre_label": "analyst-negative",
+                "confidence_tier": "high",
+                "analyst_id": "analyst-a",
+                "evidence_timestamp": "2025-10-01T00:00:00+00:00",
+            },
+        ],
+    )
     report = run_prelabel_evaluation(
         watchlist_path=watchlist_parquet,
         output_path=str(tmp_path / "out.json"),

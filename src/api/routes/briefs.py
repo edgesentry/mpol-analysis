@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
-import logging
 
 import duckdb
 import polars as pl
@@ -19,7 +19,9 @@ from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
+    "candidate_watchlist.parquet"
+)
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 BRIEF_CONFIDENCE_THRESHOLD = float(os.getenv("BRIEF_CONFIDENCE_THRESHOLD", "0.7"))
 
@@ -190,7 +192,7 @@ async def _generate_brief_tokens(vessel: dict) -> list[str]:
 
     llm = get_llm_client()
     tokens: list[str] = []
-    async for token in await llm.chat(system, user):
+    async for token in llm.chat(system, user):
         tokens.append(token)
     return tokens
 
@@ -205,9 +207,11 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
     """
     vessel = _load_vessel(mmsi)
     if vessel is None:
+
         async def _not_found():
             yield "data: Vessel not found in watchlist.\n\n"
             yield "data: [DONE]\n\n"
+
         return StreamingResponse(
             _not_found(),
             media_type="text/event-stream",
@@ -217,6 +221,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
     version = _watchlist_version()
     cached = _read_cached_brief(mmsi, version)
     if cached:
+
         async def _cached_stream():
             # Stream cached brief word by word so the UI sees progressive output
             words = cached.split(" ")
@@ -224,6 +229,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
                 chunk = word if i == 0 else " " + word
                 yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"
+
         return StreamingResponse(
             _cached_stream(),
             media_type="text/event-stream",

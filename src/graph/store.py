@@ -23,85 +23,111 @@ Directory layout (alongside the DuckDB file, e.g. data/processed/mpol.duckdb):
 """
 
 import os
-from pathlib import Path
 
 import lance
 import pyarrow as pa
 
 from src.storage.config import graph_uri, is_s3, lance_storage_options
 
-
 # ---------------------------------------------------------------------------
 # Schema definitions
 # ---------------------------------------------------------------------------
 
 NODE_SCHEMAS: dict[str, pa.Schema] = {
-    "Vessel": pa.schema([
-        pa.field("mmsi", pa.string()),
-        pa.field("imo", pa.string()),
-        pa.field("name", pa.string()),
-    ]),
-    "Company": pa.schema([
-        pa.field("id", pa.string()),
-        pa.field("name", pa.string()),
-        pa.field("country", pa.string()),
-    ]),
-    "Country": pa.schema([
-        pa.field("code", pa.string()),
-    ]),
-    "Address": pa.schema([
-        pa.field("address_id", pa.string()),
-        pa.field("street", pa.string()),
-    ]),
-    "VesselName": pa.schema([
-        pa.field("name", pa.string()),
-    ]),
-    "SanctionsRegime": pa.schema([
-        pa.field("name", pa.string()),
-    ]),
+    "Vessel": pa.schema(
+        [
+            pa.field("mmsi", pa.string()),
+            pa.field("imo", pa.string()),
+            pa.field("name", pa.string()),
+        ]
+    ),
+    "Company": pa.schema(
+        [
+            pa.field("id", pa.string()),
+            pa.field("name", pa.string()),
+            pa.field("country", pa.string()),
+        ]
+    ),
+    "Country": pa.schema(
+        [
+            pa.field("code", pa.string()),
+        ]
+    ),
+    "Address": pa.schema(
+        [
+            pa.field("address_id", pa.string()),
+            pa.field("street", pa.string()),
+        ]
+    ),
+    "VesselName": pa.schema(
+        [
+            pa.field("name", pa.string()),
+        ]
+    ),
+    "SanctionsRegime": pa.schema(
+        [
+            pa.field("name", pa.string()),
+        ]
+    ),
 }
 
 # Relationship tables: src_id → dst_id plus optional edge properties.
 REL_SCHEMAS: dict[str, pa.Schema] = {
-    "ALIAS": pa.schema([
-        pa.field("src_id", pa.string()),   # vessel mmsi
-        pa.field("dst_id", pa.string()),   # vessel name
-        pa.field("date", pa.string()),
-    ]),
-    "OWNED_BY": pa.schema([
-        pa.field("src_id", pa.string()),   # vessel mmsi
-        pa.field("dst_id", pa.string()),   # company id
-        pa.field("since", pa.string()),
-        pa.field("until", pa.string()),
-    ]),
-    "MANAGED_BY": pa.schema([
-        pa.field("src_id", pa.string()),   # vessel mmsi
-        pa.field("dst_id", pa.string()),   # company id
-        pa.field("since", pa.string()),
-        pa.field("until", pa.string()),
-    ]),
-    "SANCTIONED_BY": pa.schema([
-        pa.field("src_id", pa.string()),   # vessel mmsi OR company id
-        pa.field("dst_id", pa.string()),   # sanctions regime name
-        pa.field("list", pa.string()),
-        pa.field("date", pa.string()),
-    ]),
-    "REGISTERED_IN": pa.schema([
-        pa.field("src_id", pa.string()),   # company id
-        pa.field("dst_id", pa.string()),   # country code
-    ]),
-    "REGISTERED_AT": pa.schema([
-        pa.field("src_id", pa.string()),   # company id
-        pa.field("dst_id", pa.string()),   # address id
-    ]),
-    "CONTROLLED_BY": pa.schema([
-        pa.field("src_id", pa.string()),   # child company id
-        pa.field("dst_id", pa.string()),   # parent company id
-    ]),
-    "STS_CONTACT": pa.schema([
-        pa.field("src_id", pa.string()),   # vessel mmsi
-        pa.field("dst_id", pa.string()),   # vessel mmsi
-    ]),
+    "ALIAS": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # vessel mmsi
+            pa.field("dst_id", pa.string()),  # vessel name
+            pa.field("date", pa.string()),
+        ]
+    ),
+    "OWNED_BY": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # vessel mmsi
+            pa.field("dst_id", pa.string()),  # company id
+            pa.field("since", pa.string()),
+            pa.field("until", pa.string()),
+        ]
+    ),
+    "MANAGED_BY": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # vessel mmsi
+            pa.field("dst_id", pa.string()),  # company id
+            pa.field("since", pa.string()),
+            pa.field("until", pa.string()),
+        ]
+    ),
+    "SANCTIONED_BY": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # vessel mmsi OR company id
+            pa.field("dst_id", pa.string()),  # sanctions regime name
+            pa.field("list", pa.string()),
+            pa.field("date", pa.string()),
+        ]
+    ),
+    "REGISTERED_IN": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # company id
+            pa.field("dst_id", pa.string()),  # country code
+        ]
+    ),
+    "REGISTERED_AT": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # company id
+            pa.field("dst_id", pa.string()),  # address id
+        ]
+    ),
+    "CONTROLLED_BY": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # child company id
+            pa.field("dst_id", pa.string()),  # parent company id
+        ]
+    ),
+    "STS_CONTACT": pa.schema(
+        [
+            pa.field("src_id", pa.string()),  # vessel mmsi
+            pa.field("dst_id", pa.string()),  # vessel mmsi
+        ]
+    ),
 }
 
 ALL_SCHEMAS: dict[str, pa.Schema] = {**NODE_SCHEMAS, **REL_SCHEMAS}
@@ -110,6 +136,7 @@ ALL_SCHEMAS: dict[str, pa.Schema] = {**NODE_SCHEMAS, **REL_SCHEMAS}
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
+
 
 def graph_dir(db_path: str) -> str:
     """Return the Lance graph root URI (S3) or local directory path."""
@@ -126,6 +153,7 @@ def _dataset_path(db_path: str, name: str) -> str:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def write_tables(db_path: str, tables: dict[str, pa.Table]) -> None:
     """Write (overwrite) a set of named tables to the Lance graph directory."""

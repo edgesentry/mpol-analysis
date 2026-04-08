@@ -26,15 +26,26 @@ DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
 
 # Flags with weak Port State Control oversight (UNCTAD/Paris MOU grey/black list proxies)
 HIGH_RISK_FLAGS = {
-    "KP", "IR", "VE", "SY", "CU",   # sanctioned states
-    "KM", "GA", "CM", "PW",          # high-risk open registries (Comoros, Gabon, Cameroon, Palau)
-    "KI", "TG", "SL", "ST",          # frequently flagged in shadow fleet reports
+    "KP",
+    "IR",
+    "VE",
+    "SY",
+    "CU",  # sanctioned states
+    "KM",
+    "GA",
+    "CM",
+    "PW",  # high-risk open registries (Comoros, Gabon, Cameroon, Palau)
+    "KI",
+    "TG",
+    "SL",
+    "ST",  # frequently flagged in shadow fleet reports
 }
 
 
 # ---------------------------------------------------------------------------
 # Feature computations (polars joins on PyArrow tables)
 # ---------------------------------------------------------------------------
+
 
 def _compute_name_changes(tables: dict) -> pl.DataFrame:
     vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
@@ -44,14 +55,10 @@ def _compute_name_changes(tables: dict) -> pl.DataFrame:
         return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("name_changes_2y"))
 
     counts = (
-        aliases.rename({"src_id": "mmsi"})
-        .group_by("mmsi")
-        .agg(pl.len().alias("name_changes_2y"))
+        aliases.rename({"src_id": "mmsi"}).group_by("mmsi").agg(pl.len().alias("name_changes_2y"))
     )
-    return (
-        vessels
-        .join(counts, on="mmsi", how="left")
-        .with_columns(pl.col("name_changes_2y").fill_null(0).cast(pl.Int32))
+    return vessels.join(counts, on="mmsi", how="left").with_columns(
+        pl.col("name_changes_2y").fill_null(0).cast(pl.Int32)
     )
 
 
@@ -62,15 +69,9 @@ def _compute_owner_changes(tables: dict) -> pl.DataFrame:
     if len(ob) == 0:
         return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("owner_changes_2y"))
 
-    counts = (
-        ob.rename({"src_id": "mmsi"})
-        .group_by("mmsi")
-        .agg(pl.len().alias("owner_changes_2y"))
-    )
-    return (
-        vessels
-        .join(counts, on="mmsi", how="left")
-        .with_columns(pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32))
+    counts = ob.rename({"src_id": "mmsi"}).group_by("mmsi").agg(pl.len().alias("owner_changes_2y"))
+    return vessels.join(counts, on="mmsi", how="left").with_columns(
+        pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32)
     )
 
 
@@ -126,10 +127,8 @@ def _compute_ownership_depth(tables: dict) -> pl.DataFrame:
         schema={"mmsi": pl.Utf8, "ownership_depth": pl.Int32},
     )
 
-    return (
-        vessels
-        .join(depth_df, on="mmsi", how="left")
-        .with_columns(pl.col("ownership_depth").fill_null(0).cast(pl.Int32))
+    return vessels.join(depth_df, on="mmsi", how="left").with_columns(
+        pl.col("ownership_depth").fill_null(0).cast(pl.Int32)
     )
 
 
@@ -162,15 +161,18 @@ def _compute_high_risk_flag_ratio(tables: dict) -> pl.DataFrame:
         else:
             risky = sum(1 for c in countries if c in HIGH_RISK_FLAGS)
             ratio = risky / len(countries)
-        rows.append({"mmsi": mmsi[0] if isinstance(mmsi, tuple) else mmsi, "high_risk_flag_ratio": ratio})
+        rows.append(
+            {"mmsi": mmsi[0] if isinstance(mmsi, tuple) else mmsi, "high_risk_flag_ratio": ratio}
+        )
 
-    hrisk_df = pl.DataFrame(rows, schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32}) \
-        if rows else pl.DataFrame(schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
+    hrisk_df = (
+        pl.DataFrame(rows, schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
+        if rows
+        else pl.DataFrame(schema={"mmsi": pl.Utf8, "high_risk_flag_ratio": pl.Float32})
+    )
 
-    return (
-        vessels
-        .join(hrisk_df, on="mmsi", how="left")
-        .with_columns(pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32))
+    return vessels.join(hrisk_df, on="mmsi", how="left").with_columns(
+        pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32)
     )
 
 
@@ -178,11 +180,12 @@ def _compute_high_risk_flag_ratio(tables: dict) -> pl.DataFrame:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     """Load Lance datasets + DuckDB for identity volatility features."""
     tables = load_tables(db_path)
 
-    name_df  = _compute_name_changes(tables)
+    name_df = _compute_name_changes(tables)
     owner_df = _compute_owner_changes(tables)
     depth_df = _compute_ownership_depth(tables)
     hrisk_df = _compute_high_risk_flag_ratio(tables)
@@ -196,9 +199,9 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     finally:
         con.close()
 
-    flag_df = meta.with_columns(
-        pl.lit(0).cast(pl.Int32).alias("flag_changes_2y")
-    ).select(["mmsi", "flag_changes_2y"])
+    flag_df = meta.with_columns(pl.lit(0).cast(pl.Int32).alias("flag_changes_2y")).select(
+        ["mmsi", "flag_changes_2y"]
+    )
 
     all_mmsi = name_df.select("mmsi")
     if all_mmsi.is_empty() and not flag_df.is_empty():
@@ -206,24 +209,27 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
 
     return (
         all_mmsi.lazy()
-        .join(name_df.lazy(),  on="mmsi", how="left")
+        .join(name_df.lazy(), on="mmsi", how="left")
         .join(owner_df.lazy(), on="mmsi", how="left")
         .join(depth_df.lazy(), on="mmsi", how="left")
         .join(hrisk_df.lazy(), on="mmsi", how="left")
-        .join(flag_df.lazy(),  on="mmsi", how="left")
-        .with_columns([
-            pl.col("flag_changes_2y").fill_null(0).cast(pl.Int32),
-            pl.col("name_changes_2y").fill_null(0).cast(pl.Int32),
-            pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32),
-            pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32),
-            pl.col("ownership_depth").fill_null(0).cast(pl.Int32),
-        ])
+        .join(flag_df.lazy(), on="mmsi", how="left")
+        .with_columns(
+            [
+                pl.col("flag_changes_2y").fill_null(0).cast(pl.Int32),
+                pl.col("name_changes_2y").fill_null(0).cast(pl.Int32),
+                pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32),
+                pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32),
+                pl.col("ownership_depth").fill_null(0).cast(pl.Int32),
+            ]
+        )
         .collect()
     )
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Compute identity volatility features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     args = parser.parse_args()

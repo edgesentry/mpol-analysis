@@ -9,61 +9,89 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── fixtures ───────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def watchlist_parquet(tmp_path):
-    df = pl.DataFrame({
-        "mmsi": [
-            "123456789", "987654321",
-            "273456782", "613115678", "352123456", "538009876",
-        ],
-        "vessel_name": [
-            "OCEAN GLORY", "DARK STAR",
-            # Realistic shadow fleet candidates for LLM brief testing
-            "PETROVSKY ZVEZDA", "SARI NOUR", "OCEAN VOYAGER", "VERA SUNSET",
-        ],
-        "vessel_type": ["Tanker", "Bulk Carrier", "Tanker", "Tanker", "Tanker", "Tanker"],
-        "flag": ["KH", "PW", "RU", "CM", "PA", "MH"],
-        "imo": ["IMO1234567", "IMO9876543", "IMO9234567", "IMO9345612", "IMO9456781", "IMO9678901"],
-        "confidence": [0.83, 0.45, 0.91, 0.87, 0.79, 0.72],
-        "last_lat": [1.15, 1.30, 26.50, 29.10, 35.90, 25.10],
-        "last_lon": [103.6, 104.0, 55.50, 50.30, -5.50, 56.40],
-        "last_seen": [
-            "2026-04-01T06:00:00", "2026-04-01T12:00:00",
-            "2026-03-15T00:00:00", "2026-03-20T00:00:00",
-            "2026-03-10T00:00:00", "2026-03-25T00:00:00",
-        ],
-        "top_signals": [
-            json.dumps([{"feature": "ais_gap_count_30d", "value": 12, "contribution": 0.34}]),
-            json.dumps([{"feature": "sanctions_distance", "value": 2, "contribution": 0.20}]),
-            # PETROVSKY ZVEZDA: AIS dark ops in Hormuz, 1 hop from OFAC entity, reflagged twice
-            json.dumps([
-                {"feature": "ais_gap_count_30d", "value": 14, "contribution": 0.38},
-                {"feature": "sanctions_distance", "value": 1, "contribution": 0.28},
-                {"feature": "flag_changes_2y", "value": 2, "contribution": 0.15},
-            ]),
-            # SARI NOUR: trades Kharg Island crude with no Comtrade record, 3 GPS spoofing jumps, IR→CM reflag
-            json.dumps([
-                {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.42},
-                {"feature": "position_jump_count", "value": 3, "contribution": 0.25},
-                {"feature": "high_risk_flag_ratio", "value": 0.85, "contribution": 0.18},
-            ]),
-            # OCEAN VOYAGER: 6 STS partners off Ceuta, shared Piraeus address with 5 vessels (40% OFAC-listed)
-            json.dumps([
-                {"feature": "sts_hub_degree", "value": 6, "contribution": 0.30},
-                {"feature": "shared_address_centrality", "value": 5, "contribution": 0.22},
-                {"feature": "cluster_sanctions_ratio", "value": 0.40, "contribution": 0.18},
-            ]),
-            # VERA SUNSET: 5-layer ownership chain, beneficial owner 2 hops from designated entity, renamed once
-            json.dumps([
-                {"feature": "ownership_depth", "value": 5, "contribution": 0.28},
-                {"feature": "sanctions_distance", "value": 2, "contribution": 0.24},
-                {"feature": "name_changes_2y", "value": 1, "contribution": 0.12},
-            ]),
-        ],
-    })
+    df = pl.DataFrame(
+        {
+            "mmsi": [
+                "123456789",
+                "987654321",
+                "273456782",
+                "613115678",
+                "352123456",
+                "538009876",
+            ],
+            "vessel_name": [
+                "OCEAN GLORY",
+                "DARK STAR",
+                # Realistic shadow fleet candidates for LLM brief testing
+                "PETROVSKY ZVEZDA",
+                "SARI NOUR",
+                "OCEAN VOYAGER",
+                "VERA SUNSET",
+            ],
+            "vessel_type": ["Tanker", "Bulk Carrier", "Tanker", "Tanker", "Tanker", "Tanker"],
+            "flag": ["KH", "PW", "RU", "CM", "PA", "MH"],
+            "imo": [
+                "IMO1234567",
+                "IMO9876543",
+                "IMO9234567",
+                "IMO9345612",
+                "IMO9456781",
+                "IMO9678901",
+            ],
+            "confidence": [0.83, 0.45, 0.91, 0.87, 0.79, 0.72],
+            "last_lat": [1.15, 1.30, 26.50, 29.10, 35.90, 25.10],
+            "last_lon": [103.6, 104.0, 55.50, 50.30, -5.50, 56.40],
+            "last_seen": [
+                "2026-04-01T06:00:00",
+                "2026-04-01T12:00:00",
+                "2026-03-15T00:00:00",
+                "2026-03-20T00:00:00",
+                "2026-03-10T00:00:00",
+                "2026-03-25T00:00:00",
+            ],
+            "top_signals": [
+                json.dumps([{"feature": "ais_gap_count_30d", "value": 12, "contribution": 0.34}]),
+                json.dumps([{"feature": "sanctions_distance", "value": 2, "contribution": 0.20}]),
+                # PETROVSKY ZVEZDA: AIS dark ops in Hormuz, 1 hop from OFAC entity, reflagged twice
+                json.dumps(
+                    [
+                        {"feature": "ais_gap_count_30d", "value": 14, "contribution": 0.38},
+                        {"feature": "sanctions_distance", "value": 1, "contribution": 0.28},
+                        {"feature": "flag_changes_2y", "value": 2, "contribution": 0.15},
+                    ]
+                ),
+                # SARI NOUR: trades Kharg Island crude with no Comtrade record, 3 GPS spoofing jumps, IR→CM reflag
+                json.dumps(
+                    [
+                        {"feature": "route_cargo_mismatch", "value": 1.0, "contribution": 0.42},
+                        {"feature": "position_jump_count", "value": 3, "contribution": 0.25},
+                        {"feature": "high_risk_flag_ratio", "value": 0.85, "contribution": 0.18},
+                    ]
+                ),
+                # OCEAN VOYAGER: 6 STS partners off Ceuta, shared Piraeus address with 5 vessels (40% OFAC-listed)
+                json.dumps(
+                    [
+                        {"feature": "sts_hub_degree", "value": 6, "contribution": 0.30},
+                        {"feature": "shared_address_centrality", "value": 5, "contribution": 0.22},
+                        {"feature": "cluster_sanctions_ratio", "value": 0.40, "contribution": 0.18},
+                    ]
+                ),
+                # VERA SUNSET: 5-layer ownership chain, beneficial owner 2 hops from designated entity, renamed once
+                json.dumps(
+                    [
+                        {"feature": "ownership_depth", "value": 5, "contribution": 0.28},
+                        {"feature": "sanctions_distance", "value": 2, "contribution": 0.24},
+                        {"feature": "name_changes_2y", "value": 1, "contribution": 0.12},
+                    ]
+                ),
+            ],
+        }
+    )
     path = str(tmp_path / "candidate_watchlist.parquet")
     df.write_parquet(path)
     return path
@@ -80,25 +108,31 @@ def client(watchlist_parquet, tmp_db, monkeypatch):
     monkeypatch.setenv("DB_PATH", tmp_db)
 
     import importlib
+
+    import src.api.routes.alerts as alerts_mod
     import src.api.routes.briefs as briefs_mod
     import src.api.routes.vessels as vessels_mod
-    import src.api.routes.alerts as alerts_mod
+
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
     importlib.reload(briefs_mod)
 
     from src.api.main import create_app
+
     return TestClient(create_app())
 
 
 # ── /api/briefs/{mmsi} ─────────────────────────────────────────────────────
 
+
 def test_brief_streams_tokens(client, monkeypatch):
     mock_llm = MagicMock()
     mock_llm.chat = _fake_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.briefs.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+    ):
         resp = client.get("/api/briefs/123456789")
 
     assert resp.status_code == 200
@@ -119,13 +153,15 @@ def test_brief_unknown_vessel_returns_not_found(client):
 
 
 def test_brief_includes_gdelt_events_in_prompt(client, monkeypatch):
-    gdelt_events = [{
-        "event_date": "20260401",
-        "actor1_name": "Cambodia",
-        "actor2_name": "Iran",
-        "action_geo": "South China Sea",
-        "source_url": "http://example.com/news",
-    }]
+    gdelt_events = [
+        {
+            "event_date": "20260401",
+            "actor1_name": "Cambodia",
+            "actor2_name": "Iran",
+            "action_geo": "South China Sea",
+            "source_url": "http://example.com/news",
+        }
+    ]
     captured_system = []
 
     async def _capture_chat(system: str, user: str):
@@ -135,8 +171,10 @@ def test_brief_includes_gdelt_events_in_prompt(client, monkeypatch):
     mock_llm = MagicMock()
     mock_llm.chat = _capture_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.briefs.query_gdelt_context", return_value=gdelt_events):
+    with (
+        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.briefs.query_gdelt_context", return_value=gdelt_events),
+    ):
         client.get("/api/briefs/123456789")
 
     assert captured_system, "chat() was never called"
@@ -145,6 +183,7 @@ def test_brief_includes_gdelt_events_in_prompt(client, monkeypatch):
 
 
 # ── /api/briefs/{mmsi}/cached ──────────────────────────────────────────────
+
 
 def test_cached_brief_not_available_initially(client):
     resp = client.get("/api/briefs/123456789/cached")
@@ -156,8 +195,10 @@ def test_cached_brief_available_after_streaming(client, monkeypatch):
     mock_llm = MagicMock()
     mock_llm.chat = _fake_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.briefs.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+    ):
         client.get("/api/briefs/123456789")  # generate and cache
 
     resp = client.get("/api/briefs/123456789/cached")
@@ -178,8 +219,10 @@ def test_cached_brief_served_on_second_request(client, monkeypatch):
 
     mock_llm.chat = _counting_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.briefs.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+    ):
         client.get("/api/briefs/123456789")  # first — calls LLM
         client.get("/api/briefs/123456789")  # second — should use cache
 
@@ -188,12 +231,15 @@ def test_cached_brief_served_on_second_request(client, monkeypatch):
 
 # ── GDELT context formatting ───────────────────────────────────────────────
 
+
 def test_brief_with_no_gdelt_still_generates(client):
     mock_llm = MagicMock()
     mock_llm.chat = _fake_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm), \
-         patch("src.api.routes.briefs.query_gdelt_context", return_value=[]):
+    with (
+        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+    ):
         resp = client.get("/api/briefs/123456789")
 
     assert resp.status_code == 200

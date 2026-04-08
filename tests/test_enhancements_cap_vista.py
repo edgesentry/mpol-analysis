@@ -14,11 +14,6 @@ import duckdb
 import polars as pl
 import pytest
 
-from src.score.mpol_baseline import (
-    SERVICE_VESSEL_TYPES,
-    compute_mpol_baseline,
-    load_cleared_mmsis,
-)
 from src.score.anomaly import fit_isolation_forest
 from src.score.composite import (
     GeoEvent,
@@ -26,7 +21,11 @@ from src.score.composite import (
     apply_geopolitical_filter,
     load_geopolitical_filter,
 )
-
+from src.score.mpol_baseline import (
+    SERVICE_VESSEL_TYPES,
+    compute_mpol_baseline,
+    load_cleared_mmsis,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,11 +78,13 @@ def _make_behavior_row(mmsi: str, ship_type: int, **overrides) -> dict:
 
 
 def _make_feature_df(rows: list[dict]) -> pl.DataFrame:
-    return pl.DataFrame(rows).with_columns([
-        pl.col("ais_gap_count_30d").cast(pl.Int64),
-        pl.col("position_jump_count").cast(pl.Int64),
-        pl.col("sts_candidate_count").cast(pl.Int64),
-    ])
+    return pl.DataFrame(rows).with_columns(
+        [
+            pl.col("ais_gap_count_30d").cast(pl.Int64),
+            pl.col("position_jump_count").cast(pl.Int64),
+            pl.col("sts_candidate_count").cast(pl.Int64),
+        ]
+    )
 
 
 def _make_anomaly_df(n: int, sanctions_distance: int = 5) -> pl.DataFrame:
@@ -101,11 +102,11 @@ def _make_anomaly_df(n: int, sanctions_distance: int = 5) -> pl.DataFrame:
 
 
 def test_service_vessel_types_includes_required_codes():
-    assert 51 in SERVICE_VESSEL_TYPES   # pilot
-    assert 55 in SERVICE_VESSEL_TYPES   # anti-pollution
-    assert 59 in SERVICE_VESSEL_TYPES   # coast guard / offshore support
-    assert 31 in SERVICE_VESSEL_TYPES   # tug
-    assert 32 in SERVICE_VESSEL_TYPES   # supply / tender
+    assert 51 in SERVICE_VESSEL_TYPES  # pilot
+    assert 55 in SERVICE_VESSEL_TYPES  # anti-pollution
+    assert 59 in SERVICE_VESSEL_TYPES  # coast guard / offshore support
+    assert 31 in SERVICE_VESSEL_TYPES  # tug
+    assert 32 in SERVICE_VESSEL_TYPES  # supply / tender
 
 
 def test_service_vessel_types_excludes_tankers():
@@ -279,7 +280,7 @@ def test_geo_event_vessel_in_corridor():
         down_weight=0.5,
     )
     assert ev.vessel_in_corridor(-30.0, 18.0)
-    assert not ev.vessel_in_corridor(1.3, 103.8)   # Singapore, not in Cape corridor
+    assert not ev.vessel_in_corridor(1.3, 103.8)  # Singapore, not in Cape corridor
     assert not ev.vessel_in_corridor(None, None)
 
 
@@ -295,9 +296,7 @@ def test_load_geopolitical_filter(tmp_path):
                 "name": "Test rerouting",
                 "active_from": "2023-11-01",
                 "active_to": "2026-12-31",
-                "corridors": [
-                    {"lat_min": -40, "lat_max": -25, "lon_min": 10, "lon_max": 40}
-                ],
+                "corridors": [{"lat_min": -40, "lat_max": -25, "lon_min": 10, "lon_max": 40}],
                 "down_weight": 0.5,
             }
         ]
@@ -319,11 +318,13 @@ def test_load_geopolitical_filter(tmp_path):
 
 
 def _make_scored_df(rows: list[dict]) -> pl.DataFrame:
-    return pl.DataFrame(rows).with_columns([
-        pl.col("anomaly_score").cast(pl.Float32),
-        pl.col("last_lat").cast(pl.Float64),
-        pl.col("last_lon").cast(pl.Float64),
-    ])
+    return pl.DataFrame(rows).with_columns(
+        [
+            pl.col("anomaly_score").cast(pl.Float32),
+            pl.col("last_lat").cast(pl.Float64),
+            pl.col("last_lon").cast(pl.Float64),
+        ]
+    )
 
 
 def test_apply_filter_down_weights_vessels_in_corridor():
@@ -335,10 +336,12 @@ def test_apply_filter_down_weights_vessels_in_corridor():
         corridors=[corridor],
         down_weight=0.5,
     )
-    df = _make_scored_df([
-        {"mmsi": "cape_vessel",  "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
-        {"mmsi": "normal_vessel", "anomaly_score": 0.8, "last_lat": 1.3, "last_lon": 103.8},
-    ])
+    df = _make_scored_df(
+        [
+            {"mmsi": "cape_vessel", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {"mmsi": "normal_vessel", "anomaly_score": 0.8, "last_lat": 1.3, "last_lon": 103.8},
+        ]
+    )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
 
     cape_score = result.filter(pl.col("mmsi") == "cape_vessel")["anomaly_score"][0]
@@ -352,21 +355,25 @@ def test_apply_filter_no_effect_when_event_inactive():
     event = GeoEvent(
         name="past_event",
         active_from=date(2020, 1, 1),
-        active_to=date(2021, 12, 31),   # expired
+        active_to=date(2021, 12, 31),  # expired
         corridors=[corridor],
         down_weight=0.5,
     )
-    df = _make_scored_df([
-        {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
-    ])
+    df = _make_scored_df(
+        [
+            {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+        ]
+    )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
     assert result["anomaly_score"][0] == pytest.approx(0.8)
 
 
 def test_apply_filter_no_effect_when_no_active_events():
-    df = _make_scored_df([
-        {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
-    ])
+    df = _make_scored_df(
+        [
+            {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+        ]
+    )
     result = apply_geopolitical_filter(df, [], reference_date=date(2025, 1, 1))
     assert result["anomaly_score"][0] == pytest.approx(0.8)
 

@@ -12,12 +12,15 @@ import polars as pl
 from dotenv import load_dotenv
 from sklearn.metrics import roc_auc_score
 
-from src.score.watchlist import DEFAULT_DB_PATH, DEFAULT_OUTPUT_PATH as DEFAULT_WATCHLIST_PATH, build_candidate_watchlist
+from src.score.watchlist import DEFAULT_DB_PATH, build_candidate_watchlist
+from src.score.watchlist import DEFAULT_OUTPUT_PATH as DEFAULT_WATCHLIST_PATH
 from src.storage.config import read_parquet as read_parquet_uri
 
 load_dotenv()
 
-DEFAULT_METRICS_PATH = os.getenv("VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json")
+DEFAULT_METRICS_PATH = os.getenv(
+    "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
+)
 
 
 def _positive_identifier_sets(db_path: str) -> tuple[set[str], set[str]]:
@@ -39,7 +42,9 @@ def _positive_identifier_sets(db_path: str) -> tuple[set[str], set[str]]:
     return mmsi_set, imo_set
 
 
-def label_watchlist_against_ofac(watchlist_df: pl.DataFrame, db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
+def label_watchlist_against_ofac(
+    watchlist_df: pl.DataFrame, db_path: str = DEFAULT_DB_PATH
+) -> pl.DataFrame:
     mmsi_set, imo_set = _positive_identifier_sets(db_path)
     if watchlist_df.is_empty():
         return watchlist_df.with_columns(pl.lit(False).alias("is_ofac_listed"))
@@ -69,7 +74,7 @@ def compute_validation_metrics(labeled_watchlist_df: pl.DataFrame) -> dict[str, 
     top_50 = ranked.head(min(50, ranked.height))
     top_200 = ranked.head(min(200, ranked.height))
 
-    precision_at_50 = float(top_50["is_ofac_listed"].cast(pl.Int8).mean() or 0.0)
+    precision_at_50 = float(top_50["is_ofac_listed"].cast(pl.Int8).mean() or 0.0)  # type: ignore[arg-type]
     recall_hits = int(top_200["is_ofac_listed"].cast(pl.Int8).sum())
     recall_at_200 = float(recall_hits / positive_count) if positive_count else 0.0
 
@@ -88,7 +93,9 @@ def compute_validation_metrics(labeled_watchlist_df: pl.DataFrame) -> dict[str, 
     }
 
 
-def write_validation_metrics(metrics: dict[str, float | int | None], output_path: str = DEFAULT_METRICS_PATH) -> None:
+def write_validation_metrics(
+    metrics: dict[str, float | int | None], output_path: str = DEFAULT_METRICS_PATH
+) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(metrics, indent=2) + "\n")
@@ -110,7 +117,9 @@ def validate_watchlist(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate candidate watchlist against OFAC ground truth")
+    parser = argparse.ArgumentParser(
+        description="Validate candidate watchlist against OFAC ground truth"
+    )
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--watchlist", default=DEFAULT_WATCHLIST_PATH)
     parser.add_argument("--output", default=DEFAULT_METRICS_PATH)

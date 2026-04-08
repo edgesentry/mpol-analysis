@@ -32,9 +32,7 @@ DEFAULT_RAW_DIR = "data/raw/sanctions"
 
 # OpenSanctions "sanctions" topic — all sanctioned entities from merged lists.
 # Switch to the "default" dataset URL for the full entity graph (much larger).
-OPENSANCTIONS_URL = (
-    "https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json"
-)
+OPENSANCTIONS_URL = "https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json"
 
 # FtM schemas we care about for the screening pipeline
 RELEVANT_SCHEMAS = {"Vessel", "Company", "Person", "Organization", "LegalEntity"}
@@ -128,7 +126,7 @@ def parse_ftm_entity(entity: dict) -> dict | None:
 
 def _flush_batch(con: duckdb.DuckDBPyConnection, batch: list[dict]) -> int:
     """INSERT OR IGNORE *batch* rows into sanctions_entities. Returns inserted count."""
-    df = pl.DataFrame(
+    df = pl.DataFrame(  # noqa: F841 — referenced by DuckDB via `FROM df`
         batch,
         schema={
             "entity_id": pl.Utf8,
@@ -140,14 +138,14 @@ def _flush_batch(con: duckdb.DuckDBPyConnection, batch: list[dict]) -> int:
             "list_source": pl.Utf8,
         },
     )
-    before = con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0]
+    before = con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0]  # type: ignore[index]
     con.execute("""
         INSERT OR IGNORE INTO sanctions_entities
             (entity_id, name, mmsi, imo, flag, type, list_source)
         SELECT entity_id, name, mmsi, imo, flag, type, list_source
         FROM df
     """)
-    return con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0] - before
+    return con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0] - before  # type: ignore[index]
 
 
 def load_jsonl_to_duckdb(
@@ -199,8 +197,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Load OpenSanctions data into DuckDB")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--raw-dir", default=DEFAULT_RAW_DIR)
-    parser.add_argument("--url", default=OPENSANCTIONS_URL,
-                        help="OpenSanctions JSONL URL (override to use 'default' dataset)")
+    parser.add_argument(
+        "--url",
+        default=OPENSANCTIONS_URL,
+        help="OpenSanctions JSONL URL (override to use 'default' dataset)",
+    )
     parser.add_argument("--force", action="store_true", help="Re-download even if cached")
     args = parser.parse_args()
 

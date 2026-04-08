@@ -93,7 +93,12 @@ def _merge_feature_frames(
     ownership_df: pl.DataFrame,
     trade_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    frames = [_normalize(ais_df), _normalize(identity_df), _normalize(ownership_df), _normalize(trade_df)]
+    frames = [
+        _normalize(ais_df),
+        _normalize(identity_df),
+        _normalize(ownership_df),
+        _normalize(trade_df),
+    ]
     non_empty = [f for f in frames if not f.is_empty()]
     if not non_empty:
         return pl.DataFrame({"mmsi": []}, schema={"mmsi": pl.Utf8})

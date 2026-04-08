@@ -60,9 +60,7 @@ def test_causal_effects_has_required_columns(causal_df):
 
 def test_causal_effects_has_three_regimes(causal_df):
     """One row per sanction regime (OFAC Iran, OFAC Russia, UN DPRK)."""
-    assert causal_df.height == 3, (
-        f"Expected 3 regime rows, got {causal_df.height}"
-    )
+    assert causal_df.height == 3, f"Expected 3 regime rows, got {causal_df.height}"
     labels = set(causal_df["label"].to_list())
     assert labels == EXPECTED_REGIMES, f"Unexpected regime labels: {labels}"
 
@@ -78,8 +76,7 @@ def test_causal_effects_ci_ordered(causal_df):
     """CI lower bound must be ≤ upper bound for every regime."""
     for row in causal_df.iter_rows(named=True):
         assert row["att_ci_lower"] <= row["att_ci_upper"], (
-            f"CI inverted for {row['label']}: "
-            f"[{row['att_ci_lower']}, {row['att_ci_upper']}]"
+            f"CI inverted for {row['label']}: [{row['att_ci_lower']}, {row['att_ci_upper']}]"
         )
 
 

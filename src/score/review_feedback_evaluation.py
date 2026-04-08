@@ -17,7 +17,6 @@ from typing import Any
 import duckdb
 import polars as pl
 
-
 POSITIVE_TIERS = {"confirmed", "probable", "suspect"}
 NEGATIVE_TIERS = {"cleared"}
 DEFAULT_WATCHLISTS = {
@@ -189,7 +188,9 @@ def _top_k_tier_mix(df: pl.DataFrame, capacities: list[int]) -> list[dict[str, o
             {
                 "review_capacity": cap,
                 "count": int(top.height),
-                "tiers": _tier_counts(top.select(["review_tier"]) if "review_tier" in top.columns else top),
+                "tiers": _tier_counts(
+                    top.select(["review_tier"]) if "review_tier" in top.columns else top
+                ),
             }
         )
     return out
@@ -278,10 +279,14 @@ def _evaluate_region(
             "ops_thresholds": _ops_thresholds(labeled, capacities),
             "primary_capacity": primary_capacity,
             "precision_at_primary_capacity": round(_precision_at_k(labeled, primary_capacity), 4),
-            "recall_at_primary_capacity": round(_recall_at_k(labeled, primary_capacity, positive_count), 4),
+            "recall_at_primary_capacity": round(
+                _recall_at_k(labeled, primary_capacity, positive_count), 4
+            ),
         },
         "threshold_recommendation": {
-            "recommended_threshold": round(float(best_threshold), 4) if best_threshold is not None else None,
+            "recommended_threshold": round(float(best_threshold), 4)
+            if best_threshold is not None
+            else None,
             "f1_at_recommended": round(best_f1, 4),
             "support": {
                 "labeled_count": int(labeled.height),
@@ -457,7 +462,9 @@ def _parse_watchlist_args(pairs: list[str]) -> dict[str, str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run periodic reviewed-outcome feedback evaluation")
+    parser = argparse.ArgumentParser(
+        description="Run periodic reviewed-outcome feedback evaluation"
+    )
     parser.add_argument("--db", default="data/processed/mpol.duckdb", help="DuckDB path")
     parser.add_argument(
         "--output",

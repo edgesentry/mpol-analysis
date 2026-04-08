@@ -36,6 +36,7 @@ DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _rows_to_table(rows: list[dict], schema: pa.Schema) -> pa.Table:
     """Convert a list of dicts to a PyArrow table, filling missing fields with None."""
     if not rows:
@@ -47,6 +48,7 @@ def _rows_to_table(rows: list[dict], schema: pa.Schema) -> pa.Table:
 # ---------------------------------------------------------------------------
 # Graph builder
 # ---------------------------------------------------------------------------
+
 
 def build_graph_tables(
     db_path: str,
@@ -131,22 +133,26 @@ def build_graph_tables(
     for entity_id, mmsi, imo, list_source in sanctioned_vessel_rows:
         vessel_id = mmsi or imo_index.get(imo)
         if vessel_id and (vessel_id, list_source) not in _sb_seen:
-            sanctioned_by.append({
-                "src_id": vessel_id,
-                "dst_id": list_source,
-                "list": list_source,
-                "date": entity_id,
-            })
+            sanctioned_by.append(
+                {
+                    "src_id": vessel_id,
+                    "dst_id": list_source,
+                    "list": list_source,
+                    "date": entity_id,
+                }
+            )
             _sb_seen.add((vessel_id, list_source))
 
     for entity_id, _name, list_source in sanctioned_company_rows:
         if (entity_id, list_source) not in _sb_seen:
-            sanctioned_by.append({
-                "src_id": entity_id,
-                "dst_id": list_source,
-                "list": list_source,
-                "date": "",
-            })
+            sanctioned_by.append(
+                {
+                    "src_id": entity_id,
+                    "dst_id": list_source,
+                    "list": list_source,
+                    "date": "",
+                }
+            )
             _sb_seen.add((entity_id, list_source))
 
     # ------------------------------------------------------------------
@@ -198,12 +204,14 @@ def build_graph_tables(
                             registered_in.append({"src_id": owner_id, "dst_id": owner_country})
                             _ri_seen.add((owner_id, owner_country))
 
-                    owned_by.append({
-                        "src_id": mmsi,
-                        "dst_id": owner_id,
-                        "since": since,
-                        "until": until,
-                    })
+                    owned_by.append(
+                        {
+                            "src_id": mmsi,
+                            "dst_id": owner_id,
+                            "since": since,
+                            "until": until,
+                        }
+                    )
 
                     addr_id = (row.get("owner_address_id") or "").strip()
                     if addr_id:
@@ -222,33 +230,37 @@ def build_graph_tables(
                         "name": manager_name or existing_mgr.get("name", ""),
                         "country": existing_mgr.get("country", ""),
                     }
-                    managed_by.append({
-                        "src_id": mmsi,
-                        "dst_id": manager_id,
-                        "since": since,
-                        "until": until,
-                    })
+                    managed_by.append(
+                        {
+                            "src_id": mmsi,
+                            "dst_id": manager_id,
+                            "since": since,
+                            "until": until,
+                        }
+                    )
 
     # ------------------------------------------------------------------
     # Assemble PyArrow tables
     # ------------------------------------------------------------------
     return {
-        "Vessel":          _rows_to_table(list(vessels.values()),      NODE_SCHEMAS["Vessel"]),
-        "Company":         _rows_to_table(list(companies.values()),    NODE_SCHEMAS["Company"]),
-        "Country":         _rows_to_table(list(countries.values()),    NODE_SCHEMAS["Country"]),
-        "Address":         _rows_to_table(list(addresses.values()),    NODE_SCHEMAS["Address"]),
-        "VesselName":      _rows_to_table(list(vessel_names.values()), NODE_SCHEMAS["VesselName"]),
-        "SanctionsRegime": _rows_to_table([{"name": n} for n in regimes], NODE_SCHEMAS["SanctionsRegime"]),
-        "ALIAS":           _rows_to_table(aliases,        REL_SCHEMAS["ALIAS"]),
-        "OWNED_BY":        _rows_to_table(owned_by,       REL_SCHEMAS["OWNED_BY"]),
-        "MANAGED_BY":      _rows_to_table(managed_by,     REL_SCHEMAS["MANAGED_BY"]),
-        "SANCTIONED_BY":   _rows_to_table(sanctioned_by,  REL_SCHEMAS["SANCTIONED_BY"]),
-        "REGISTERED_IN":   _rows_to_table(registered_in,  REL_SCHEMAS["REGISTERED_IN"]),
-        "REGISTERED_AT":   _rows_to_table(registered_at,  REL_SCHEMAS["REGISTERED_AT"]),
+        "Vessel": _rows_to_table(list(vessels.values()), NODE_SCHEMAS["Vessel"]),
+        "Company": _rows_to_table(list(companies.values()), NODE_SCHEMAS["Company"]),
+        "Country": _rows_to_table(list(countries.values()), NODE_SCHEMAS["Country"]),
+        "Address": _rows_to_table(list(addresses.values()), NODE_SCHEMAS["Address"]),
+        "VesselName": _rows_to_table(list(vessel_names.values()), NODE_SCHEMAS["VesselName"]),
+        "SanctionsRegime": _rows_to_table(
+            [{"name": n} for n in regimes], NODE_SCHEMAS["SanctionsRegime"]
+        ),
+        "ALIAS": _rows_to_table(aliases, REL_SCHEMAS["ALIAS"]),
+        "OWNED_BY": _rows_to_table(owned_by, REL_SCHEMAS["OWNED_BY"]),
+        "MANAGED_BY": _rows_to_table(managed_by, REL_SCHEMAS["MANAGED_BY"]),
+        "SANCTIONED_BY": _rows_to_table(sanctioned_by, REL_SCHEMAS["SANCTIONED_BY"]),
+        "REGISTERED_IN": _rows_to_table(registered_in, REL_SCHEMAS["REGISTERED_IN"]),
+        "REGISTERED_AT": _rows_to_table(registered_at, REL_SCHEMAS["REGISTERED_AT"]),
         # CONTROLLED_BY is populated externally (e.g. company hierarchy data)
-        "CONTROLLED_BY":   REL_SCHEMAS["CONTROLLED_BY"].empty_table(),
+        "CONTROLLED_BY": REL_SCHEMAS["CONTROLLED_BY"].empty_table(),
         # STS_CONTACT is populated by the AIS behavior pipeline
-        "STS_CONTACT":     REL_SCHEMAS["STS_CONTACT"].empty_table(),
+        "STS_CONTACT": REL_SCHEMAS["STS_CONTACT"].empty_table(),
     }
 
 
@@ -259,8 +271,9 @@ def build_graph_tables(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build vessel ownership graph (Lance Graph)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--equasis-csv", default=None,
-                        help="Path to Equasis ownership chain CSV export")
+    parser.add_argument(
+        "--equasis-csv", default=None, help="Path to Equasis ownership chain CSV export"
+    )
     args = parser.parse_args()
 
     print("Building ownership graph tables …")

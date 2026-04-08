@@ -172,12 +172,11 @@ def _label_watchlist(watchlist: pl.DataFrame, prelabels: pl.DataFrame) -> pl.Dat
         )
 
     label_cols = [
-        c for c in ["mmsi", "pre_label", "confidence_tier", "analyst_id", "evidence_notes"]
+        c
+        for c in ["mmsi", "pre_label", "confidence_tier", "analyst_id", "evidence_notes"]
         if c in prelabels.columns
     ]
-    slim = prelabels.select(label_cols).with_columns(
-        pl.col("mmsi").cast(pl.Utf8).str.strip_chars()
-    )
+    slim = prelabels.select(label_cols).with_columns(pl.col("mmsi").cast(pl.Utf8).str.strip_chars())
 
     joined = (
         watchlist.with_columns(pl.col("mmsi").cast(pl.Utf8).str.strip_chars())
@@ -202,7 +201,7 @@ def _precision_at_k(df: pl.DataFrame, k: int) -> float:
     if df.is_empty() or k <= 0:
         return 0.0
     head = df.head(min(k, df.height))
-    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)
+    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)  # type: ignore[arg-type]
 
 
 def _recall_at_k(df: pl.DataFrame, k: int, positive_count: int) -> float:
@@ -229,18 +228,14 @@ def _disagreement_report(
     cols = [c for c in display_cols if c in labeled.columns]
 
     model_high_neg = (
-        labeled.filter(
-            (pl.col("confidence") >= threshold) & (pl.col("y_true") == 0)
-        )
+        labeled.filter((pl.col("confidence") >= threshold) & (pl.col("y_true") == 0))
         .sort("confidence", descending=True)
         .head(max_examples)
         .select(cols)
         .to_dicts()
     )
     model_low_pos = (
-        labeled.filter(
-            (pl.col("confidence") < threshold) & (pl.col("y_true") == 1)
-        )
+        labeled.filter((pl.col("confidence") < threshold) & (pl.col("y_true") == 1))
         .sort("confidence", descending=False)
         .head(max_examples)
         .select(cols)
@@ -276,8 +271,18 @@ def evaluate_prelabel_window(
     labeled = labeled_all.filter(pl.col("y_true").is_not_null())
 
     display_cols = [
-        c for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence",
-                    "pre_label", "confidence_tier", "analyst_id", "evidence_notes"]
+        c
+        for c in [
+            "mmsi",
+            "imo",
+            "vessel_name",
+            "vessel_type",
+            "confidence",
+            "pre_label",
+            "confidence_tier",
+            "analyst_id",
+            "evidence_notes",
+        ]
         if c in labeled_all.columns
     ]
 
@@ -302,7 +307,9 @@ def evaluate_prelabel_window(
                 "pr_auc": None,
             },
             "ops_thresholds": _ops_thresholds(labeled_all, capacities),
-            "disagreement": _disagreement_report(labeled, disagreement_threshold or 0.7, display_cols),
+            "disagreement": _disagreement_report(
+                labeled, disagreement_threshold or 0.7, display_cols
+            ),
         }
 
     ranked = labeled.sort("confidence", descending=True)
@@ -373,14 +380,18 @@ def _ops_thresholds(df: pl.DataFrame, capacities: list[int]) -> list[dict[str, A
             out.append({"review_capacity": cap, "min_score": 1.0, "hit_rate": 0.0})
             continue
         top = df.head(min(cap, df.height))
-        min_score = float(top["confidence"].min() or 0.0)
+        min_score = float(top["confidence"].min() or 0.0)  # type: ignore[arg-type]
         known = top.filter(pl.col("y_true").is_not_null())
-        hit_rate = float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0
-        out.append({
-            "review_capacity": cap,
-            "min_score": round(min_score, 4),
-            "hit_rate": round(hit_rate, 4),
-        })
+        hit_rate = (
+            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0  # type: ignore[arg-type]
+        )
+        out.append(
+            {
+                "review_capacity": cap,
+                "min_score": round(min_score, 4),
+                "hit_rate": round(hit_rate, 4),
+            }
+        )
     return out
 
 
@@ -430,7 +441,10 @@ def run_prelabel_evaluation(
         )
     else:
         prelabels, n_leaked = load_prelabels_from_csv(
-            prelabels_csv, end_date=end_date, region=region, min_confidence_tier=min_confidence_tier  # type: ignore[arg-type]
+            prelabels_csv,  # type: ignore[arg-type]
+            end_date=end_date,
+            region=region,
+            min_confidence_tier=min_confidence_tier,
         )
 
     window = PrelabelWindow(
@@ -442,7 +456,10 @@ def run_prelabel_evaluation(
     )
 
     window_result = evaluate_prelabel_window(
-        window, prelabels, n_leaked, capacities,
+        window,
+        prelabels,
+        n_leaked,
+        capacities,
         disagreement_threshold=disagreement_threshold,
     )
 
@@ -476,19 +493,35 @@ def main() -> None:
     )
     parser.add_argument("--watchlist", required=True, help="Watchlist parquet path")
     parser.add_argument("--db", default=None, help="DuckDB path (analyst_prelabels table)")
-    parser.add_argument("--prelabels-csv", default=None, help="Pre-labels CSV path (alternative to --db)")
-    parser.add_argument("--output", default="data/processed/prelabel_evaluation.json",
-                        help="Output report JSON path")
-    parser.add_argument("--end-date", default=None,
-                        help="Leakage cutoff: drop labels with evidence_timestamp after this date (ISO-8601)")
+    parser.add_argument(
+        "--prelabels-csv", default=None, help="Pre-labels CSV path (alternative to --db)"
+    )
+    parser.add_argument(
+        "--output",
+        default="data/processed/prelabel_evaluation.json",
+        help="Output report JSON path",
+    )
+    parser.add_argument(
+        "--end-date",
+        default=None,
+        help="Leakage cutoff: drop labels with evidence_timestamp after this date (ISO-8601)",
+    )
     parser.add_argument("--region", default=None, help="Filter pre-labels to this region")
-    parser.add_argument("--min-confidence-tier", default="weak",
-                        choices=["high", "medium", "weak"],
-                        help="Minimum analyst confidence tier to include")
-    parser.add_argument("--review-capacities", default="25,50,100",
-                        help="Comma-separated review capacities")
-    parser.add_argument("--disagreement-threshold", type=float, default=None,
-                        help="Score threshold for disagreement analysis (default: best-F1)")
+    parser.add_argument(
+        "--min-confidence-tier",
+        default="weak",
+        choices=["high", "medium", "weak"],
+        help="Minimum analyst confidence tier to include",
+    )
+    parser.add_argument(
+        "--review-capacities", default="25,50,100", help="Comma-separated review capacities"
+    )
+    parser.add_argument(
+        "--disagreement-threshold",
+        type=float,
+        default=None,
+        help="Score threshold for disagreement analysis (default: best-F1)",
+    )
     args = parser.parse_args()
 
     capacities = [int(x.strip()) for x in args.review_capacities.split(",") if x.strip()]

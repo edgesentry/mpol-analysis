@@ -131,4 +131,7 @@ def test_review_feedback_regression_checks(tmp_path):
     checks = report["drift_regression_checks"]
     assert checks["baseline_used"] is True
     assert checks["overall_pass"] is False
-    assert any(c["metric"] == "precision_at_primary_capacity" and c["passed"] is False for c in checks["checks"])
+    assert any(
+        c["metric"] == "precision_at_primary_capacity" and c["passed"] is False
+        for c in checks["checks"]
+    )

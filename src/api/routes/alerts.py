@@ -13,7 +13,9 @@ from fastapi.responses import StreamingResponse
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
+    "candidate_watchlist.parquet"
+)
 ALERT_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", "0.75"))
 POLL_INTERVAL_SECONDS = int(os.getenv("ALERT_POLL_INTERVAL", "60"))
 
@@ -35,12 +37,14 @@ async def _event_stream():
                         key = f"{row['mmsi']}:{row.get('last_seen', '')}"
                         if key not in seen:
                             seen.add(key)
-                            payload = json.dumps({
-                                "mmsi": row["mmsi"],
-                                "vessel_name": row["vessel_name"],
-                                "confidence": row["confidence"],
-                                "flag": row["flag"],
-                            })
+                            payload = json.dumps(
+                                {
+                                    "mmsi": row["mmsi"],
+                                    "vessel_name": row["vessel_name"],
+                                    "confidence": row["confidence"],
+                                    "flag": row["flag"],
+                                }
+                            )
                             yield f"data: {payload}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"

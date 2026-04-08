@@ -24,8 +24,9 @@ def causal_db(tmp_path):
     return db_path
 
 
-def _seed_vessel(db_path: str, mmsi: str, sanctions_distance: int = 99,
-                 sts_count: int = 0, flag_changes: int = 0) -> None:
+def _seed_vessel(
+    db_path: str, mmsi: str, sanctions_distance: int = 99, sts_count: int = 0, flag_changes: int = 0
+) -> None:
     con = duckdb.connect(db_path)
     try:
         con.execute(
@@ -45,8 +46,9 @@ def _seed_vessel(db_path: str, mmsi: str, sanctions_distance: int = 99,
         con.close()
 
 
-def _seed_ais_gaps(db_path: str, mmsi: str, as_of: datetime,
-                   n_recent: int = 0, n_baseline: int = 0) -> None:
+def _seed_ais_gaps(
+    db_path: str, mmsi: str, as_of: datetime, n_recent: int = 0, n_baseline: int = 0
+) -> None:
     """Seed AIS records that produce the specified number of >6h gaps."""
     con = duckdb.connect(db_path)
     try:
@@ -95,10 +97,9 @@ def test_compute_signal_score_caps_at_one():
 
 def test_candidate_prompt_context_no_evidence():
     candidate = UnknownUnknownCandidate(
-        mmsi="123456789", causal_score=0.5,
-        matching_signals=[
-            CausalSignal("ais_gap_count", 5.0, 0.5, 10.0)
-        ],
+        mmsi="123456789",
+        causal_score=0.5,
+        matching_signals=[CausalSignal("ais_gap_count", 5.0, 0.5, 10.0)],
         causal_evidence=[],
     )
     ctx = candidate.prompt_context()
@@ -109,15 +110,18 @@ def test_candidate_prompt_context_no_evidence():
 
 def test_candidate_prompt_context_with_evidence():
     evidence = CausalEvidence(
-        regime="OFAC_Russia", regime_label="OFAC Russia",
-        att_estimate=1.23, att_ci_lower=0.5, att_ci_upper=2.0,
-        p_value=0.03, is_significant=True,
+        regime="OFAC_Russia",
+        regime_label="OFAC Russia",
+        att_estimate=1.23,
+        att_ci_lower=0.5,
+        att_ci_upper=2.0,
+        p_value=0.03,
+        is_significant=True,
     )
     candidate = UnknownUnknownCandidate(
-        mmsi="123456789", causal_score=0.7,
-        matching_signals=[
-            CausalSignal("ais_gap_count", 8.0, 1.0, 8.0)
-        ],
+        mmsi="123456789",
+        causal_score=0.7,
+        matching_signals=[CausalSignal("ais_gap_count", 8.0, 1.0, 8.0)],
         causal_evidence=[evidence],
     )
     ctx = candidate.prompt_context()
@@ -128,9 +132,13 @@ def test_candidate_prompt_context_with_evidence():
 
 def test_causal_evidence_prompt_context_not_significant():
     ev = CausalEvidence(
-        regime="UN_DPRK", regime_label="UN DPRK",
-        att_estimate=-0.5, att_ci_lower=-2.0, att_ci_upper=1.0,
-        p_value=0.45, is_significant=False,
+        regime="UN_DPRK",
+        regime_label="UN DPRK",
+        att_estimate=-0.5,
+        att_ci_lower=-2.0,
+        att_ci_upper=1.0,
+        p_value=0.45,
+        is_significant=False,
     )
     ctx = ev.to_prompt_context()
     assert "not-significant" in ctx
@@ -226,9 +234,7 @@ def test_score_attaches_causal_evidence(causal_db):
         is_significant=True,
         calibrated_weight=0.45,
     )
-    candidates = score_unknown_unknowns(
-        db_path=causal_db, causal_effects=[effect], as_of=as_of
-    )
+    candidates = score_unknown_unknowns(db_path=causal_db, causal_effects=[effect], as_of=as_of)
     evi_candidates = [c for c in candidates if c.mmsi == "EVI001"]
     assert len(evi_candidates) == 1
     assert len(evi_candidates[0].causal_evidence) == 1
@@ -254,9 +260,7 @@ def test_score_negative_att_not_attached(causal_db):
         is_significant=True,
         calibrated_weight=0.35,
     )
-    candidates = score_unknown_unknowns(
-        db_path=causal_db, causal_effects=[effect], as_of=as_of
-    )
+    candidates = score_unknown_unknowns(db_path=causal_db, causal_effects=[effect], as_of=as_of)
     neg_candidates = [c for c in candidates if c.mmsi == "NEG001"]
     if neg_candidates:
         assert neg_candidates[0].causal_evidence == []

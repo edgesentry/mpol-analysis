@@ -23,7 +23,9 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
     if os.getenv("RUN_PUBLIC_DATA_TESTS") != "1":
         pytest.skip("Set RUN_PUBLIC_DATA_TESTS=1 to run public-data integration test")
 
-    watchlist_path = Path(os.getenv("PUBLIC_TEST_WATCHLIST", "data/processed/candidate_watchlist.parquet"))
+    watchlist_path = Path(
+        os.getenv("PUBLIC_TEST_WATCHLIST", "data/processed/candidate_watchlist.parquet")
+    )
     if not watchlist_path.exists():
         pytest.skip(f"Watchlist not found: {watchlist_path}")
 
@@ -72,10 +74,14 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
         .with_columns(
             pl.lit("positive").alias("label"),
             pl.lit("high").alias("label_confidence"),
-            pl.lit("https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json").alias("evidence_url"),
+            pl.lit(
+                "https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json"
+            ).alias("evidence_url"),
             pl.lit("public source overlap with algorithm output").alias("notes"),
         )
-        .select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
+        .select(
+            ["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"]
+        )
     )
 
     # Add weak negatives from low-confidence tail to enable full metric computation.
@@ -92,10 +98,14 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
             pl.lit("").alias("evidence_url"),
             pl.lit("integration-test negative label; analyst review required").alias("notes"),
         )
-        .select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
+        .select(
+            ["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"]
+        )
     )
 
-    labels = pl.concat([pos_labels, neg_labels], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
+    labels = pl.concat([pos_labels, neg_labels], how="vertical_relaxed").unique(
+        subset=["mmsi", "imo"]
+    )
     labels_path = tmp_path / "eval_labels_public.csv"
     labels.write_csv(labels_path)
 

@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
-from src.score.mpol_baseline import DEFAULT_OUTPUT_PATH as DEFAULT_BASELINE_PATH
 from src.score.mpol_baseline import build_mpol_baseline, load_cleared_mmsis
 
 load_dotenv()
@@ -102,13 +101,15 @@ def score_anomalies(
     db_path: str = DEFAULT_DB_PATH,
 ) -> tuple[pl.DataFrame, StandardScaler, IsolationForest]:
     if feature_df.is_empty():
-        empty = pl.DataFrame(schema={
-            "mmsi": pl.Utf8,
-            "cluster_label": pl.Int32,
-            "baseline_noise_score": pl.Float32,
-            "isolation_raw_score": pl.Float32,
-            "anomaly_score": pl.Float32,
-        })
+        empty = pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "cluster_label": pl.Int32,
+                "baseline_noise_score": pl.Float32,
+                "isolation_raw_score": pl.Float32,
+                "anomaly_score": pl.Float32,
+            }
+        )
         return empty, StandardScaler(), IsolationForest(random_state=42)
 
     if baseline_df is None:
@@ -125,24 +126,32 @@ def score_anomalies(
     else:
         normalized = ((raw - raw.min()) / np.ptp(raw)).astype(np.float32)
 
-    joined = feature_df.select("mmsi").join(baseline_df, on="mmsi", how="left").with_columns([
-        pl.col("cluster_label").fill_null(0).cast(pl.Int32),
-        pl.col("baseline_noise_score").fill_null(0.0).cast(pl.Float32),
-        pl.Series("isolation_raw_score", raw.astype(np.float32)),
-        pl.Series("isolation_norm_score", normalized),
-    ])
+    joined = (
+        feature_df.select("mmsi")
+        .join(baseline_df, on="mmsi", how="left")
+        .with_columns(
+            [
+                pl.col("cluster_label").fill_null(0).cast(pl.Int32),
+                pl.col("baseline_noise_score").fill_null(0.0).cast(pl.Float32),
+                pl.Series("isolation_raw_score", raw.astype(np.float32)),
+                pl.Series("isolation_norm_score", normalized),
+            ]
+        )
+    )
 
     result = joined.with_columns(
         (0.75 * pl.col("isolation_norm_score") + 0.25 * pl.col("baseline_noise_score"))
         .clip(0.0, 1.0)
         .alias("anomaly_score")
-    ).select([
-        "mmsi",
-        "cluster_label",
-        "baseline_noise_score",
-        "isolation_raw_score",
-        "anomaly_score",
-    ])
+    ).select(
+        [
+            "mmsi",
+            "cluster_label",
+            "baseline_noise_score",
+            "isolation_raw_score",
+            "anomaly_score",
+        ]
+    )
 
     return result, scaler, model
 

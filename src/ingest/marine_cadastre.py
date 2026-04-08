@@ -95,10 +95,14 @@ def download_year(
                     downloaded += len(chunk)
                     if total:
                         pct = downloaded / total * 100
-                        print(f"\r  {downloaded / 1e6:.0f} MB / {total / 1e6:.0f} MB ({pct:.0f}%)", end="", flush=True)
+                        print(
+                            f"\r  {downloaded / 1e6:.0f} MB / {total / 1e6:.0f} MB ({pct:.0f}%)",
+                            end="",
+                            flush=True,
+                        )
             print()
 
-    print(f"  Extracting …")
+    print("  Extracting …")
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(out_path)
     zip_path.unlink()
@@ -130,9 +134,7 @@ def load_csv_to_duckdb(
         )
         .with_columns(
             pl.col("mmsi").cast(pl.Utf8),
-            pl.col("timestamp").str.to_datetime(
-                "%Y-%m-%dT%H:%M:%S", strict=False
-            ),
+            pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S", strict=False),
             pl.col("sog").cast(pl.Float32, strict=False),
             pl.col("cog").cast(pl.Float32, strict=False),
             pl.col("nav_status").cast(pl.Int8, strict=False),
@@ -148,24 +150,24 @@ def load_csv_to_duckdb(
     con = duckdb.connect(db_path)
     try:
         pos_cols = ["mmsi", "timestamp", "lat", "lon", "sog", "cog", "nav_status", "ship_type"]
-        pos_df = df.select([c for c in pos_cols if c in df.columns])
-        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]
+        pos_df = df.select([c for c in pos_cols if c in df.columns])  # noqa: F841 — referenced by DuckDB via `FROM pos_df`
+        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]  # type: ignore[index]
         con.execute("""
             INSERT OR IGNORE INTO ais_positions
             SELECT mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type
             FROM pos_df
         """)
-        inserted = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0] - before
+        inserted = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0] - before  # type: ignore[index]
 
         # Upsert vessel_meta from static fields where available
         meta_src_cols = ["mmsi", "vessel_name", "imo", "flag", "ship_type", "gross_tonnage"]
         meta_avail = [c for c in meta_src_cols if c in df.columns]
         if len(meta_avail) > 1:
-            meta_df = (
-                df.select(meta_avail)
-                .unique(subset=["mmsi"], keep="first")
+            meta_df = (  # noqa: F841 — referenced by DuckDB via `FROM meta_df`
+                df.select(meta_avail).unique(subset=["mmsi"], keep="first")
             )
-            con.execute("""
+            con.execute(
+                """
                 INSERT OR IGNORE INTO vessel_meta (mmsi, imo, name, flag, ship_type, gross_tonnage)
                 SELECT
                     mmsi,
@@ -176,12 +178,15 @@ def load_csv_to_duckdb(
                     gross_tonnage
                 FROM meta_df
                 WHERE mmsi IS NOT NULL
-            """ if "vessel_name" in meta_avail else """
+            """
+                if "vessel_name" in meta_avail
+                else """
                 INSERT OR IGNORE INTO vessel_meta (mmsi, imo, flag, ship_type, gross_tonnage)
                 SELECT mmsi, NULLIF(TRIM(imo), ''), NULLIF(TRIM(flag), ''), ship_type, gross_tonnage
                 FROM meta_df
                 WHERE mmsi IS NOT NULL
-            """)
+            """
+            )
     finally:
         con.close()
 
@@ -224,8 +229,14 @@ def _parse_bbox(values: list[float]) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load Marine Cadastre AIS data into DuckDB")
-    parser.add_argument("--year", type=int, required=True, action="append", dest="years",
-                        help="Year to download (repeat for multiple, e.g. --year 2022 --year 2023)")
+    parser.add_argument(
+        "--year",
+        type=int,
+        required=True,
+        action="append",
+        dest="years",
+        help="Year to download (repeat for multiple, e.g. --year 2022 --year 2023)",
+    )
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--raw-dir", default=DEFAULT_RAW_DIR, help="Raw download directory")
     parser.add_argument(

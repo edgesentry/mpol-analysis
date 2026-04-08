@@ -1,4 +1,5 @@
 import duckdb
+
 from src.ingest.schema import init_schema
 
 

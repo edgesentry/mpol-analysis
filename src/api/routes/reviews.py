@@ -104,19 +104,30 @@ def create_review(payload: ReviewUpsertRequest) -> ReviewResponse:
             INSERT INTO vessel_reviews (mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            [payload.mmsi.strip(), tier, handoff_state, payload.rationale, evidence_json, payload.reviewed_by],
+            [
+                payload.mmsi.strip(),
+                tier,
+                handoff_state,
+                payload.rationale,
+                evidence_json,
+                payload.reviewed_by,
+            ],
         )
 
-        row = con.execute(
-            """
+        row = (
+            con.execute(
+                """
             SELECT mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by, reviewed_at
             FROM vessel_reviews
             WHERE mmsi = ?
             ORDER BY reviewed_at DESC
             LIMIT 1
             """,
-            [payload.mmsi.strip()],
-        ).fetchdf().to_dict("records")[0]
+                [payload.mmsi.strip()],
+            )
+            .fetchdf()
+            .to_dict("records")[0]
+        )
         return _row_to_response(row)
     finally:
         con.close()
@@ -126,8 +137,9 @@ def create_review(payload: ReviewUpsertRequest) -> ReviewResponse:
 def export_latest_reviews() -> dict[str, Any]:
     con = _connect()
     try:
-        rows = con.execute(
-            """
+        rows = (
+            con.execute(
+                """
             SELECT mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by, reviewed_at
             FROM (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY mmsi ORDER BY reviewed_at DESC) AS rn
@@ -136,7 +148,10 @@ def export_latest_reviews() -> dict[str, Any]:
             WHERE rn = 1
             ORDER BY reviewed_at DESC
             """
-        ).fetchdf().to_dict("records")
+            )
+            .fetchdf()
+            .to_dict("records")
+        )
     finally:
         con.close()
 
@@ -151,16 +166,20 @@ def export_latest_reviews() -> dict[str, Any]:
 def get_latest_review(mmsi: str) -> ReviewResponse:
     con = _connect()
     try:
-        rows = con.execute(
-            """
+        rows = (
+            con.execute(
+                """
             SELECT mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by, reviewed_at
             FROM vessel_reviews
             WHERE mmsi = ?
             ORDER BY reviewed_at DESC
             LIMIT 1
             """,
-            [mmsi.strip()],
-        ).fetchdf().to_dict("records")
+                [mmsi.strip()],
+            )
+            .fetchdf()
+            .to_dict("records")
+        )
         if not rows:
             raise HTTPException(status_code=404, detail="No review found for MMSI")
         return _row_to_response(rows[0])
@@ -173,16 +192,20 @@ def get_review_history(mmsi: str, limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 200))
     con = _connect()
     try:
-        rows = con.execute(
-            """
+        rows = (
+            con.execute(
+                """
             SELECT mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by, reviewed_at
             FROM vessel_reviews
             WHERE mmsi = ?
             ORDER BY reviewed_at DESC
             LIMIT ?
             """,
-            [mmsi.strip(), safe_limit],
-        ).fetchdf().to_dict("records")
+                [mmsi.strip(), safe_limit],
+            )
+            .fetchdf()
+            .to_dict("records")
+        )
     finally:
         con.close()
 

@@ -18,17 +18,17 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Region presets
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RegionPreset:
     name: str
     label: str
-    bbox: list[float]          # [lat_min, lon_min, lat_max, lon_max]
+    bbox: list[float]  # [lat_min, lon_min, lat_max, lon_max]
     gap_threshold_h: int
     window_days: int
     w_anomaly: float
@@ -105,6 +105,7 @@ PRESETS: dict[str, RegionPreset] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _bold(text: str) -> str:
     return f"\033[1m{text}\033[0m"
 
@@ -136,14 +137,22 @@ def _fail(detail: str = "") -> None:
     print(_red("✗") + suffix)
 
 
-def _run(cmd: list[str], env: Optional[dict] = None) -> subprocess.CompletedProcess:
+def _run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
     merged_env = {**os.environ, **(env or {})}
     return subprocess.run(cmd, env=merged_env, capture_output=True, text=True)
 
 
 _DUMMY_MMSIS = (
-    "352001369", "314856000", "372979000", "312171000", "352898820",
-    "352002316", "626152000", "352001298", "314925000", "352001565"
+    "352001369",
+    "314856000",
+    "372979000",
+    "312171000",
+    "352898820",
+    "352002316",
+    "626152000",
+    "352001298",
+    "314925000",
+    "352001565",
 )
 
 
@@ -222,11 +231,11 @@ def _seed_dummy_vessels(db_path: str) -> None:
         con.close()
 
 
-
 def _ais_row_count(db_path: str) -> int:
     """Return the number of rows in ais_positions for a given DB, or 0 on error."""
     try:
         import duckdb
+
         con = duckdb.connect(db_path, read_only=True)
         try:
             return con.execute("SELECT COUNT(*) FROM ais_positions").fetchone()[0]
@@ -249,6 +258,7 @@ def _ask_retry_skip(step_name: str) -> str:
 # ---------------------------------------------------------------------------
 # Interactive region selection
 # ---------------------------------------------------------------------------
+
 
 def _select_region_interactive() -> RegionPreset:
     preset_list = list(PRESETS.values())
@@ -327,7 +337,9 @@ def _print_region_summary(p: RegionPreset) -> None:
     print(f"  Bbox:              {lat_min}°N {lon_min}°E → {lat_max}°N {lon_max}°E")
     print(f"  AIS gap threshold: {p.gap_threshold_h}h")
     print(f"  Feature window:    {p.window_days} days")
-    print(f"  Composite weights: anomaly={p.w_anomaly:.2f}  graph={p.w_graph:.2f}  identity={p.w_identity:.2f}")
+    print(
+        f"  Composite weights: anomaly={p.w_anomaly:.2f}  graph={p.w_graph:.2f}  identity={p.w_identity:.2f}"
+    )
     print(f"  DB path:           {p.db_path}")
     print()
 
@@ -341,9 +353,7 @@ TOTAL_STEPS = 9
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
     _step(1, TOTAL_STEPS, "Initialising DuckDB schema...")
-    result = _run(
-        [sys.executable, "-m", "src.ingest.schema", "--db", p.db_path]
-    )
+    result = _run([sys.executable, "-m", "src.ingest.schema", "--db", p.db_path])
     if result.returncode == 0:
         _ok()
         return True
@@ -371,16 +381,20 @@ def step_marine_cadastre(p: RegionPreset, non_interactive: bool, years: list[int
 
     _step(2, TOTAL_STEPS, f"Loading Marine Cadastre ({', '.join(str(y) for y in years)})...")
     result = _run(
-        [sys.executable, "-m", "src.ingest.marine_cadastre",
-         "--db", p.db_path,
-         "--raw-dir", "data/raw/marine_cadastre",
-         *year_args,
-         *bbox_args],
+        [
+            sys.executable,
+            "-m",
+            "src.ingest.marine_cadastre",
+            "--db",
+            p.db_path,
+            "--raw-dir",
+            "data/raw/marine_cadastre",
+            *year_args,
+            *bbox_args,
+        ],
     )
     if result.returncode == 0:
-        count_line = next(
-            (l for l in result.stdout.splitlines() if "total" in l.lower()), ""
-        )
+        count_line = next((l for l in result.stdout.splitlines() if "total" in l.lower()), "")
         _ok(count_line.strip() if count_line else "")
         return True
     _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
@@ -403,9 +417,16 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
     print(f"      bbox {p.bbox}  flush every 60s")
 
     cmd = [
-        sys.executable, "-m", "src.ingest.ais_stream",
-        "--db", p.db_path,
-        "--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max),
+        sys.executable,
+        "-m",
+        "src.ingest.ais_stream",
+        "--db",
+        p.db_path,
+        "--bbox",
+        str(lat_min),
+        str(lon_min),
+        str(lat_max),
+        str(lon_max),
     ]
     if stream_duration:
         # ais_stream handles its own deadline internally — no cross-process signalling needed.
@@ -417,7 +438,9 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
         rows = _ais_row_count(p.db_path)
         if ret == 0:
             if rows == 0:
-                _fail("stream exited cleanly but 0 rows inserted — check AISSTREAM_API_KEY and bbox")
+                _fail(
+                    "stream exited cleanly but 0 rows inserted — check AISSTREAM_API_KEY and bbox"
+                )
                 return False
             _ok(f"{rows} rows in ais_positions")
         else:
@@ -447,9 +470,7 @@ def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
     result = _run([sys.executable, "-m", "src.ingest.sanctions", "--db", p.db_path])
     if result.returncode == 0:
         # Extract entity count from stdout if available
-        count_line = next(
-            (l for l in result.stdout.splitlines() if "entit" in l.lower()), ""
-        )
+        count_line = next((l for l in result.stdout.splitlines() if "entit" in l.lower()), "")
         _ok(count_line.strip() if count_line else "")
         return True
     _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
@@ -477,9 +498,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
     # ownership_graph computes graph features into DuckDB
     graph = _run([sys.executable, "-m", "src.features.ownership_graph", "--db", p.db_path])
     if graph.returncode == 0:
-        count_line = next(
-            (l for l in graph.stdout.splitlines() if "vessel" in l.lower()), ""
-        )
+        count_line = next((l for l in graph.stdout.splitlines() if "vessel" in l.lower()), "")
         _ok(count_line.strip() if count_line else "")
         return True
     _fail(graph.stderr.strip().splitlines()[-1] if graph.stderr.strip() else "")
@@ -492,18 +511,33 @@ def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = Fal
     _step(6, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
-        ([sys.executable, "-m", "src.features.ais_behavior",
-          "--db", p.db_path,
-          "--window", str(p.window_days),
-          "--gap-threshold-hours", str(p.gap_threshold_h)], "ais_behavior"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "src.features.ais_behavior",
+                "--db",
+                p.db_path,
+                "--window",
+                str(p.window_days),
+                "--gap-threshold-hours",
+                str(p.gap_threshold_h),
+            ],
+            "ais_behavior",
+        ),
         ([sys.executable, "-m", "src.features.identity", "--db", p.db_path], "identity"),
-        ([sys.executable, "-m", "src.features.trade_mismatch", "--db", p.db_path], "trade_mismatch"),
+        (
+            [sys.executable, "-m", "src.features.trade_mismatch", "--db", p.db_path],
+            "trade_mismatch",
+        ),
         ([sys.executable, "-m", "src.features.build_matrix", "--db", p.db_path], "build_matrix"),
     ]
     for cmd, label in cmds:
         result = _run(cmd, env=env)
         if result.returncode != 0:
-            _fail(f"{label}: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'error'}")
+            _fail(
+                f"{label}: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'error'}"
+            )
             if non_interactive:
                 return False
             if _ask_retry_skip(label) == "skip":
@@ -526,7 +560,13 @@ def _calibrate_graph_weight(db_path: str, preset_w_graph: float) -> float:
     AIS data in the DB) so the pipeline never hard-fails because of C3.
     """
     try:
-        from src.score.causal_sanction import calibrate_graph_weight, run_causal_model, effects_to_dataframe, write_effects
+        from src.score.causal_sanction import (
+            calibrate_graph_weight,
+            effects_to_dataframe,
+            run_causal_model,
+            write_effects,
+        )
+
         causal_output = db_path.replace(".duckdb", "_causal_effects.parquet")
         effects = run_causal_model(db_path)
         df = effects_to_dataframe(effects)
@@ -556,11 +596,17 @@ def step_score(
     w_anomaly = round(1.0 - w_graph - w_identity, 4)
 
     composite_cmd = [
-        sys.executable, "-m", "src.score.composite",
-        "--db", p.db_path,
-        "--w-anomaly", str(w_anomaly),
-        "--w-graph", str(w_graph),
-        "--w-identity", str(w_identity),
+        sys.executable,
+        "-m",
+        "src.score.composite",
+        "--db",
+        p.db_path,
+        "--w-anomaly",
+        str(w_anomaly),
+        "--w-graph",
+        str(w_graph),
+        "--w-identity",
+        str(w_identity),
     ]
     if geo_filter_path:
         composite_cmd += ["--geopolitical-event-filter", geo_filter_path]
@@ -569,15 +615,26 @@ def step_score(
         ([sys.executable, "-m", "src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
         ([sys.executable, "-m", "src.score.anomaly", "--db", p.db_path], "anomaly"),
         (composite_cmd, "composite"),
-        ([sys.executable, "-m", "src.score.watchlist",
-          "--db", p.db_path,
-          "--output", os.getenv("WATCHLIST_OUTPUT_PATH", p.watchlist_path)], "watchlist"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "src.score.watchlist",
+                "--db",
+                p.db_path,
+                "--output",
+                os.getenv("WATCHLIST_OUTPUT_PATH", p.watchlist_path),
+            ],
+            "watchlist",
+        ),
     ]
     precision_line = ""
     for cmd, label in cmds:
         result = _run(cmd, env=env)
         if result.returncode != 0:
-            _fail(f"{label}: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'error'}")
+            _fail(
+                f"{label}: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'error'}"
+            )
             if non_interactive:
                 return False
             if _ask_retry_skip(label) == "skip":
@@ -594,9 +651,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
     _step(8, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
-        count_line = next(
-            (l for l in result.stdout.splitlines() if "total" in l.lower()), ""
-        )
+        count_line = next((l for l in result.stdout.splitlines() if "total" in l.lower()), "")
         _ok(count_line.strip() if count_line else "")
         return True
     _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
@@ -617,7 +672,17 @@ def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
     merged_env = {**os.environ, **env}
     try:
         subprocess.run(
-            [sys.executable, "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "src.api.main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8000",
+                "--reload",
+            ],
             env=merged_env,
         )
     except KeyboardInterrupt:
@@ -628,6 +693,7 @@ def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -649,7 +715,7 @@ def main() -> None:
         default=0,
         metavar="SECONDS",
         help="How long to collect live AIS data before moving on (default: 0 = skip in "
-             "--non-interactive, run until Ctrl-C in interactive mode)",
+        "--non-interactive, run until Ctrl-C in interactive mode)",
     )
     parser.add_argument(
         "--gdelt-days",
@@ -663,7 +729,7 @@ def main() -> None:
         action="store_true",
         default=False,
         help="Inject realistic dummy vessels (PETROVSKY ZVEZDA, SARI NOUR, OCEAN VOYAGER, "
-             "VERA SUNSET) into the DB after feature engineering so they appear on the dashboard",
+        "VERA SUNSET) into the DB after feature engineering so they appear on the dashboard",
     )
     parser.add_argument(
         "--marine-cadastre-year",
@@ -673,8 +739,8 @@ def main() -> None:
         metavar="YEAR",
         default=None,
         help="Load a Marine Cadastre historical year before the live pipeline runs "
-             "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
-             "Uses the region bbox automatically. Useful for the gulf region.",
+        "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
+        "Uses the region bbox automatically. Useful for the gulf region.",
     )
     parser.add_argument(
         "--geopolitical-event-filter",

@@ -44,6 +44,7 @@ SG_REPORTER = "702"
 # Comtrade download
 # ---------------------------------------------------------------------------
 
+
 def download_comtrade(
     reporter: str,
     partner_codes: list[str],
@@ -57,8 +58,7 @@ def download_comtrade(
     Returns number of rows inserted.
     """
     if not api_key:
-        print("  COMTRADE_API_KEY not set — skipping download. "
-              "Export will use cached data only.")
+        print("  COMTRADE_API_KEY not set — skipping download. Export will use cached data only.")
         return 0
 
     params = {
@@ -66,8 +66,8 @@ def download_comtrade(
         "partnerCode": ",".join(partner_codes),
         "cmdCode": hs_code,
         "period": str(year),
-        "motCode": "0",       # all modes of transport
-        "flowCode": "M",      # imports
+        "motCode": "0",  # all modes of transport
+        "flowCode": "M",  # imports
         "maxRecords": "500",
     }
     headers = {"Ocp-Apim-Subscription-Key": api_key}
@@ -91,17 +91,17 @@ def download_comtrade(
         }
         for r in data
     ]
-    df = pl.DataFrame(rows)
+    df = pl.DataFrame(rows)  # noqa: F841 — referenced by DuckDB via `FROM df`
     con = duckdb.connect(db_path)
     try:
-        before = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0]
+        before = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0]  # type: ignore[index]
         con.execute("""
             INSERT OR IGNORE INTO trade_flow
                 (reporter, partner, hs_code, period, trade_value_usd, route_key)
             SELECT reporter, partner, hs_code, period, trade_value_usd, route_key
             FROM df
         """)
-        inserted = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0] - before
+        inserted = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0] - before  # type: ignore[index]
     finally:
         con.close()
     return inserted
@@ -110,6 +110,7 @@ def download_comtrade(
 # ---------------------------------------------------------------------------
 # Route inference from AIS
 # ---------------------------------------------------------------------------
+
 
 def _infer_vessel_routes(db_path: str) -> pl.DataFrame:
     """Infer likely origin country for each tanker from its flag state.
@@ -136,12 +137,15 @@ def _load_trade_flows(db_path: str, reporter: str, hs_code: str) -> pl.DataFrame
     """Load cached Comtrade rows for a given reporter + HS code."""
     con = duckdb.connect(db_path, read_only=True)
     try:
-        return con.execute("""
+        return con.execute(
+            """
             SELECT partner, SUM(trade_value_usd) AS total_usd
             FROM trade_flow
             WHERE reporter = ? AND hs_code = ?
             GROUP BY partner
-        """, [reporter, hs_code]).pl()
+        """,
+            [reporter, hs_code],
+        ).pl()
     finally:
         con.close()
 
@@ -149,6 +153,7 @@ def _load_trade_flows(db_path: str, reporter: str, hs_code: str) -> pl.DataFrame
 # ---------------------------------------------------------------------------
 # Feature computation
 # ---------------------------------------------------------------------------
+
 
 def compute_trade_features(
     db_path: str = DEFAULT_DB_PATH,
@@ -169,23 +174,21 @@ def compute_trade_features(
         0.0 if no Comtrade data available.
     """
     vessel_df = _infer_vessel_routes(db_path)
-    trade_df  = _load_trade_flows(db_path, reporter, hs_code)
+    trade_df = _load_trade_flows(db_path, reporter, hs_code)
 
     # trade_by_partner: partner (ISO M49) → total USD
     trade_map: dict[str, float] = {}
     if not trade_df.is_empty():
-        trade_map = dict(zip(trade_df["partner"].to_list(),
-                             trade_df["total_usd"].to_list()))
+        trade_map = dict(zip(trade_df["partner"].to_list(), trade_df["total_usd"].to_list()))
 
     # Count vessels per flag (to estimate per-vessel share)
-    flag_counts = (
-        vessel_df.group_by("flag")
-        .agg(pl.len().alias("vessel_count"))
+    flag_counts = vessel_df.group_by("flag").agg(pl.len().alias("vessel_count"))
+    flag_count_map: dict[str, int] = dict(
+        zip(
+            flag_counts["flag"].to_list(),
+            flag_counts["vessel_count"].to_list(),
+        )
     )
-    flag_count_map: dict[str, int] = dict(zip(
-        flag_counts["flag"].to_list(),
-        flag_counts["vessel_count"].to_list(),
-    ))
 
     rows = []
     for row in vessel_df.iter_rows(named=True):
@@ -195,11 +198,13 @@ def compute_trade_features(
         is_tanker = ship_type in TANKER_TYPES
 
         if not is_tanker or flag not in SANCTIONED_EXPORTERS:
-            rows.append({
-                "mmsi": mmsi,
-                "route_cargo_mismatch": 0.0,
-                "declared_vs_estimated_cargo_value": 0.0,
-            })
+            rows.append(
+                {
+                    "mmsi": mmsi,
+                    "route_cargo_mismatch": 0.0,
+                    "declared_vs_estimated_cargo_value": 0.0,
+                }
+            )
             continue
 
         trade_val = trade_map.get(flag, 0.0)
@@ -208,28 +213,37 @@ def compute_trade_features(
         count = flag_count_map.get(flag, 1)
         per_vessel = trade_val / count if trade_val > 0 else 0.0
 
-        rows.append({
-            "mmsi": mmsi,
-            "route_cargo_mismatch": mismatch,
-            "declared_vs_estimated_cargo_value": per_vessel,
-        })
+        rows.append(
+            {
+                "mmsi": mmsi,
+                "route_cargo_mismatch": mismatch,
+                "declared_vs_estimated_cargo_value": per_vessel,
+            }
+        )
 
-    return pl.DataFrame(
-        rows,
-        schema={
-            "mmsi": pl.Utf8,
-            "route_cargo_mismatch": pl.Float32,
-            "declared_vs_estimated_cargo_value": pl.Float32,
-        },
-    ) if rows else pl.DataFrame(schema={
-        "mmsi": pl.Utf8,
-        "route_cargo_mismatch": pl.Float32,
-        "declared_vs_estimated_cargo_value": pl.Float32,
-    })
+    return (
+        pl.DataFrame(
+            rows,
+            schema={
+                "mmsi": pl.Utf8,
+                "route_cargo_mismatch": pl.Float32,
+                "declared_vs_estimated_cargo_value": pl.Float32,
+            },
+        )
+        if rows
+        else pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "route_cargo_mismatch": pl.Float32,
+                "declared_vs_estimated_cargo_value": pl.Float32,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Compute trade flow mismatch features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--reporter", default=SG_REPORTER)

@@ -104,11 +104,13 @@ def _cluster_group(
     cleared_mmsis: frozenset[str],
 ) -> pl.DataFrame:
     if group.is_empty():
-        return pl.DataFrame(schema={
-            "mmsi": pl.Utf8,
-            "cluster_label": pl.Int32,
-            "baseline_noise_score": pl.Float32,
-        })
+        return pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "cluster_label": pl.Int32,
+                "baseline_noise_score": pl.Float32,
+            }
+        )
 
     matrix = group.select(BEHAVIOR_COLUMNS).to_numpy()
     if len(group) < 3 or np.unique(matrix, axis=0).shape[0] < 2 or HDBSCAN is None:
@@ -129,11 +131,13 @@ def _cluster_group(
             if mmsi in cleared_mmsis:
                 noise[idx] = 0.0
 
-    return pl.DataFrame({
-        "mmsi": group["mmsi"],
-        "cluster_label": labels,
-        "baseline_noise_score": noise,
-    })
+    return pl.DataFrame(
+        {
+            "mmsi": group["mmsi"],
+            "cluster_label": labels,
+            "baseline_noise_score": noise,
+        }
+    )
 
 
 def compute_mpol_baseline(
@@ -160,11 +164,13 @@ def compute_mpol_baseline(
         cleared_mmsis = frozenset()
 
     if feature_df.is_empty():
-        return pl.DataFrame(schema={
-            "mmsi": pl.Utf8,
-            "cluster_label": pl.Int32,
-            "baseline_noise_score": pl.Float32,
-        })
+        return pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "cluster_label": pl.Int32,
+                "baseline_noise_score": pl.Float32,
+            }
+        )
 
     service_df: pl.DataFrame | None = None
     if exclude_service_vessels:
@@ -179,24 +185,30 @@ def compute_mpol_baseline(
 
     # Service vessels: pass-through with neutral baseline score so Isolation Forest dominates
     if service_df is not None and not service_df.is_empty():
-        outputs.append(pl.DataFrame({
-            "mmsi": service_df["mmsi"],
-            "cluster_label": pl.Series(
-                "cluster_label", [0] * service_df.height, dtype=pl.Int32
-            ),
-            "baseline_noise_score": pl.Series(
-                "baseline_noise_score",
-                [0.0] * service_df.height,
-                dtype=pl.Float32,
-            ),
-        }))
+        outputs.append(
+            pl.DataFrame(
+                {
+                    "mmsi": service_df["mmsi"],
+                    "cluster_label": pl.Series(
+                        "cluster_label", [0] * service_df.height, dtype=pl.Int32
+                    ),
+                    "baseline_noise_score": pl.Series(
+                        "baseline_noise_score",
+                        [0.0] * service_df.height,
+                        dtype=pl.Float32,
+                    ),
+                }
+            )
+        )
 
     if not outputs:
-        return pl.DataFrame(schema={
-            "mmsi": pl.Utf8,
-            "cluster_label": pl.Int32,
-            "baseline_noise_score": pl.Float32,
-        })
+        return pl.DataFrame(
+            schema={
+                "mmsi": pl.Utf8,
+                "cluster_label": pl.Int32,
+                "baseline_noise_score": pl.Float32,
+            }
+        )
 
     return pl.concat(outputs).sort("mmsi")
 

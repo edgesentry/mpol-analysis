@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
@@ -130,7 +130,11 @@ def _source_positive_coverage(
         }
 
     ranked_rows = ranked_all.select(
-        [c for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"] if c in ranked_all.columns]
+        [
+            c
+            for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"]
+            if c in ranked_all.columns
+        ]
     ).to_dicts()
 
     mmsi_idx: dict[str, tuple[int, dict[str, object]]] = {}
@@ -146,7 +150,11 @@ def _source_positive_coverage(
     matched: list[dict[str, object]] = []
     missed: list[dict[str, object]] = []
     for row in positives.select(
-        [c for c in ["mmsi", "imo", "label_confidence", "evidence_source", "evidence_url"] if c in positives.columns]
+        [
+            c
+            for c in ["mmsi", "imo", "label_confidence", "evidence_source", "evidence_url"]
+            if c in positives.columns
+        ]
     ).iter_rows(named=True):
         mmsi = _normalize_id(row.get("mmsi"))
         imo = _normalize_id(row.get("imo"))
@@ -165,7 +173,7 @@ def _source_positive_coverage(
         }
 
         if hit is None:
-            missed.append(common)
+            missed.append(common)  # type: ignore[arg-type]
             continue
 
         rank, watch = hit
@@ -180,7 +188,7 @@ def _source_positive_coverage(
         )
 
     detected_in_top_k: list[dict[str, int | float]] = []
-    matched_ranks = [int(x["rank"]) for x in matched]
+    matched_ranks = [int(x["rank"]) for x in matched]  # type: ignore[call-overload]
     total = len(positives)
     for k in capacities:
         hits = sum(1 for r in matched_ranks if r <= k)
@@ -263,7 +271,7 @@ def _precision_at_k(df: pl.DataFrame, k: int) -> float:
     if df.is_empty():
         return 0.0
     head = df.head(min(k, df.height))
-    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)
+    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)  # type: ignore[arg-type]
 
 
 def _recall_at_k(df: pl.DataFrame, k: int, positive_count: int) -> float:
@@ -281,7 +289,9 @@ def _ece(scores: list[float], labels: list[int], bins: int = 10) -> float:
     for b in range(bins):
         lo = b / bins
         hi = (b + 1) / bins
-        idx = [i for i, s in enumerate(scores) if (s >= lo and s < hi) or (b == bins - 1 and s <= hi)]
+        idx = [
+            i for i, s in enumerate(scores) if (s >= lo and s < hi) or (b == bins - 1 and s <= hi)
+        ]
         if not idx:
             continue
         bin_scores = [scores[i] for i in idx]
@@ -329,9 +339,11 @@ def _ops_thresholds(ranked: pl.DataFrame, capacities: list[int]) -> list[dict[st
             out.append({"review_capacity": k, "min_score": 1.0, "hit_rate": 0.0})
             continue
         top = ranked.head(k_eff)
-        min_score = float(top["confidence"].min() or 0.0)
+        min_score = float(top["confidence"].min() or 0.0)  # type: ignore[arg-type]
         known = top.filter(pl.col("y_true").is_not_null())
-        hit_rate = float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0
+        hit_rate = (
+            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0  # type: ignore[arg-type]
+        )
         out.append(
             {
                 "review_capacity": k,
@@ -342,7 +354,9 @@ def _ops_thresholds(ranked: pl.DataFrame, capacities: list[int]) -> list[dict[st
     return out
 
 
-def _stratified_metrics(labeled_ranked: pl.DataFrame, by_col: str) -> list[dict[str, float | int | str | None]]:
+def _stratified_metrics(
+    labeled_ranked: pl.DataFrame, by_col: str
+) -> list[dict[str, float | int | str | None]]:
     if by_col not in labeled_ranked.columns:
         return []
     rows: list[dict[str, float | int | str | None]] = []
@@ -446,13 +460,25 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
     fp = (
         ranked.filter((pl.col("confidence") >= used_threshold) & (pl.col("y_true") == 0))
         .head(10)
-        .select([c for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"] if c in ranked.columns])
+        .select(
+            [
+                c
+                for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"]
+                if c in ranked.columns
+            ]
+        )
         .to_dicts()
     )
     fn = (
         ranked.filter((pl.col("confidence") < used_threshold) & (pl.col("y_true") == 1))
         .head(10)
-        .select([c for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"] if c in ranked.columns])
+        .select(
+            [
+                c
+                for c in ["mmsi", "imo", "vessel_name", "vessel_type", "confidence"]
+                if c in ranked.columns
+            ]
+        )
         .to_dicts()
     )
 
@@ -496,7 +522,7 @@ def run_backtest(manifest_path: str, output_path: str, capacities: list[int]) ->
 
     report: dict[str, object] = {
         "schema_version": schema_version,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "manifest_path": str(Path(manifest_path).resolve()),
         "windows": window_reports,
         "summary": {

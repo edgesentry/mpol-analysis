@@ -14,7 +14,6 @@ import polars as pl
 from scripts.prepare_public_sanctions_db import prepare_public_sanctions_db
 from src.score.backtest import run_backtest
 
-
 WATCHLIST_BY_REGION = {
     "singapore": "data/processed/singapore_watchlist.parquet",
     "japan": "data/processed/japansea_watchlist.parquet",
@@ -101,24 +100,36 @@ def _build_labels_for_watchlist(
     pos_labels = pos.with_columns(
         pl.lit("positive").alias("label"),
         pl.lit("high").alias("label_confidence"),
-        pl.lit("https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json").alias("evidence_url"),
+        pl.lit("https://data.opensanctions.org/datasets/latest/sanctions/entities.ftm.json").alias(
+            "evidence_url"
+        ),
         pl.lit("public sanctions overlap (integration OR match)").alias("notes"),
-    ).select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
+    ).select(
+        ["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"]
+    )
 
     tail = watchlist.filter(pl.col("confidence") < 0.2)
     if not pos_labels.is_empty():
         tail = tail.filter(~pl.col("mmsi").is_in(pos_labels["mmsi"].to_list()))
 
     neg_size = max(20, min(max(100, max_known_cases), max(pos_labels.height * 2, 20)))
-    neg_labels = tail.head(neg_size).with_columns(
-        pl.lit("negative").alias("label"),
-        pl.lit("weak").alias("label_confidence"),
-        pl.lit("no_public_match_demo").alias("evidence_source"),
-        pl.lit("").alias("evidence_url"),
-        pl.lit("integration synthetic negative; analyst review required").alias("notes"),
-    ).select(["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"])
+    neg_labels = (
+        tail.head(neg_size)
+        .with_columns(
+            pl.lit("negative").alias("label"),
+            pl.lit("weak").alias("label_confidence"),
+            pl.lit("no_public_match_demo").alias("evidence_source"),
+            pl.lit("").alias("evidence_url"),
+            pl.lit("integration synthetic negative; analyst review required").alias("notes"),
+        )
+        .select(
+            ["mmsi", "imo", "label", "label_confidence", "evidence_source", "evidence_url", "notes"]
+        )
+    )
 
-    return pl.concat([pos_labels, neg_labels], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
+    return pl.concat([pos_labels, neg_labels], how="vertical_relaxed").unique(
+        subset=["mmsi", "imo"]
+    )
 
 
 def main() -> None:
@@ -140,9 +151,15 @@ def main() -> None:
     parser.add_argument("--public-db", default="data/processed/public_eval.duckdb")
     parser.add_argument("--public-raw", default="data/raw/sanctions/opensanctions_entities.jsonl")
     parser.add_argument("--public-metadata", default="data/processed/public_eval_metadata.json")
-    parser.add_argument("--manifest-out", default="data/processed/evaluation_manifest_public_integration.json")
-    parser.add_argument("--report-out", default="data/processed/backtest_report_public_integration.json")
-    parser.add_argument("--summary-out", default="data/processed/backtest_public_integration_summary.json")
+    parser.add_argument(
+        "--manifest-out", default="data/processed/evaluation_manifest_public_integration.json"
+    )
+    parser.add_argument(
+        "--report-out", default="data/processed/backtest_report_public_integration.json"
+    )
+    parser.add_argument(
+        "--summary-out", default="data/processed/backtest_public_integration_summary.json"
+    )
     parser.add_argument("--max-known-cases", type=int, default=200)
     parser.add_argument("--min-known-cases", type=int, default=30)
     parser.add_argument(

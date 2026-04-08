@@ -62,10 +62,20 @@ _COL_ACTION_GEO_COUNTRY = 53
 _COL_SOURCE_URL = 57
 
 _ALL_COLS = [
-    _COL_EVENT_ID, _COL_DATE, _COL_ACTOR1_NAME, _COL_ACTOR1_COUNTRY,
-    _COL_ACTOR2_NAME, _COL_ACTOR2_COUNTRY, _COL_EVENT_CODE, _COL_EVENT_ROOT,
-    _COL_QUAD_CLASS, _COL_GOLDSTEIN, _COL_AVG_TONE,
-    _COL_ACTION_GEO, _COL_ACTION_GEO_COUNTRY, _COL_SOURCE_URL,
+    _COL_EVENT_ID,
+    _COL_DATE,
+    _COL_ACTOR1_NAME,
+    _COL_ACTOR1_COUNTRY,
+    _COL_ACTOR2_NAME,
+    _COL_ACTOR2_COUNTRY,
+    _COL_EVENT_CODE,
+    _COL_EVENT_ROOT,
+    _COL_QUAD_CLASS,
+    _COL_GOLDSTEIN,
+    _COL_AVG_TONE,
+    _COL_ACTION_GEO,
+    _COL_ACTION_GEO_COUNTRY,
+    _COL_SOURCE_URL,
 ]
 
 
@@ -153,23 +163,25 @@ def _parse_csv(csv_path: Path) -> list[dict]:
         except (ValueError, TypeError):
             avg_tone, goldstein, quad_class = 0.0, 0.0, 0
 
-        records.append({
-            "event_id": str(row.get(col(_COL_EVENT_ID), "") or ""),
-            "event_date": event_date,
-            "actor1_name": actor1,
-            "actor1_country": actor1_country,
-            "actor2_name": actor2,
-            "actor2_country": actor2_country,
-            "event_code": event_code,
-            "event_root_code": root_code,
-            "quad_class": quad_class,
-            "goldstein_scale": goldstein,
-            "avg_tone": avg_tone,
-            "action_geo": action_geo,
-            "action_geo_country": action_geo_country,
-            "source_url": source_url,
-            "description": description,
-        })
+        records.append(
+            {
+                "event_id": str(row.get(col(_COL_EVENT_ID), "") or ""),
+                "event_date": event_date,
+                "actor1_name": actor1,
+                "actor1_country": actor1_country,
+                "actor2_name": actor2,
+                "actor2_country": actor2_country,
+                "event_code": event_code,
+                "event_root_code": root_code,
+                "quad_class": quad_class,
+                "goldstein_scale": goldstein,
+                "avg_tone": avg_tone,
+                "action_geo": action_geo,
+                "action_geo_country": action_geo_country,
+                "source_url": source_url,
+                "description": description,
+            }
+        )
 
     return records
 
@@ -213,7 +225,11 @@ def ingest_gdelt_events(
         if parent:
             os.makedirs(parent, exist_ok=True)
     storage_opts = lance_storage_options()
-    db = lancedb.connect(lance_path, storage_options=storage_opts) if storage_opts else lancedb.connect(lance_path)
+    db = (
+        lancedb.connect(lance_path, storage_options=storage_opts)
+        if storage_opts
+        else lancedb.connect(lance_path)
+    )
 
     if "events" in db.table_names():
         table = db.open_table("events")
@@ -244,7 +260,11 @@ def query_gdelt_context(
 
     storage_opts = lance_storage_options()
     try:
-        db = lancedb.connect(lance_path, storage_options=storage_opts) if storage_opts else lancedb.connect(lance_path)
+        db = (
+            lancedb.connect(lance_path, storage_options=storage_opts)
+            if storage_opts
+            else lancedb.connect(lance_path)
+        )
     except Exception:
         return []
     if "events" not in db.table_names():
@@ -265,15 +285,10 @@ def query_gdelt_context(
     query_text = " ".join(query_parts)
 
     try:
-        results = (
-            table.search(query_text, query_type="fts")
-            .limit(n * 3)
-            .to_list()
-        )
+        results = table.search(query_text, query_type="fts").limit(n * 3).to_list()
     except Exception:
         # FTS not available — filter by country code in actor fields
         try:
-            import pandas as pd
             df = table.to_pandas()
             mask = (
                 df["actor1_country"].str.upper().eq(flag_country.upper())
