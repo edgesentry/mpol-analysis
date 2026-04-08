@@ -678,6 +678,151 @@ PY
   echo "     Check 'signals' array for unmatched_sar_detections_30d"
 }
 
+run_eo_feature_smoke() {
+  echo
+  echo "[12] EO Feature Smoke Test"
+
+  local db_path
+  db_path="$(prompt "DuckDB path (will be created fresh, OVERWRITES existing file)" "data/processed/mpol.duckdb")"
+
+  local gap_hours
+  gap_hours="$(prompt "AIS gap duration hours" "12")"
+
+  local vessel_lat
+  vessel_lat="$(prompt "Vessel last-known lat" "1.0")"
+
+  local vessel_lon
+  vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
+
+  export DB_PATH="$db_path" GAP_HOURS="$gap_hours" \
+         VESSEL_LAT="$vessel_lat" VESSEL_LON="$vessel_lon"
+  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
+import os
+from datetime import UTC, datetime, timedelta
+import duckdb
+from src.ingest.schema import init_schema
+from src.ingest.eo_gfw import ingest_eo_records
+from src.features.eo_fusion import compute_eo_features
+
+db     = os.environ["DB_PATH"]
+gap_h  = float(os.environ.get("GAP_HOURS", "12"))
+v_lat  = float(os.environ.get("VESSEL_LAT", "1.0"))
+v_lon  = float(os.environ.get("VESSEL_LON", "103.0"))
+
+# Always start from a clean slate
+if os.path.exists(db):
+    os.remove(db)
+init_schema(db)
+
+now       = datetime.now(UTC)
+gap_start = now - timedelta(days=3)
+gap_end   = gap_start + timedelta(hours=gap_h)
+
+# Seed: target vessel (AIS gap) + 5 normal background vessels
+con = duckdb.connect(db)
+con.execute("""
+    INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
+    VALUES
+      ('123456789', ?, ?, ?, 8.0, 0, 70),
+      ('123456789', ?, ?, ?, 7.0, 0, 70)
+""", [gap_start - timedelta(hours=1), v_lat, v_lon,
+      gap_end   + timedelta(hours=1), v_lat, v_lon])
+
+normal_vessels = [
+    ("200000001", 1.3, 103.8, 70), ("200000002", 1.4, 104.0, 70),
+    ("200000003", 1.2, 103.5, 80), ("200000004", 1.5, 103.9, 70),
+    ("200000005", 1.1, 104.1, 80),
+]
+for mmsi, lat, lon, stype in normal_vessels:
+    for h in range(0, 72, 3):
+        ts = now - timedelta(hours=72 - h)
+        con.execute(
+            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) "
+            "VALUES (?, ?, ?, ?, 8.0, 0, ?)",
+            [mmsi, ts, lat, lon, stype],
+        )
+con.execute("""
+    INSERT INTO vessel_meta (mmsi, flag, ship_type) VALUES
+      ('123456789','IR',70),('200000001','SG',70),('200000002','SG',70),
+      ('200000003','SG',80),('200000004','SG',70),('200000005','SG',80)
+""")
+con.close()
+print(f"Seeded vessel 123456789 with {gap_h}h AIS gap at ({v_lat}, {v_lon})")
+print("Seeded 5 normal background vessels")
+
+# Seed: 2 unmatched + 1 matched EO detection
+matched_time = gap_start - timedelta(minutes=30)   # during AIS coverage
+detections = [
+    {"detection_id": "eo-dark-1",
+     "detected_at": gap_start + timedelta(hours=3),
+     "lat": v_lat + 0.05, "lon": v_lon + 0.05, "source": "gfw"},
+    {"detection_id": "eo-dark-2",
+     "detected_at": gap_start + timedelta(hours=gap_h / 2),
+     "lat": v_lat + 0.08, "lon": v_lon,         "source": "gfw"},
+    {"detection_id": "eo-matched",
+     "detected_at": matched_time,
+     "lat": v_lat + 0.02, "lon": v_lon + 0.02,  "source": "gfw"},
+]
+ingest_eo_records(detections, db_path=db)
+print("Seeded 2 dark + 1 matched EO detections")
+
+# Verify feature computation
+result = compute_eo_features(db, window_days=30, match_radius_deg=0.1,
+                              match_window_minutes=120, gap_threshold_h=6.0,
+                              attribution_radius_deg=0.5)
+if result.is_empty():
+    print("Result: FAILED — no EO features computed")
+    raise SystemExit(1)
+
+row = result.filter(result["mmsi"] == "123456789")
+if row.is_empty():
+    print("Result: FAILED — vessel 123456789 not in output")
+    raise SystemExit(1)
+
+dark  = row["eo_dark_count_30d"][0]
+ratio = row["eo_ais_mismatch_ratio"][0]
+print(f"Result: SUCCESS — mmsi=123456789  eo_dark_count_30d={dark}  eo_ais_mismatch_ratio={ratio:.2f}")
+print(result)
+PY
+  )
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "Result: FAILED"
+    return
+  fi
+  echo "Artifact: $db_path"
+
+  if ! prompt_yes_no "Run full pipeline + launch dashboard to verify in app" "false"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  docker compose up dashboard"
+  echo "  2. Open: http://localhost:8000 → Review tab → vessel 123456789"
+  echo "     Look for: 'Eo Dark Count 30D  2 dark detections'"
+  echo "              'Eo Ais Mismatch Ratio  67% dark'"
+  echo "  3. API:  curl http://localhost:8000/api/vessels/123456789/signals"
+}
+
 run_seed_dev_data() {
   echo
   echo "[6] Seed Dev Data"
@@ -773,6 +918,12 @@ main_menu() {
     echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
     echo "      Who: developer, data engineer"
     echo
+    echo "12) EO Feature Smoke Test"
+    echo "     What: seed one vessel with an AIS gap + 2 dark and 1 matched EO detections,"
+    echo "           run eo_dark_count_30d / eo_ais_mismatch_ratio, verify counts"
+    echo "     When: after changing EO ingestion or feature logic; verifying issue #119"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -792,6 +943,7 @@ main_menu() {
       9) run_prepare_sanctions_db ;;
       10) run_build_sanctions_demo ;;
       11) run_sar_feature_smoke ;;
+      12) run_eo_feature_smoke ;;
       q|quit|exit)
         echo "Bye"
         return
