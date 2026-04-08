@@ -558,7 +558,10 @@ gap_h   = float(os.environ.get("GAP_HOURS", "12"))
 v_lat   = float(os.environ.get("VESSEL_LAT", "1.0"))
 v_lon   = float(os.environ.get("VESSEL_LON", "103.0"))
 
-# Fresh schema
+# Always start from a clean slate
+import os as _os
+if _os.path.exists(db):
+    _os.remove(db)
 init_schema(db)
 
 now        = datetime.now(UTC)

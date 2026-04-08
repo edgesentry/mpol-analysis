@@ -170,6 +170,11 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
                 computed_at                       TIMESTAMPTZ DEFAULT now()
             )
         """)
+        # Migrations: add columns introduced after initial schema creation
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS unmatched_sar_detections_30d INTEGER DEFAULT 0
+        """)
     finally:
         con.close()
 
