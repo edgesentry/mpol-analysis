@@ -11,11 +11,11 @@ Usage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import polars as pl
 
-from src.storage.config import output_uri, write_parquet, read_parquet
+from src.storage.config import output_uri, read_parquet, write_parquet
+
 WATCHLIST_URI = output_uri("candidate_watchlist.parquet")
 SAR_MMSI = "613115678"
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 from pathlib import Path
 
 
@@ -27,12 +26,12 @@ def main() -> None:
     args = parser.parse_args()
 
     source = Path(args.source)
-    target = Path(args.target)
 
     if not source.exists():
         raise SystemExit(f"Source demo watchlist not found: {source}")
 
     import polars as pl
+
     from src.storage.config import output_uri, write_parquet
 
     df = pl.read_parquet(source)
