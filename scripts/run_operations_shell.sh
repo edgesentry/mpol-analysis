@@ -202,11 +202,12 @@ PY
 }
 
 seed_demo_causal_effects() {
-  local output_path="$PROJECT_ROOT/data/processed/causal_effects.parquet"
-  uv run python - <<PY
+  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
 import polars as pl
+from src.storage.config import output_uri
+from src.storage.config import write_parquet as write_parquet_uri
 
-pl.DataFrame({
+df = pl.DataFrame({
     "regime":            ["OFAC Iran", "OFAC Russia", "UN DPRK"],
     "n_treated":         [18, 32, 11],
     "n_control":         [142, 180, 95],
@@ -216,9 +217,13 @@ pl.DataFrame({
     "p_value":           [0.0003, 0.09, 0.45],
     "is_significant":    [True, False, False],
     "calibrated_weight": [0.55, 0.40, 0.40],
-}).write_parquet("$output_path")
-print("Artifact: $output_path")
+})
+
+uri = output_uri("causal_effects.parquet")
+write_parquet_uri(df, uri)
+print(f"Artifact: {uri}")
 PY
+  )
 }
 
 run_demo_smoke() {
