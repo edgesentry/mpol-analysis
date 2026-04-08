@@ -34,10 +34,7 @@ print(
     f"recall@100={m.get('recall_at_100', 0.0):.3f}, "
     f"auroc={m.get('auroc') or 'n/a'}"
 )
-print(
-    f"Leakage: {leak.get('labels_dropped', 0)} pre-labels dropped "
-    f"(evidence after cutoff date)"
-)
+print(f"Leakage: {leak.get('labels_dropped', 0)} pre-labels dropped (evidence after cutoff date)")
 print(
     f"Disagreement: model-high/analyst-negative={dis.get('model_high_analyst_negative_count', 0)}, "
     f"model-low/analyst-positive={dis.get('model_low_analyst_positive_count', 0)}"
