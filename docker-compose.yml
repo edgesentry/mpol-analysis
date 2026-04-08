@@ -17,6 +17,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # Downloads the GGUF model on first run; skips if already present in the volume.
+  # Model: Gemma 4B Instruct Q4_K_M (~2.5 GB). Override MODEL_URL / LLAMACPP_MODEL_PATH to swap.
+  model_init:
+    image: curlimages/curl:latest
+    container_name: mpol-model-init
+    volumes:
+      - models:/models
+    environment:
+      MODEL_URL: ${MODEL_URL:-https://huggingface.co/bartowski/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf}
+      MODEL_FILE: ${MODEL_FILE:-gemma-3-4b-it-Q4_K_M.gguf}
+    entrypoint: >
+      sh -c "
+        if [ -f /models/$$MODEL_FILE ]; then
+          echo 'Model already present, skipping download.';
+        else
+          echo 'Downloading $$MODEL_FILE (~2.5 GB) …';
+          curl -L --progress-bar -o /models/$$MODEL_FILE $$MODEL_URL;
+          echo 'Download complete.';
+        fi
+      "
+
   # Creates the default bucket on first run
   minio_init:
     image: minio/mc:latest
@@ -47,10 +68,16 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Local LLM — defaults to llamacpp with the model downloaded by model_init
+      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
+      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/gemma-3-4b-it-Q4_K_M.gguf}
     volumes:
       - ./data:/app/data   # DuckDB working file stays local
+      - models:/app/models  # GGUF model downloaded by model_init
     depends_on:
       minio_init:
+        condition: service_completed_successfully
+      model_init:
         condition: service_completed_successfully
     command: ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
 
@@ -81,3 +108,4 @@ services:
 
 volumes:
   minio_data:
+  models:  # GGUF model files — persists across rebuilds

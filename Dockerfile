@@ -7,6 +7,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    cmake \
     curl \
     pkg-config \
     libssl-dev \
@@ -29,7 +30,7 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen
+    uv sync --no-dev --frozen --extra llm
 
 # ── runtime: lean image without build tools ────────────────────────────────────
 FROM python:3.12-slim AS runtime
