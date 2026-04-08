@@ -142,27 +142,27 @@ class LlamaCppClient:
 
     _instance: object = None  # lazy singleton — loaded once on first call
 
-    def _get_model(self) -> object | None:
+    def _get_model(self) -> object | None:  # type: ignore[return]
         if LlamaCppClient._instance is not None:
             return LlamaCppClient._instance
         try:
-            from llama_cpp import Llama  # type: ignore[import]
+            from llama_cpp import Llama  # type: ignore[import-untyped]
         except ImportError:
             return None
 
         model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
         repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
 
-        if model_path and os.path.exists(model_path):
-            LlamaCppClient._instance = Llama(
-                model_path=model_path,
-                n_ctx=4096,
-                n_threads=os.cpu_count() or 4,
-                verbose=False,
-            )
-        elif repo_id:
-            filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
-            try:
+        try:
+            if model_path and os.path.exists(model_path):
+                LlamaCppClient._instance = Llama(
+                    model_path=model_path,
+                    n_ctx=4096,
+                    n_threads=os.cpu_count() or 4,
+                    verbose=False,
+                )
+            elif repo_id:
+                filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
                 LlamaCppClient._instance = Llama.from_pretrained(
                     repo_id=repo_id,
                     filename=filename,
@@ -170,9 +170,9 @@ class LlamaCppClient:
                     n_threads=os.cpu_count() or 4,
                     verbose=False,
                 )
-            except Exception:
+            else:
                 return None
-        else:
+        except Exception:
             return None
 
         return LlamaCppClient._instance
@@ -197,7 +197,7 @@ class LlamaCppClient:
 
         def _run() -> None:
             try:
-                response = model.create_chat_completion(  # type: ignore[union-attr]
+                response = model.create_chat_completion(  # type: ignore[union-attr,attr-defined]
                     messages=full_messages,
                     stream=True,
                     max_tokens=512,

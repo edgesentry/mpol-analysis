@@ -30,7 +30,8 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen --extra llm
+    uv sync --no-dev --frozen && \
+    uv pip install --no-cache "llama-cpp-python>=0.3" "huggingface-hub>=0.24"
 
 # ── runtime: lean image without build tools ────────────────────────────────────
 FROM python:3.12-slim AS runtime

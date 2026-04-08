@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.api.llm import AnthropicClient, OpenAICompatClient, get_llm_client
+from src.api.llm import AnthropicClient, LlamaCppClient, OpenAICompatClient, get_llm_client
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -135,10 +135,10 @@ async def test_anthropic_client_ignores_non_delta_events():
 # ── get_llm_client factory ─────────────────────────────────────────────────
 
 
-def test_get_llm_client_default_is_openai_compat(monkeypatch):
+def test_get_llm_client_default_is_llamacpp(monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     client = get_llm_client()
-    assert isinstance(client, OpenAICompatClient)
+    assert isinstance(client, LlamaCppClient)
 
 
 def test_get_llm_client_anthropic(monkeypatch):
