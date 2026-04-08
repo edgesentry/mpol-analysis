@@ -64,10 +64,10 @@ if [[ -z "${LLAMACPP_MODEL_PATH:-}" ]]; then
     export LLAMACPP_MODEL_PATH="${DEFAULT_MODEL}"
   elif [[ -f "${FALLBACK_MODEL}" ]]; then
     export LLAMACPP_MODEL_PATH="${FALLBACK_MODEL}"
-  else
-    echo "⚠️  No GGUF model found. LLM briefs will be disabled."
-    echo "   Run:  uv run python scripts/download_model.py gemma-4-e4b-it"
-    echo "   Or set LLAMACPP_MODEL_PATH in .env or via --model."
+  elif [[ "${LLM_PROVIDER:-llamacpp}" == "llamacpp" ]]; then
+    echo "⬇️  No GGUF model found. Downloading default model (gemma-4-e4b-it)…"
+    uv run python scripts/download_model.py gemma-4-e4b-it --dir "${HOME}/models"
+    export LLAMACPP_MODEL_PATH="${HOME}/models/gemma-4-E4B-it-Q4_K_M.gguf"
   fi
 fi
 
