@@ -215,6 +215,38 @@ def vessel_causal(mmsi: str) -> JSONResponse:
     return JSONResponse({"mmsi": mmsi, "causal_score": 0.0, "is_candidate": False, "signals": []})
 
 
+@router.get("/api/vessels/{mmsi}/signals")
+def vessel_signals(mmsi: str) -> JSONResponse:
+    """Return the top SHAP signals for a vessel.
+
+    Response shape:
+      { "mmsi": "...", "confidence": 0.87, "signals": [
+          { "feature": "ais_gap_count_30d", "value": 14, "contribution": 0.42 }, ...
+      ]}
+    Signals are sorted by contribution descending (up to 5).
+    Returns an empty signals list if the vessel is not found.
+    """
+    df = _load_watchlist()
+    if df.is_empty():
+        return JSONResponse({"mmsi": mmsi, "confidence": None, "signals": []})
+
+    rows = df.filter(pl.col("mmsi") == mmsi)
+    if rows.is_empty():
+        return JSONResponse({"mmsi": mmsi, "confidence": None, "signals": []})
+
+    row = rows.row(0, named=True)
+    try:
+        signals = json.loads(row.get("top_signals") or "[]")
+    except Exception:
+        signals = []
+
+    return JSONResponse({
+        "mmsi": mmsi,
+        "confidence": row.get("confidence"),
+        "signals": signals,
+    })
+
+
 @router.get("/api/vessel-types")
 def vessel_types() -> JSONResponse:
     df = _load_watchlist()

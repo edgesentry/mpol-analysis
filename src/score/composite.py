@@ -393,7 +393,7 @@ def _top_signals_fallback(feature_df: pl.DataFrame) -> list[str]:
                 "value": value,
                 "contribution": round(magnitude, 3),
             }
-            for feature, value, magnitude in candidates[:3]
+            for feature, value, magnitude in candidates[:5]
         ]
         rows.append(json.dumps(payload))
     return rows
@@ -425,7 +425,7 @@ def _compute_top_signals(feature_df: pl.DataFrame, model, scaled_matrix: np.ndar
                     }
                 )
             contributions.sort(key=lambda item: float(item["contribution"]), reverse=True)  # type: ignore[arg-type]
-            rows.append(json.dumps(contributions[:3]))
+            rows.append(json.dumps(contributions[:5]))
         return pl.Series("top_signals", rows)
     except Exception:
         return pl.Series("top_signals", _top_signals_fallback(feature_df))

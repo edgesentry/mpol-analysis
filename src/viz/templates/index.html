@@ -367,6 +367,40 @@
       line-height: 1.5;
     }
 
+    /* ── SHAP breakdown table ───────────────────────────── */
+    .shap-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.7rem;
+      margin-top: 0.4rem;
+      color: #cbd5e1;
+    }
+    .shap-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 0.1rem 0.3rem 0.2rem 0;
+      border-bottom: 1px solid #2d3748;
+    }
+    .shap-table td {
+      padding: 0.18rem 0.3rem 0.18rem 0;
+      vertical-align: middle;
+    }
+    .shap-bar-track {
+      display: inline-block;
+      width: 60px;
+      height: 7px;
+      background: #2d3748;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+    .shap-bar-fill {
+      display: inline-block;
+      height: 7px;
+      background: #f6ad55;
+      border-radius: 3px;
+    }
+
     /* ── Review panel ───────────────────────────────────── */
     #review-panel {
       display: none;
@@ -925,8 +959,55 @@ function renderVesselDetails(meta) {
     `<div><strong>MMSI:</strong> ${_escapeHtml(meta.mmsi)}</div>` +
     `<div><strong>Type:</strong> ${_escapeHtml(meta.vesselType)} &nbsp; <strong>Flag:</strong> ${_escapeHtml(meta.flag)}</div>` +
     `<div><strong>Score:</strong> ${_escapeHtml(score)} &nbsp; <strong>Last seen:</strong> ${_escapeHtml(meta.lastSeen)}</div>` +
-    `<div><strong>Signals:</strong> ${_escapeHtml(meta.signals)}</div>` +
+    `<div id="shap-table-area"><span style="color:#718096;font-size:0.7rem;">Loading signals…</span></div>` +
     `<div id="causal-badge-area"></div>`;
+
+  fetch(`/api/vessels/${encodeURIComponent(meta.mmsi)}/signals`)
+    .then(r => r.json())
+    .then(data => {
+      const area = document.getElementById('shap-table-area');
+      if (!area) return;
+      const signals = data.signals || [];
+      if (signals.length === 0) {
+        area.innerHTML = '<div style="color:#718096;font-size:0.7rem;">No signal data available.</div>';
+        return;
+      }
+      const maxContrib = Math.max(...signals.map(s => s.contribution), 0.001);
+      const featureLabel = f => f
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+      const valueLabel = (feature, value) => {
+        if (value === null || value === undefined) return '—';
+        const v = Number(value);
+        if (feature.includes('gap_count')) return `${v} gaps`;
+        if (feature.includes('gap_max_hours')) return `${v.toFixed(0)} hrs`;
+        if (feature.includes('sanctions_distance')) return v >= 99 ? 'none' : `${v} hop${v !== 1 ? 's' : ''}`;
+        if (feature.includes('sts_hub_degree')) return `${v} transfers`;
+        if (feature.includes('sts_candidate')) return `${v} STS`;
+        if (feature.includes('flag_changes')) return `${v} changes`;
+        if (feature.includes('name_changes')) return `${v} changes`;
+        if (feature.includes('owner_changes')) return `${v} changes`;
+        if (feature.includes('position_jump')) return `${v} jumps`;
+        return v % 1 === 0 ? String(v) : v.toFixed(2);
+      };
+      const rows = signals.map(s => {
+        const barPct = Math.round((s.contribution / maxContrib) * 100);
+        return `<tr>
+          <td style="color:#e2e8f0;">${featureLabel(s.feature)}</td>
+          <td style="color:#94a3b8;white-space:nowrap;">${valueLabel(s.feature, s.value)}</td>
+          <td style="white-space:nowrap;">+${s.contribution.toFixed(2)}</td>
+          <td><span class="shap-bar-track"><span class="shap-bar-fill" style="width:${barPct}%;"></span></span></td>
+        </tr>`;
+      }).join('');
+      area.innerHTML =
+        `<table class="shap-table">` +
+        `<thead><tr><th>Feature</th><th>Value</th><th>SHAP</th><th></th></tr></thead>` +
+        `<tbody>${rows}</tbody></table>`;
+    })
+    .catch(() => {
+      const area = document.getElementById('shap-table-area');
+      if (area) area.innerHTML = '';
+    });
 
   fetch(`/api/vessels/${encodeURIComponent(meta.mmsi)}/causal`)
     .then(r => r.json())
