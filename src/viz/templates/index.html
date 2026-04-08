@@ -379,12 +379,6 @@
       margin-top: 0.25rem;
       font-family: monospace;
     }
-    @media print {
-      body > *:not(#dispatch-modal) { display: none !important; }
-      #dispatch-modal { position:static !important; background:none !important; display:block !important; }
-      #dispatch-modal-inner { border:none !important; margin:0 !important; padding:0 !important; max-width:100% !important; }
-      button { display:none !important; }
-    }
     .brief-section { margin-bottom:1.1rem; border-top:1px solid #1e3a5a; padding-top:0.7rem; }
     .brief-section h4 { font-size:0.72rem; font-weight:700; color:#64748b; letter-spacing:0.08em; text-transform:uppercase; margin:0 0 0.4rem; }
     .brief-kv { display:grid; grid-template-columns:repeat(3,1fr); gap:0.3rem 1rem; }
@@ -722,7 +716,7 @@
           <input type="checkbox" id="redact-mmsi-toggle" onchange="renderDispatchBrief()" style="cursor:pointer;"/>
           Redact MMSI
         </label>
-        <button onclick="window.print()" style="padding:0.25rem 0.7rem;background:#1e3a5a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;cursor:pointer;font-size:0.72rem;">&#128438; Print / PDF</button>
+        <button onclick="printDispatchBrief()" style="padding:0.25rem 0.7rem;background:#1e3a5a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;cursor:pointer;font-size:0.72rem;">&#128438; Print / PDF</button>
         <button onclick="document.getElementById('dispatch-modal').style.display='none'" style="padding:0.25rem 0.7rem;background:#1e2a3a;border:1px solid #334155;border-radius:4px;color:#94a3b8;cursor:pointer;font-size:0.72rem;">&#x2715; Close</button>
       </div>
     </div>
@@ -1383,6 +1377,41 @@ function startAlertStream() {
     setTimeout(() => toast.remove(), 8000);
   };
   es.onerror = () => { /* reconnect is automatic */ };
+}
+
+function printDispatchBrief() {
+  const body = document.getElementById('dispatch-brief-body');
+  if (!body) return;
+  const win = window.open('', '_blank', 'width=820,height=1000');
+  if (!win) { alert('Allow pop-ups for this page to print the dispatch brief.'); return; }
+  win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Patrol Dispatch Brief</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11pt;color:#1e293b;padding:2cm;}
+  h1{font-size:13pt;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1.2rem;border-bottom:2px solid #0f172a;padding-bottom:0.4rem;}
+  .brief-section{margin-bottom:1rem;border-top:1px solid #cbd5e1;padding-top:0.6rem;}
+  .brief-section h4{font-size:8pt;font-weight:700;color:#64748b;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.4rem;}
+  .brief-kv{display:grid;grid-template-columns:repeat(3,1fr);gap:0.3rem 1rem;}
+  .brief-kv span{font-size:8pt;color:#64748b;}
+  .brief-kv strong{font-size:9.5pt;color:#0f172a;}
+  .brief-tier-high{color:#dc2626;font-weight:700;}
+  .brief-tier-medium{color:#d97706;font-weight:700;}
+  .brief-tier-low{color:#16a34a;font-weight:700;}
+  .brief-table{width:100%;border-collapse:collapse;font-size:9pt;}
+  .brief-table th{text-align:left;padding:0.2rem 0.4rem;border-bottom:1px solid #94a3b8;font-size:8pt;color:#64748b;text-transform:uppercase;font-weight:600;}
+  .brief-table td{padding:0.2rem 0.4rem;border-bottom:1px solid #e2e8f0;color:#1e293b;}
+  .brief-sanctioned{color:#dc2626;font-weight:700;}
+  footer{margin-top:1.5rem;font-size:8pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:0.4rem;}
+  @media print{button{display:none!important;}}
+</style></head>
+<body>
+<h1>Patrol Dispatch Brief</h1>
+${body.innerHTML}
+</body></html>`);
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
 }
 
 // ── Dispatch brief ─────────────────────────────────────────────────────────
