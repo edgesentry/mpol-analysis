@@ -54,23 +54,7 @@ run_cmd() {
 
 print_watchlist_summary() {
   local watchlist_path="$1"
-  WATCHLIST_PATH="$watchlist_path" uv run python - <<'PY'
-import os
-from pathlib import Path
-import polars as pl
-
-path = Path(os.environ["WATCHLIST_PATH"]).resolve()
-if not path.exists():
-    print(f"Result: watchlist not found at {path}")
-    raise SystemExit(0)
-
-df = pl.read_parquet(path)
-print(f"Result: watchlist rows = {df.height}")
-if df.height > 0 and {"mmsi", "confidence"}.issubset(set(df.columns)):
-    row = df.sort("confidence", descending=True).head(1).to_dicts()[0]
-    print(f"Top candidate: mmsi={row.get('mmsi')} confidence={row.get('confidence')}")
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_watchlist_summary.py "$watchlist_path")
 }
 
 run_full_screening() {
@@ -137,27 +121,7 @@ run_review_feedback() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but output report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-summary = report.get("summary", {}) if isinstance(report, dict) else {}
-print("Result: SUCCESS")
-print(
-    "Summary: "
-    f"reviewed_vessel_count={summary.get('reviewed_vessel_count', 0)}, "
-    f"regions_evaluated={summary.get('regions_evaluated', 0)}, "
-    f"overall_drift_pass={summary.get('overall_drift_pass', True)}"
-)
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_review_feedback_report.py --report "$abs_output")
 }
 
 run_backtesting_public_batch() {
@@ -179,26 +143,8 @@ run_backtesting_public_batch() {
 
   local summary_path="$PROJECT_ROOT/data/processed/backtest_public_integration_summary.json"
   local report_path="$PROJECT_ROOT/data/processed/backtest_report_public_integration.json"
-  SUMMARY_PATH="$summary_path" REPORT_PATH="$report_path" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-summary_path = Path(os.environ["SUMMARY_PATH"]).resolve()
-report_path = Path(os.environ["REPORT_PATH"]).resolve()
-if not summary_path.exists():
-    print("Result: SUCCESS, but summary report was not found")
-    raise SystemExit(0)
-
-summary = json.loads(summary_path.read_text())
-print("Result: SUCCESS")
-print(
-    "Summary: "
-    f"regions={summary.get('regions', [])}, "
-    f"total_known_cases={summary.get('total_known_cases', 0)}"
-)
-print(f"Artifacts: {summary_path}, {report_path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtest_report.py \
+      --summary "$summary_path" --report "$report_path")
 }
 
 seed_demo_causal_effects() {
@@ -216,28 +162,7 @@ seed_demo_causal_effects() {
     echo "  MinIO not detected — writing to local data/processed/"
   fi
 
-  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
-import polars as pl
-from src.storage.config import output_uri
-from src.storage.config import write_parquet as write_parquet_uri
-
-df = pl.DataFrame({
-    "regime":            ["OFAC Iran", "OFAC Russia", "UN DPRK"],
-    "n_treated":         [18, 32, 11],
-    "n_control":         [142, 180, 95],
-    "att_estimate":      [0.42, 0.15, -0.05],
-    "att_ci_lower":      [0.31, -0.02, -0.18],
-    "att_ci_upper":      [0.53, 0.32, 0.08],
-    "p_value":           [0.0003, 0.09, 0.45],
-    "is_significant":    [True, False, False],
-    "calibrated_weight": [0.55, 0.40, 0.40],
-})
-
-uri = output_uri("causal_effects.parquet")
-write_parquet_uri(df, uri)
-print(f"Artifact: {uri}")
-PY
-  )
+  (cd "$PROJECT_ROOT" && uv run python scripts/seed_demo_causal_effects.py)
 }
 
 run_demo_smoke() {
@@ -292,28 +217,7 @@ run_backtracking() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-rc = report.get("regression_checks", {})
-status = "PASS" if rc.get("pass") else "FAIL"
-print("Result: SUCCESS")
-print(
-    f"Summary: confirmed={rc.get('confirmed_vessel_count', 0)}, "
-    f"rewound={rc.get('rewind_vessel_count', 0)}, "
-    f"propagated={rc.get('propagated_entity_count', 0)}, "
-    f"regression={status}"
-)
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtracking_report.py --report "$abs_output")
 }
 
 run_prepare_sanctions_db() {
@@ -414,57 +318,7 @@ run_prelabel_evaluation() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-result = report.get("result", {})
-m = result.get("metrics", {})
-leak = result.get("leakage_report", {})
-dis = result.get("disagreement", {})
-
-print("Result: SUCCESS")
-print(
-    f"Metrics: candidates={m.get('candidate_count', 0)}, "
-    f"labeled={m.get('labeled_count', 0)}, "
-    f"positives={m.get('positive_count', 0)}, "
-    f"precision@50={m.get('precision_at_50', 0.0):.3f}, "
-    f"recall@100={m.get('recall_at_100', 0.0):.3f}, "
-    f"auroc={m.get('auroc') or 'n/a'}"
-)
-print(
-    f"Leakage: {leak.get('labels_dropped', 0)} pre-labels dropped "
-    f"(evidence after cutoff date)"
-)
-print(
-    f"Disagreement: model-high/analyst-negative={dis.get('model_high_analyst_negative_count', 0)}, "
-    f"model-low/analyst-positive={dis.get('model_low_analyst_positive_count', 0)}"
-)
-
-tier_breakdown = result.get("confidence_tier_breakdown", {})
-if tier_breakdown:
-    print("Tier breakdown:")
-    for tier, stats in tier_breakdown.items():
-        print(
-            f"  {tier}: count={stats['count']}, "
-            f"positives={stats['positive_count']}, "
-            f"precision@50={stats['precision_at_50']:.3f}"
-        )
-
-if dis.get("model_low_analyst_positive"):
-    print("Model missed (low-score suspected-positives):")
-    for row in dis["model_low_analyst_positive"][:3]:
-        print(f"  mmsi={row.get('mmsi')} score={row.get('confidence', '?'):.3f} notes={row.get('evidence_notes', '')[:60]}")
-
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_prelabel_report.py --report "$abs_output")
 }
 
 run_causal_analysis() {
@@ -478,52 +332,16 @@ run_causal_analysis() {
 
   echo
   echo "── Drift Monitor ──────────────────────────────────────────────────────────────"
-  if ! run_cmd uv run python src/analysis/monitor.py --db "$db_path" --json \
-      2>/dev/null | uv run python - <<PY
-import json, sys
-data = json.load(sys.stdin)
-s = data["summary"]
-print(f"Result: ok={s['ok']}  warning={s['warning']}  critical={s['critical']}")
-for a in data["alerts"]:
-    icon = {"ok": "✓", "warning": "⚠", "critical": "✗"}.get(a["severity"], "?")
-    print(f"  {icon} [{a['severity'].upper()}] {a['check_name']}: {a['message']}")
-PY
-  then
+  if ! (cd "$PROJECT_ROOT" && uv run python src/analysis/monitor.py --db "$db_path" --json \
+      2>/dev/null | uv run python scripts/print_monitor_summary.py); then
     echo "Result: FAILED (drift monitor)"
     return
   fi
 
   echo
   echo "── Unknown-Unknown Causal Reasoner ────────────────────────────────────────────"
-  DB_PATH="$db_path" TOP_N="$top_n" uv run python - <<'PY'
-import os
-from src.analysis.causal import score_unknown_unknowns
-from src.score.causal_sanction import run_causal_model
-
-db = os.environ["DB_PATH"]
-top_n = int(os.environ.get("TOP_N", "5"))
-
-try:
-    effects = run_causal_model(db)
-    sig = sum(1 for e in effects if e.is_significant)
-    print(f"C3 causal effects: {len(effects)} regimes, {sig} significant")
-except Exception as exc:
-    print(f"C3 model unavailable ({exc}), running without causal evidence")
-    effects = []
-
-candidates = score_unknown_unknowns(db_path=db, causal_effects=effects or None)
-print(f"Unknown-unknown candidates: {len(candidates)}")
-if not candidates:
-    print("  (no vessels meet the minimum signal threshold)")
-else:
-    for c in candidates[:top_n]:
-        signals = ", ".join(s.feature for s in c.matching_signals)
-        print(f"  mmsi={c.mmsi}  score={c.causal_score:.3f}  signals=[{signals}]")
-    if candidates:
-        print()
-        print("Sample prompt context for top candidate:")
-        print(candidates[0].prompt_context())
-PY
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/run_causal_reasoner.py \
+      --db "$db_path" --top-n "$top_n")
 }
 
 run_sar_feature_smoke() {
@@ -542,103 +360,8 @@ run_sar_feature_smoke() {
   local vessel_lon
   vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
 
-  # Always init schema fresh so the test is self-contained
-  export DB_PATH="$db_path" GAP_HOURS="$gap_hours" \
-         VESSEL_LAT="$vessel_lat" VESSEL_LON="$vessel_lon"
-  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
-import os
-from datetime import UTC, datetime, timedelta
-import duckdb
-from src.ingest.schema import init_schema
-from src.ingest.sar import ingest_sar_records
-from src.features.sar_detections import compute_unmatched_sar_detections
-
-db      = os.environ["DB_PATH"]
-gap_h   = float(os.environ.get("GAP_HOURS", "12"))
-v_lat   = float(os.environ.get("VESSEL_LAT", "1.0"))
-v_lon   = float(os.environ.get("VESSEL_LON", "103.0"))
-
-# Always start from a clean slate
-import os as _os
-if _os.path.exists(db):
-    _os.remove(db)
-init_schema(db)
-
-now        = datetime.now(UTC)
-gap_start  = now - timedelta(days=3)
-gap_end    = gap_start + timedelta(hours=gap_h)
-
-# Seed: target vessel (two AIS pings bracketing the gap) + normal background
-# vessels so Isolation Forest has enough samples to train (needs ≥4).
-con = duckdb.connect(db)
-con.execute("""
-    INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
-    VALUES
-      ('123456789', ?, ?, ?, 8.0, 0, 70),
-      ('123456789', ?, ?, ?, 7.0, 0, 70)
-""", [gap_start - timedelta(hours=1), v_lat, v_lon,
-      gap_end   + timedelta(hours=1), v_lat, v_lon])
-
-# Five normal vessels — frequent pings, no gaps, different positions
-normal_vessels = [
-    ("200000001", 1.3,  103.8, 70),
-    ("200000002", 1.4,  104.0, 70),
-    ("200000003", 1.2,  103.5, 80),
-    ("200000004", 1.5,  103.9, 70),
-    ("200000005", 1.1,  104.1, 80),
-]
-for mmsi, lat, lon, stype in normal_vessels:
-    for h in range(0, 72, 3):   # ping every 3 hours over 3 days — no gaps
-        ts = now - timedelta(hours=72 - h)
-        con.execute(
-            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) "
-            "VALUES (?, ?, ?, ?, 8.0, 0, ?)",
-            [mmsi, ts, lat, lon, stype],
-        )
-
-con.execute("""
-    INSERT INTO vessel_meta (mmsi, flag, ship_type)
-    VALUES
-      ('123456789', 'IR', 70),
-      ('200000001', 'SG', 70), ('200000002', 'SG', 70),
-      ('200000003', 'SG', 80), ('200000004', 'SG', 70),
-      ('200000005', 'SG', 80)
-""")
-con.close()
-print(f"Seeded vessel 123456789 with {gap_h}h AIS gap at ({v_lat}, {v_lon})")
-print(f"Seeded 5 normal background vessels for Isolation Forest training")
-
-# Seed: three unmatched SAR detections during the gap (~11 km offset)
-detections = [
-    {"detection_id": "smoke-d1",
-     "detected_at": gap_start + timedelta(hours=2),
-     "lat": v_lat + 0.1, "lon": v_lon,      "source_scene": "S1A_IW_GRDH_smoke_1"},
-    {"detection_id": "smoke-d2",
-     "detected_at": gap_start + timedelta(hours=gap_h / 2),
-     "lat": v_lat + 0.1, "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_2"},
-    {"detection_id": "smoke-d3",
-     "detected_at": gap_end - timedelta(hours=2),
-     "lat": v_lat,       "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_3"},
-]
-ingest_sar_records(detections, db_path=db)
-print(f"Seeded {len(detections)} unmatched SAR detections during the gap")
-
-# Run feature computation
-result = compute_unmatched_sar_detections(db, window_days=30)
-if result.is_empty():
-    print("Result: FAILED — no unmatched detections attributed (expected 1 vessel)")
-    raise SystemExit(1)
-
-row = result.filter(result["mmsi"] == "123456789")
-if row.is_empty():
-    print("Result: FAILED — vessel 123456789 not in output")
-    raise SystemExit(1)
-
-count = row["unmatched_sar_detections_30d"][0]
-print(f"Result: SUCCESS — mmsi=123456789 unmatched_sar_detections_30d={count}")
-print(result)
-PY
-  )
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/smoke_sar_feature.py \
+      --db "$db_path" --gap-hours "$gap_hours" --lat "$vessel_lat" --lon "$vessel_lon")
   local rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "Result: FAILED"
@@ -676,6 +399,62 @@ PY
   echo "     Look for: 'Unmatched Sar Detections 30D  3 detections'"
   echo "  4. Open: http://localhost:8000/api/vessels/123456789/dispatch-brief"
   echo "     Check 'signals' array for unmatched_sar_detections_30d"
+}
+
+run_eo_feature_smoke() {
+  echo
+  echo "[12] EO Feature Smoke Test"
+
+  local db_path
+  db_path="$(prompt "DuckDB path (will be created fresh, OVERWRITES existing file)" "data/processed/mpol.duckdb")"
+
+  local gap_hours
+  gap_hours="$(prompt "AIS gap duration hours" "12")"
+
+  local vessel_lat
+  vessel_lat="$(prompt "Vessel last-known lat" "1.0")"
+
+  local vessel_lon
+  vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
+
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/smoke_eo_feature.py \
+      --db "$db_path" --gap-hours "$gap_hours" --lat "$vessel_lat" --lon "$vessel_lon")
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "Result: FAILED"
+    return
+  fi
+  echo "Artifact: $db_path"
+
+  if ! prompt_yes_no "Run full pipeline + launch dashboard to verify in app" "false"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  docker compose up dashboard"
+  echo "  2. Open: http://localhost:8000 → Review tab → vessel 123456789"
+  echo "     Look for: 'Eo Dark Count 30D  2 dark detections'"
+  echo "              'Eo Ais Mismatch Ratio  67% dark'"
+  echo "  3. API:  curl http://localhost:8000/api/vessels/123456789/signals"
 }
 
 run_seed_dev_data() {
@@ -773,6 +552,12 @@ main_menu() {
     echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
     echo "      Who: developer, data engineer"
     echo
+    echo "12) EO Feature Smoke Test"
+    echo "     What: seed one vessel with an AIS gap + 2 dark and 1 matched EO detections,"
+    echo "           run eo_dark_count_30d / eo_ais_mismatch_ratio, verify counts"
+    echo "     When: after changing EO ingestion or feature logic; verifying issue #119"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -792,6 +577,7 @@ main_menu() {
       9) run_prepare_sanctions_db ;;
       10) run_build_sanctions_demo ;;
       11) run_sar_feature_smoke ;;
+      12) run_eo_feature_smoke ;;
       q|quit|exit)
         echo "Bye"
         return

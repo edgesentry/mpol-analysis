@@ -75,6 +75,8 @@ FEATURE_VALUE_COLUMNS = [
     "shared_address_centrality",
     "sts_hub_degree",
     "unmatched_sar_detections_30d",
+    "eo_dark_count_30d",
+    "eo_ais_mismatch_ratio",
 ]
 
 

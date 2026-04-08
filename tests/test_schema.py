@@ -19,6 +19,7 @@ def test_all_tables_created(tmp_db):
         "vessel_reviews",
         "analyst_prelabels",
         "sar_detections",
+        "eo_detections",
     }
 
 

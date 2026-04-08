@@ -146,6 +146,20 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             ON sar_detections (detected_at)
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS eo_detections (
+                detection_id   VARCHAR PRIMARY KEY,
+                detected_at    TIMESTAMPTZ NOT NULL,
+                lat            DOUBLE NOT NULL,
+                lon            DOUBLE NOT NULL,
+                source         VARCHAR,
+                confidence     FLOAT DEFAULT 1.0
+            )
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_eo_detections_time
+            ON eo_detections (detected_at)
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                              VARCHAR PRIMARY KEY,
                 ais_gap_count_30d                 INTEGER,
@@ -167,6 +181,8 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
                 route_cargo_mismatch              FLOAT,
                 declared_vs_estimated_cargo_value FLOAT,
                 unmatched_sar_detections_30d      INTEGER,
+                eo_dark_count_30d                 INTEGER,
+                eo_ais_mismatch_ratio             FLOAT,
                 computed_at                       TIMESTAMPTZ DEFAULT now()
             )
         """)
@@ -174,6 +190,14 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
         con.execute("""
             ALTER TABLE vessel_features
             ADD COLUMN IF NOT EXISTS unmatched_sar_detections_30d INTEGER DEFAULT 0
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS eo_dark_count_30d INTEGER DEFAULT 0
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS eo_ais_mismatch_ratio FLOAT DEFAULT 0.0
         """)
     finally:
         con.close()

@@ -14,6 +14,7 @@ import polars as pl
 from dotenv import load_dotenv
 
 from src.features.ais_behavior import DEFAULT_DB_PATH, compute_ais_features
+from src.features.eo_fusion import compute_eo_features
 from src.features.identity import compute_identity_features
 from src.features.ownership_graph import compute_ownership_graph_features
 from src.features.sar_detections import compute_unmatched_sar_detections
@@ -41,6 +42,8 @@ DEFAULTS = {
     "route_cargo_mismatch": 0.0,
     "declared_vs_estimated_cargo_value": 0.0,
     "unmatched_sar_detections_30d": 0,
+    "eo_dark_count_30d": 0,
+    "eo_ais_mismatch_ratio": 0.0,
 }
 
 CORE_COLUMNS = [
@@ -95,6 +98,7 @@ def _merge_feature_frames(
     ownership_df: pl.DataFrame,
     trade_df: pl.DataFrame,
     sar_df: pl.DataFrame,
+    eo_df: pl.DataFrame,
 ) -> pl.DataFrame:
     frames = [
         _normalize(ais_df),
@@ -102,6 +106,7 @@ def _merge_feature_frames(
         _normalize(ownership_df),
         _normalize(trade_df),
         _normalize(sar_df),
+        _normalize(eo_df),
     ]
     non_empty = [f for f in frames if not f.is_empty()]
     if not non_empty:
@@ -116,6 +121,7 @@ def _merge_feature_frames(
         .join(frames[2].lazy(), on="mmsi", how="left")
         .join(frames[3].lazy(), on="mmsi", how="left")
         .join(frames[4].lazy(), on="mmsi", how="left")
+        .join(frames[5].lazy(), on="mmsi", how="left")
         .collect()
     )
 
@@ -128,11 +134,12 @@ def _merge_feature_frames(
     return out.select(["mmsi", *DEFAULTS.keys()])
 
 
-def _empty_sar() -> pl.DataFrame:
+def _empty_eo() -> pl.DataFrame:
     return pl.DataFrame(
         schema={
             "mmsi": pl.Utf8,
-            "unmatched_sar_detections_30d": pl.Int32,
+            "eo_dark_count_30d": pl.Int32,
+            "eo_ais_mismatch_ratio": pl.Float32,
         }
     )
 
@@ -141,10 +148,12 @@ def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 30,
     skip_graph: bool = False,
+    skip_eo: bool = False,
 ) -> pl.DataFrame:
     ais_df = compute_ais_features(db_path=db_path, window_days=window_days)
     trade_df = compute_trade_features(db_path=db_path)
     sar_df = compute_unmatched_sar_detections(db_path=db_path, window_days=window_days)
+    eo_df = compute_eo_features(db_path=db_path, window_days=window_days, skip_eo=skip_eo)
 
     if skip_graph:
         identity_df = _empty_identity()
@@ -153,7 +162,7 @@ def build_feature_matrix(
         identity_df = compute_identity_features(db_path=db_path)
         ownership_df = compute_ownership_graph_features(db_path=db_path)
 
-    return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df, sar_df)
+    return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df, sar_df, eo_df)
 
 
 def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
@@ -188,6 +197,8 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 route_cargo_mismatch,
                 declared_vs_estimated_cargo_value,
                 unmatched_sar_detections_30d,
+                eo_dark_count_30d,
+                eo_ais_mismatch_ratio,
                 computed_at
             )
             SELECT
@@ -211,6 +222,8 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 route_cargo_mismatch,
                 declared_vs_estimated_cargo_value,
                 unmatched_sar_detections_30d,
+                eo_dark_count_30d,
+                eo_ais_mismatch_ratio,
                 now()
             FROM feature_df
             """
@@ -241,12 +254,14 @@ def main() -> None:
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--window", type=int, default=30)
     parser.add_argument("--skip-graph", action="store_true")
+    parser.add_argument("--skip-eo", action="store_true", help="Skip EO feature computation")
     args = parser.parse_args()
 
     matrix = build_feature_matrix(
         db_path=args.db,
         window_days=args.window,
         skip_graph=args.skip_graph,
+        skip_eo=args.skip_eo,
     )
     validate_core_columns_non_null(matrix)
     written = write_vessel_features(args.db, matrix)
