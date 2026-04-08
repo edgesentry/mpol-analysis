@@ -44,7 +44,6 @@ RUN pip install --no-cache-dir uv
 
 COPY src/ ./src/
 COPY scripts/ ./scripts/
-COPY data/ ./data/
 
 ENV PATH="/app/.venv/bin:${PATH}"
 ENV WATCHLIST_OUTPUT_PATH=data/processed/candidate_watchlist.parquet
