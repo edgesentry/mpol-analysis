@@ -99,9 +99,7 @@ def compute_unmatched_sar_detections(
     Returns a DataFrame with columns [mmsi, unmatched_sar_detections_30d].
     Vessels with zero unmatched detections are omitted (filled downstream).
     """
-    _empty = pl.DataFrame(
-        schema={"mmsi": pl.Utf8, "unmatched_sar_detections_30d": pl.Int32}
-    )
+    _empty = pl.DataFrame(schema={"mmsi": pl.Utf8, "unmatched_sar_detections_30d": pl.Int32})
 
     sar_df = load_sar_window(db_path, window_days)
     if sar_df.is_empty():
@@ -177,9 +175,7 @@ def compute_unmatched_sar_detections(
     if result.is_empty():
         return _empty
 
-    return result.with_columns(
-        pl.col("unmatched_sar_detections_30d").cast(pl.Int32)
-    )
+    return result.with_columns(pl.col("unmatched_sar_detections_30d").cast(pl.Int32))
 
 
 if __name__ == "__main__":

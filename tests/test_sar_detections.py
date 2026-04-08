@@ -21,8 +21,15 @@ def _seed_ais(db_path: str, records: list[dict]) -> None:
                 INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                [r["mmsi"], r["timestamp"], r["lat"], r["lon"],
-                 r.get("sog", 5.0), r.get("nav_status", 0), r.get("ship_type", 70)],
+                [
+                    r["mmsi"],
+                    r["timestamp"],
+                    r["lat"],
+                    r["lon"],
+                    r.get("sog", 5.0),
+                    r.get("nav_status", 0),
+                    r.get("ship_type", 70),
+                ],
             )
     finally:
         con.close()
@@ -32,10 +39,19 @@ def _seed_ais(db_path: str, records: list[dict]) -> None:
 # No SAR data
 # ---------------------------------------------------------------------------
 
+
 def test_empty_sar_table_returns_empty(tmp_db):
-    _seed_ais(tmp_db, [
-        {"mmsi": "111111111", "timestamp": _now() - timedelta(days=1), "lat": 1.0, "lon": 103.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {
+                "mmsi": "111111111",
+                "timestamp": _now() - timedelta(days=1),
+                "lat": 1.0,
+                "lon": 103.0,
+            },
+        ],
+    )
     result = compute_unmatched_sar_detections(tmp_db, window_days=30)
     assert result.is_empty()
 
@@ -44,14 +60,18 @@ def test_empty_sar_table_returns_empty(tmp_db):
 # SAR detection matched by AIS → should NOT count
 # ---------------------------------------------------------------------------
 
+
 def test_matched_sar_detection_not_counted(tmp_db):
     t = _now() - timedelta(days=5)
 
     # AIS position at same location at nearly the same time
-    _seed_ais(tmp_db, [
-        {"mmsi": "111111111", "timestamp": t - timedelta(minutes=10), "lat": 1.0, "lon": 103.0},
-        {"mmsi": "111111111", "timestamp": t + timedelta(minutes=10), "lat": 1.0, "lon": 103.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {"mmsi": "111111111", "timestamp": t - timedelta(minutes=10), "lat": 1.0, "lon": 103.0},
+            {"mmsi": "111111111", "timestamp": t + timedelta(minutes=10), "lat": 1.0, "lon": 103.0},
+        ],
+    )
 
     # SAR detection right next to the AIS position
     ingest_sar_records(
@@ -67,18 +87,30 @@ def test_matched_sar_detection_not_counted(tmp_db):
 # Unmatched SAR during AIS gap, vessel nearby → should count
 # ---------------------------------------------------------------------------
 
+
 def test_unmatched_sar_during_gap_counts(tmp_db):
     t = _now() - timedelta(days=5)
     gap_start = t
     gap_end = t + timedelta(hours=12)  # 12-hour gap (> 6h threshold)
 
     # Two AIS pings: one before gap, one after — vessel near lat=2.0, lon=104.0
-    _seed_ais(tmp_db, [
-        {"mmsi": "222222222", "timestamp": gap_start - timedelta(minutes=30),
-         "lat": 2.0, "lon": 104.0},
-        {"mmsi": "222222222", "timestamp": gap_end + timedelta(minutes=30),
-         "lat": 2.0, "lon": 104.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {
+                "mmsi": "222222222",
+                "timestamp": gap_start - timedelta(minutes=30),
+                "lat": 2.0,
+                "lon": 104.0,
+            },
+            {
+                "mmsi": "222222222",
+                "timestamp": gap_end + timedelta(minutes=30),
+                "lat": 2.0,
+                "lon": 104.0,
+            },
+        ],
+    )
 
     # SAR detection during the gap, within 50 km of last known position
     # 0.1° ≈ 11 km — well within 50 km attribution radius
@@ -107,18 +139,30 @@ def test_unmatched_sar_during_gap_counts(tmp_db):
 # SAR detection far from vessel's last position → should NOT be attributed
 # ---------------------------------------------------------------------------
 
+
 def test_unmatched_sar_far_from_vessel_not_counted(tmp_db):
     t = _now() - timedelta(days=5)
     gap_start = t
     gap_end = t + timedelta(hours=12)
 
     # Vessel near lat=2.0, lon=104.0
-    _seed_ais(tmp_db, [
-        {"mmsi": "333333333", "timestamp": gap_start - timedelta(minutes=30),
-         "lat": 2.0, "lon": 104.0},
-        {"mmsi": "333333333", "timestamp": gap_end + timedelta(minutes=30),
-         "lat": 2.0, "lon": 104.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {
+                "mmsi": "333333333",
+                "timestamp": gap_start - timedelta(minutes=30),
+                "lat": 2.0,
+                "lon": 104.0,
+            },
+            {
+                "mmsi": "333333333",
+                "timestamp": gap_end + timedelta(minutes=30),
+                "lat": 2.0,
+                "lon": 104.0,
+            },
+        ],
+    )
 
     # SAR detection during gap but 500+ km away (5° ~ 555 km)
     detection_time = gap_start + timedelta(hours=5)
@@ -144,25 +188,49 @@ def test_unmatched_sar_far_from_vessel_not_counted(tmp_db):
 # Multiple detections during gap → counts all
 # ---------------------------------------------------------------------------
 
+
 def test_multiple_unmatched_detections_counted(tmp_db):
     t = _now() - timedelta(days=5)
     gap_start = t
     gap_end = t + timedelta(hours=24)
 
-    _seed_ais(tmp_db, [
-        {"mmsi": "444444444", "timestamp": gap_start - timedelta(hours=1),
-         "lat": 5.0, "lon": 100.0},
-        {"mmsi": "444444444", "timestamp": gap_end + timedelta(hours=1),
-         "lat": 5.0, "lon": 100.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {
+                "mmsi": "444444444",
+                "timestamp": gap_start - timedelta(hours=1),
+                "lat": 5.0,
+                "lon": 100.0,
+            },
+            {
+                "mmsi": "444444444",
+                "timestamp": gap_end + timedelta(hours=1),
+                "lat": 5.0,
+                "lon": 100.0,
+            },
+        ],
+    )
 
     detections = [
-        {"detection_id": "d004", "detected_at": gap_start + timedelta(hours=4),
-         "lat": 5.05, "lon": 100.05},
-        {"detection_id": "d005", "detected_at": gap_start + timedelta(hours=12),
-         "lat": 5.1, "lon": 100.1},
-        {"detection_id": "d006", "detected_at": gap_start + timedelta(hours=20),
-         "lat": 5.05, "lon": 100.0},
+        {
+            "detection_id": "d004",
+            "detected_at": gap_start + timedelta(hours=4),
+            "lat": 5.05,
+            "lon": 100.05,
+        },
+        {
+            "detection_id": "d005",
+            "detected_at": gap_start + timedelta(hours=12),
+            "lat": 5.1,
+            "lon": 100.1,
+        },
+        {
+            "detection_id": "d006",
+            "detected_at": gap_start + timedelta(hours=20),
+            "lat": 5.05,
+            "lon": 100.0,
+        },
     ]
     ingest_sar_records(detections, db_path=tmp_db)
 
@@ -182,17 +250,27 @@ def test_multiple_unmatched_detections_counted(tmp_db):
 # SAR outside 30-day window → not counted
 # ---------------------------------------------------------------------------
 
+
 def test_sar_outside_window_not_counted(tmp_db):
     t = _now() - timedelta(days=45)  # outside 30-day window
 
-    _seed_ais(tmp_db, [
-        {"mmsi": "555555555", "timestamp": t - timedelta(hours=1), "lat": 1.0, "lon": 103.0},
-        {"mmsi": "555555555", "timestamp": t + timedelta(hours=13), "lat": 1.0, "lon": 103.0},
-    ])
+    _seed_ais(
+        tmp_db,
+        [
+            {"mmsi": "555555555", "timestamp": t - timedelta(hours=1), "lat": 1.0, "lon": 103.0},
+            {"mmsi": "555555555", "timestamp": t + timedelta(hours=13), "lat": 1.0, "lon": 103.0},
+        ],
+    )
 
     ingest_sar_records(
-        [{"detection_id": "d007", "detected_at": t + timedelta(hours=5),
-          "lat": 1.05, "lon": 103.05}],
+        [
+            {
+                "detection_id": "d007",
+                "detected_at": t + timedelta(hours=5),
+                "lat": 1.05,
+                "lon": 103.05,
+            }
+        ],
         db_path=tmp_db,
     )
 
