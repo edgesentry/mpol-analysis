@@ -41,9 +41,10 @@ def validation_json(tmp_path):
 
 
 @pytest.fixture
-def client(watchlist_parquet, validation_json, monkeypatch):
+def client(watchlist_parquet, validation_json, monkeypatch, tmp_path):
     monkeypatch.setenv("WATCHLIST_OUTPUT_PATH", watchlist_parquet)
     monkeypatch.setenv("VALIDATION_METRICS_PATH", validation_json)
+    monkeypatch.setenv("CAUSAL_EFFECTS_PATH", str(tmp_path / "nonexistent_causal.parquet"))
 
     # Re-import after env vars are set so module-level constants pick them up
     import importlib
@@ -207,3 +208,36 @@ def test_causal_effects_unavailable(client):
     body = r.json()
     assert body["available"] is False
     assert body["regimes"] == []
+
+
+# ── /api/vessels/{mmsi}/dispatch-brief ────────────────────────────────────
+
+
+def test_dispatch_brief_returns_identity(client):
+    r = client.get("/api/vessels/123456789/dispatch-brief")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mmsi"] == "123456789"
+    assert body["identity"]["vessel_name"] == "OCEAN GLORY"
+    assert body["identity"]["flag"] == "KH"
+    assert body["identity"]["confidence_tier"] == "High"
+    assert body["identity"]["confidence"] > 0.8
+    assert isinstance(body["signals"], list)
+    assert isinstance(body["ais_history"], list)
+    assert isinstance(body["ownership_chain"], list)
+    assert "generated_at" in body
+
+
+def test_dispatch_brief_causal_from_effects(client_with_causal):
+    r = client_with_causal.get("/api/vessels/123456789/dispatch-brief")
+    assert r.status_code == 200
+    body = r.json()
+    # Should pick OFAC Iran (only significant regime)
+    assert body["causal"] is not None
+    assert body["causal"]["regime"] == "OFAC Iran"
+    assert body["causal"]["is_significant"] is True
+
+
+def test_dispatch_brief_not_found(client):
+    r = client.get("/api/vessels/000000000/dispatch-brief")
+    assert r.status_code == 404
