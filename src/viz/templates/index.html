@@ -379,6 +379,24 @@
       margin-top: 0.25rem;
       font-family: monospace;
     }
+    @media print {
+      body > *:not(#dispatch-modal) { display: none !important; }
+      #dispatch-modal { position:static !important; background:none !important; display:block !important; }
+      #dispatch-modal-inner { border:none !important; margin:0 !important; padding:0 !important; max-width:100% !important; }
+      button { display:none !important; }
+    }
+    .brief-section { margin-bottom:1.1rem; border-top:1px solid #1e3a5a; padding-top:0.7rem; }
+    .brief-section h4 { font-size:0.72rem; font-weight:700; color:#64748b; letter-spacing:0.08em; text-transform:uppercase; margin:0 0 0.4rem; }
+    .brief-kv { display:grid; grid-template-columns:repeat(3,1fr); gap:0.3rem 1rem; }
+    .brief-kv span { color:#94a3b8; font-size:0.72rem; }
+    .brief-kv strong { color:#e2e8f0; font-size:0.78rem; }
+    .brief-tier-high { color:#f87171; font-weight:700; }
+    .brief-tier-medium { color:#fbbf24; font-weight:700; }
+    .brief-tier-low { color:#4ade80; font-weight:700; }
+    .brief-table { width:100%; border-collapse:collapse; font-size:0.74rem; }
+    .brief-table th { color:#64748b; text-align:left; padding:0.2rem 0.4rem; border-bottom:1px solid #1e3a5a; font-weight:600; font-size:0.7rem; text-transform:uppercase; }
+    .brief-table td { padding:0.2rem 0.4rem; color:#cbd5e1; border-bottom:1px solid #0f2035; }
+    .brief-sanctioned { color:#f87171; font-weight:700; }
     .att-badge.att-badge--ns {
       background: rgba(100,116,139,0.10);
       color: #64748b;
@@ -674,6 +692,7 @@
       </div>
       <div class="review-actions">
         <button class="apply-btn" style="background:#2563eb;" onclick="saveReviewDecision()">Save Review</button>
+        <button class="apply-btn" style="background:#0f766e;" id="dispatch-brief-btn" onclick="openDispatchBrief()" disabled>&#128196; Generate Brief</button>
       </div>
       <div class="review-status" id="review-status">Select a vessel to review.</div>
     </div>
@@ -692,6 +711,24 @@
 
 <!-- Alert toasts -->
 <div id="alert-container"></div>
+
+<!-- Dispatch brief modal -->
+<div id="dispatch-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto;">
+  <div id="dispatch-modal-inner" style="margin:2rem auto;max-width:760px;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:2rem;color:#e2e8f0;font-size:0.8rem;line-height:1.6;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
+      <span style="font-size:1rem;font-weight:700;letter-spacing:0.04em;">PATROL DISPATCH BRIEF</span>
+      <div style="display:flex;gap:0.6rem;align-items:center;">
+        <label style="font-size:0.72rem;color:#94a3b8;display:flex;align-items:center;gap:0.3rem;cursor:pointer;">
+          <input type="checkbox" id="redact-mmsi-toggle" onchange="renderDispatchBrief()" style="cursor:pointer;"/>
+          Redact MMSI
+        </label>
+        <button onclick="window.print()" style="padding:0.25rem 0.7rem;background:#1e3a5a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;cursor:pointer;font-size:0.72rem;">&#128438; Print / PDF</button>
+        <button onclick="document.getElementById('dispatch-modal').style.display='none'" style="padding:0.25rem 0.7rem;background:#1e2a3a;border:1px solid #334155;border-radius:4px;color:#94a3b8;cursor:pointer;font-size:0.72rem;">&#x2715; Close</button>
+      </div>
+    </div>
+    <div id="dispatch-brief-body">Loading…</div>
+  </div>
+</div>
 
 <script>
 // ── Map setup ──────────────────────────────────────────────────────────────
@@ -1215,6 +1252,9 @@ async function loadBriefForReviewPanel(mmsi, vesselName) {
 
 async function openReviewPanel(mmsi, vesselName, vesselMeta = null) {
   currentReviewMmsi = mmsi;
+  _dispatchBriefData = null;
+  const briefBtn = document.getElementById('dispatch-brief-btn');
+  if (briefBtn) briefBtn.disabled = !mmsi;
   document.getElementById('review-vessel-label').textContent = `${vesselName} (MMSI ${mmsi})`;
   document.getElementById('review-panel').classList.add('active');
   document.getElementById('review-status').textContent = 'Loading latest review...';
@@ -1259,6 +1299,9 @@ async function openReviewPanel(mmsi, vesselName, vesselMeta = null) {
 function closeReviewPanel() {
   document.getElementById('review-panel').classList.remove('active');
   currentReviewMmsi = null;
+  _dispatchBriefData = null;
+  const briefBtn = document.getElementById('dispatch-brief-btn');
+  if (briefBtn) briefBtn.disabled = true;
 }
 
 async function saveReviewDecision() {
@@ -1340,6 +1383,132 @@ function startAlertStream() {
     setTimeout(() => toast.remove(), 8000);
   };
   es.onerror = () => { /* reconnect is automatic */ };
+}
+
+// ── Dispatch brief ─────────────────────────────────────────────────────────
+let _dispatchBriefData = null;
+
+function openDispatchBrief() {
+  if (!currentReviewMmsi) return;
+  const modal = document.getElementById('dispatch-modal');
+  modal.style.display = 'block';
+  document.getElementById('dispatch-brief-body').innerHTML = 'Loading…';
+  fetch(`/api/vessels/${encodeURIComponent(currentReviewMmsi)}/dispatch-brief`)
+    .then(r => r.json())
+    .then(data => {
+      _dispatchBriefData = data;
+      renderDispatchBrief();
+    })
+    .catch(() => {
+      document.getElementById('dispatch-brief-body').innerHTML =
+        '<span style="color:#f87171;">Failed to load dispatch brief.</span>';
+    });
+}
+
+function renderDispatchBrief() {
+  const data = _dispatchBriefData;
+  if (!data) return;
+  const redact = document.getElementById('redact-mmsi-toggle')?.checked;
+  const displayMmsi = redact ? '███████████' : _escapeHtml(data.mmsi);
+  const id = data.identity || {};
+  const tierCls = id.confidence_tier === 'High' ? 'brief-tier-high'
+    : id.confidence_tier === 'Medium' ? 'brief-tier-medium' : 'brief-tier-low';
+  const sign = v => v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+
+  // Identity
+  let html = `<div class="brief-section">
+    <h4>Vessel Identity</h4>
+    <div class="brief-kv">
+      <div><span>MMSI</span><br/><strong>${displayMmsi}</strong></div>
+      <div><span>Name</span><br/><strong>${_escapeHtml(id.vessel_name || '—')}</strong></div>
+      <div><span>IMO</span><br/><strong>${_escapeHtml(id.imo || '—')}</strong></div>
+      <div><span>Flag</span><br/><strong>${_escapeHtml(id.flag || '—')}</strong></div>
+      <div><span>Type</span><br/><strong>${_escapeHtml(id.vessel_type || '—')}</strong></div>
+      <div><span>Last seen</span><br/><strong>${_escapeHtml((id.last_seen || '—').substring(0,19))}</strong></div>
+      ${id.last_lat != null ? `<div><span>Position</span><br/><strong>${Number(id.last_lat).toFixed(4)}°, ${Number(id.last_lon).toFixed(4)}°</strong></div>` : ''}
+    </div>
+  </div>`;
+
+  // Risk summary
+  const causal = data.causal;
+  html += `<div class="brief-section">
+    <h4>Risk Summary</h4>
+    <div class="brief-kv">
+      <div><span>Composite score</span><br/><strong>${Number(id.confidence).toFixed(3)}</strong></div>
+      <div><span>Confidence tier</span><br/><strong class="${tierCls}">${id.confidence_tier}</strong></div>
+      ${causal ? `<div><span>Causal regime</span><br/><strong>${_escapeHtml(causal.regime)}</strong></div>
+      <div><span>ATT estimate</span><br/><strong>${sign(causal.att_estimate)}</strong></div>
+      <div><span>95% CI</span><br/><strong>[${causal.att_ci_lower.toFixed(2)}, ${causal.att_ci_upper.toFixed(2)}]</strong></div>
+      <div><span>p-value</span><br/><strong>${causal.p_value < 0.001 ? '< 0.001' : causal.p_value.toFixed(3)}</strong></div>` : ''}
+    </div>
+  </div>`;
+
+  // SHAP signals
+  const signals = data.signals || [];
+  if (signals.length) {
+    const featureLabel = f => f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const sigRows = signals.map(s =>
+      `<tr><td>${featureLabel(s.feature)}</td><td>${s.value ?? '—'}</td><td>+${Number(s.contribution).toFixed(3)}</td></tr>`
+    ).join('');
+    html += `<div class="brief-section">
+      <h4>SHAP Signal Attribution</h4>
+      <table class="brief-table">
+        <thead><tr><th>Feature</th><th>Value</th><th>Contribution</th></tr></thead>
+        <tbody>${sigRows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // Ownership chain
+  const chain = data.ownership_chain || [];
+  if (chain.length) {
+    const chainRows = chain.map(c =>
+      `<tr>
+        <td>${c.hop}</td>
+        <td class="${c.sanctioned ? 'brief-sanctioned' : ''}">${_escapeHtml(c.name)}${c.sanctioned ? ' ⚠ SANCTIONED' : ''}</td>
+        <td>${_escapeHtml(c.country)}</td>
+      </tr>`
+    ).join('');
+    html += `<div class="brief-section">
+      <h4>Ownership Chain</h4>
+      <table class="brief-table">
+        <thead><tr><th>Hop</th><th>Entity</th><th>Country</th></tr></thead>
+        <tbody>${chainRows}</tbody>
+      </table>
+    </div>`;
+  } else {
+    html += `<div class="brief-section"><h4>Ownership Chain</h4><span style="color:#64748b;">No ownership records in graph.</span></div>`;
+  }
+
+  // AIS history
+  const hist = data.ais_history || [];
+  if (hist.length) {
+    const histRows = hist.map(h =>
+      `<tr>
+        <td>${_escapeHtml((h.timestamp || '').substring(0,19))}</td>
+        <td>${h.lat != null ? Number(h.lat).toFixed(4) : '—'}</td>
+        <td>${h.lon != null ? Number(h.lon).toFixed(4) : '—'}</td>
+        <td>${h.sog != null ? Number(h.sog).toFixed(1) : '—'}</td>
+        <td>${h.nav_status ?? '—'}</td>
+      </tr>`
+    ).join('');
+    html += `<div class="brief-section">
+      <h4>Last ${hist.length} AIS Positions</h4>
+      <table class="brief-table">
+        <thead><tr><th>Timestamp (UTC)</th><th>Lat</th><th>Lon</th><th>SOG (kt)</th><th>Nav status</th></tr></thead>
+        <tbody>${histRows}</tbody>
+      </table>
+    </div>`;
+  } else {
+    html += `<div class="brief-section"><h4>AIS Position History</h4><span style="color:#64748b;">No AIS records found.</span></div>`;
+  }
+
+  // Footer
+  html += `<div style="margin-top:1.5rem;color:#475569;font-size:0.68rem;border-top:1px solid #1e3a5a;padding-top:0.5rem;">
+    Generated: ${_escapeHtml(data.generated_at || '')} &nbsp;·&nbsp; arktrace / edgesentry &nbsp;·&nbsp; RESTRICTED
+  </div>`;
+
+  document.getElementById('dispatch-brief-body').innerHTML = html;
 }
 </script>
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC
 from pathlib import Path
 
 import polars as pl
@@ -312,3 +313,165 @@ def causal_effects() -> JSONResponse:
         )
 
     return JSONResponse({"available": True, "regimes": regimes})
+
+
+def _ais_history(mmsi: str, limit: int = 10) -> list[dict]:
+    """Return last N AIS positions for a vessel from DuckDB. Fails gracefully."""
+    try:
+        import duckdb
+
+        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+        if not Path(db_path).exists():
+            return []
+        con = duckdb.connect(db_path, read_only=True)
+        rows = con.execute(
+            """
+            SELECT timestamp, lat, lon, sog, cog, nav_status
+            FROM ais_positions
+            WHERE mmsi = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            [mmsi, limit],
+        ).fetchall()
+        con.close()
+        return [
+            {
+                "timestamp": str(r[0]),
+                "lat": r[1],
+                "lon": r[2],
+                "sog": r[3],
+                "cog": r[4],
+                "nav_status": r[5],
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def _ownership_chain(mmsi: str) -> list[dict]:
+    """Return structured ownership chain (up to 3 hops). Fails gracefully."""
+    try:
+        import polars as pl
+
+        from src.graph.store import load_tables
+
+        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+        tables = load_tables(db_path)
+
+        ob = pl.from_arrow(tables["OWNED_BY"])
+        mb = pl.from_arrow(tables["MANAGED_BY"])
+        sb = pl.from_arrow(tables["SANCTIONED_BY"])
+        co = pl.from_arrow(tables["Company"])
+
+        sanctioned_ids: set[str] = set(sb["src_id"].to_list()) if len(sb) else set()
+        chain: list[dict] = []
+
+        def _add_companies(ids: list[str], hop: int) -> None:
+            if not ids or hop > 3:
+                return
+            info = co.filter(pl.col("id").is_in(ids))
+            next_ids: list[str] = []
+            for row in info.iter_rows(named=True):
+                chain.append(
+                    {
+                        "id": row["id"],
+                        "name": row.get("name") or "?",
+                        "country": row.get("country") or "?",
+                        "hop": hop,
+                        "sanctioned": row["id"] in sanctioned_ids,
+                    }
+                )
+                # next hop via CONTROLLED_BY
+                if "CONTROLLED_BY" in tables:
+                    cb = pl.from_arrow(tables["CONTROLLED_BY"])
+                    next_ids += cb.filter(pl.col("src_id") == row["id"])["dst_id"].to_list()
+            _add_companies(list(set(next_ids) - {r["id"] for r in chain}), hop + 1)
+
+        direct: list[str] = []
+        if len(ob):
+            direct += ob.filter(pl.col("src_id") == mmsi)["dst_id"].to_list()
+        if len(mb):
+            direct += mb.filter(pl.col("src_id") == mmsi)["dst_id"].to_list()
+        direct = list(set(direct))
+        _add_companies(direct, 1)
+        return chain
+    except Exception:
+        return []
+
+
+@router.get("/api/vessels/{mmsi}/dispatch-brief")
+def vessel_dispatch_brief(mmsi: str) -> JSONResponse:
+    """Assemble a patrol dispatch brief for a vessel.
+
+    Response shape:
+      {
+        "mmsi": "...",
+        "identity": { vessel_name, flag, vessel_type, imo, confidence, confidence_tier,
+                      last_lat, last_lon, last_seen },
+        "signals": [ {feature, value, contribution}, ... ],   # top-5 SHAP
+        "causal": { att_estimate, att_ci_lower, att_ci_upper, p_value,
+                    is_significant, regime } | null,          # strongest significant regime
+        "ownership_chain": [ {id, name, country, hop, sanctioned}, ... ],
+        "ais_history": [ {timestamp, lat, lon, sog, cog, nav_status}, ... ],
+        "generated_at": "ISO timestamp"
+      }
+    Returns 404 if vessel not in watchlist.
+    """
+    from datetime import datetime
+
+    df = _load_watchlist()
+    if df.is_empty():
+        return JSONResponse({"error": "watchlist unavailable"}, status_code=404)
+
+    rows = df.filter(pl.col("mmsi") == mmsi)
+    if rows.is_empty():
+        return JSONResponse({"error": "vessel not found"}, status_code=404)
+
+    row = rows.row(0, named=True)
+    conf = float(row.get("confidence") or 0.0)
+    confidence_tier = "High" if conf >= 0.7 else "Medium" if conf >= 0.4 else "Low"
+
+    try:
+        signals = json.loads(row.get("top_signals") or "[]")
+    except Exception:
+        signals = []
+
+    # Best significant causal regime
+    causal: dict | None = None
+    effects_df = read_parquet_uri(DEFAULT_CAUSAL_EFFECTS_PATH)
+    if effects_df is not None and not effects_df.is_empty():
+        sig = effects_df.filter(pl.col("is_significant")).sort("att_estimate", descending=True)
+        if not sig.is_empty():
+            er = sig.row(0, named=True)
+            causal = {
+                "regime": str(er.get("regime", "")),
+                "att_estimate": float(er.get("att_estimate", 0.0)),
+                "att_ci_lower": float(er.get("att_ci_lower", 0.0)),
+                "att_ci_upper": float(er.get("att_ci_upper", 0.0)),
+                "p_value": float(er.get("p_value", 1.0)),
+                "is_significant": True,
+            }
+
+    return JSONResponse(
+        {
+            "mmsi": mmsi,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "identity": {
+                "vessel_name": str(row.get("vessel_name") or ""),
+                "flag": str(row.get("flag") or ""),
+                "vessel_type": str(row.get("vessel_type") or ""),
+                "imo": str(row.get("imo") or ""),
+                "confidence": conf,
+                "confidence_tier": confidence_tier,
+                "last_lat": row.get("last_lat"),
+                "last_lon": row.get("last_lon"),
+                "last_seen": str(row.get("last_seen") or ""),
+            },
+            "signals": signals,
+            "causal": causal,
+            "ownership_chain": _ownership_chain(mmsi),
+            "ais_history": _ais_history(mmsi),
+        }
+    )
