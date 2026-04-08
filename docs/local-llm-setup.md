@@ -19,6 +19,48 @@ Prompts are short (500–1,200 tokens in, 150–300 out). Instruction following 
 
 ---
 
+## 🍎 Native macOS dev mode (Apple Metal — recommended for local dev)
+
+Docker on macOS runs through a Colima Linux VM which has no access to Apple Metal (GPU/ANE).
+Running the dashboard natively on the host bypasses the VM and enables Metal-accelerated inference — typically **5–10× faster** on Apple Silicon.
+
+> **Infra (MinIO) still runs in Docker.** Only the FastAPI process runs on the host.
+
+### One-time setup
+
+```bash
+# 1. Install llama-cpp-python with Metal support
+CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
+
+# 2. Download the model (saves to ~/models/ by default)
+uv run python scripts/download_model.py gemma-4-e4b-it
+```
+
+### Start infra + dashboard
+
+```bash
+# Recommended — one command starts everything:
+bash scripts/run_dev.sh
+
+# Or step-by-step:
+docker compose -f docker-compose.infra.yml up -d   # MinIO only, no dashboard container
+
+S3_ENDPOINT=http://localhost:9000 \
+LLAMACPP_MODEL_PATH=~/models/gemma-4-E4B-it-Q4_K_M.gguf \
+  uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+`scripts/run_dev.sh` accepts a few flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model PATH` | auto-detect | Path to GGUF model file |
+| `--provider NAME` | `llamacpp` | Override `LLM_PROVIDER` |
+| `--port PORT` | `8000` | uvicorn port |
+| `--no-infra` | — | Skip Docker infra (MinIO already running) |
+
+---
+
 ## Provider: llamacpp (local, no server)
 
 The simplest setup — no separate server, no internet, runs on any laptop with 8 GB RAM.
@@ -59,7 +101,7 @@ LLAMACPP_MODEL_FILE=*Q4_K_M*
 uv run uvicorn src.api.main:app --reload
 ```
 
-**Docker:** `docker compose up` handles everything — `model_init` downloads the model into a named volume on first run, then the dashboard starts automatically:
+**Docker (full stack, no Metal):** `docker compose up` handles everything — `model_init` downloads the model into a named volume on first run, then the dashboard starts automatically:
 ```bash
 # Default: gemma-4-e4b-it
 docker compose up
@@ -67,6 +109,13 @@ docker compose up
 # Use the 2B model instead:
 MODEL_NAME=gemma-4-e2b-it docker compose up
 ```
+
+**Docker infra only (for native macOS dev):** Start only MinIO without the dashboard container:
+```bash
+docker compose -f docker-compose.infra.yml up -d
+```
+
+See the [native macOS dev mode](#-native-macos-dev-mode-apple-metal--recommended-for-local-dev) section above for the complete workflow.
 
 The model loads once on first request. If `LLAMACPP_MODEL_PATH` is unset or the file is missing, the dashboard loads normally and brief generation returns a "LLM not configured" placeholder.
 
