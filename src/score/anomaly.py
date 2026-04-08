@@ -39,6 +39,8 @@ ANOMALY_FEATURE_COLUMNS = [
     "route_cargo_mismatch",
     "declared_vs_estimated_cargo_value",
     "unmatched_sar_detections_30d",
+    "eo_dark_count_30d",
+    "eo_ais_mismatch_ratio",
 ]
 
 

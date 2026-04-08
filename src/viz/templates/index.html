@@ -1109,6 +1109,8 @@ function renderVesselDetails(meta) {
         if (feature.includes('owner_changes')) return `${v} changes`;
         if (feature.includes('position_jump')) return `${v} jumps`;
         if (feature.includes('unmatched_sar')) return `${v} detection${v !== 1 ? 's' : ''}`;
+        if (feature.includes('eo_dark_count')) return `${v} dark detection${v !== 1 ? 's' : ''}`;
+        if (feature.includes('eo_ais_mismatch')) return `${(v * 100).toFixed(0)}% dark`;
         return v % 1 === 0 ? String(v) : v.toFixed(2);
       };
       const rows = signals.map(s => {
