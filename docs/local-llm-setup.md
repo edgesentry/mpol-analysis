@@ -4,7 +4,7 @@ arktrace supports three LLM providers configured via `.env`. Set `LLM_PROVIDER` 
 
 | `LLM_PROVIDER` | Where it runs | Requires |
 |---|---|---|
-| `llamacpp` | Local — no server, no internet | GGUF model file |
+| `llamacpp` *(default)* | Local — no server, no internet | GGUF model file |
 | `anthropic` | Remote — Anthropic API | `ANTHROPIC_API_KEY` |
 | `openai` | Remote — any OpenAI-compatible API | `LLM_BASE_URL` + `LLM_API_KEY` |
 

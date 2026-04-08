@@ -8,7 +8,7 @@ Three providers:
 
 Provider selection via environment variables:
 
-    LLM_PROVIDER        llamacpp | anthropic | openai  (default: openai)
+    LLM_PROVIDER        llamacpp | anthropic | openai  (default: llamacpp)
     LLM_BASE_URL        base URL for openai provider  (default: http://localhost:8080/v1)
     LLM_API_KEY         API key — use "local" for self-hosted runtimes
     LLM_MODEL           model name / ID
@@ -206,7 +206,7 @@ class LlamaCppClient:
 
 def get_llm_client() -> LLMClient:
     """Construct the appropriate LLMClient from environment variables."""
-    provider = os.getenv("LLM_PROVIDER", "openai")
+    provider = os.getenv("LLM_PROVIDER", "llamacpp")
     if provider == "llamacpp":
         return LlamaCppClient()
     if provider == "anthropic":
