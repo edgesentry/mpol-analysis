@@ -531,7 +531,7 @@ run_sar_feature_smoke() {
   echo "[11] SAR Feature Smoke Test"
 
   local db_path
-  db_path="$(prompt "DuckDB path (will be created fresh)" "data/processed/sar_smoke_test.duckdb")"
+  db_path="$(prompt "DuckDB path (will be created fresh, OVERWRITES existing file)" "data/processed/mpol.duckdb")"
 
   local gap_hours
   gap_hours="$(prompt "AIS gap duration hours" "12")"
@@ -667,7 +667,7 @@ PY
   print_watchlist_summary "$watchlist_path"
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
-  echo "  1. Start the app:  DB_PATH=$db_path docker compose up dashboard"
+  echo "  1. Start the app:  docker compose up dashboard"
   echo "  2. Open: http://localhost:8000"
   echo "  3. Click vessel 123456789 on the map → detail panel → Signals tab"
   echo "     Look for: 'Unmatched Sar Detections 30D  3 detections'"
