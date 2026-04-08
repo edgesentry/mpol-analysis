@@ -367,6 +367,22 @@
       line-height: 1.5;
     }
 
+    /* ── Selected vessel popup ──────────────────────────── */
+    .vessel-selected-popup .maplibregl-popup-content {
+      background: #1e2a3a;
+      color: #e2e8f0;
+      border: 1px solid #f6ad55;
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      pointer-events: none;
+    }
+    .vessel-selected-popup .maplibregl-popup-tip {
+      border-top-color: #f6ad55;
+    }
+
     /* ── SHAP breakdown table ───────────────────────────── */
     .shap-table {
       width: 100%;
@@ -717,8 +733,29 @@ map.on('load', () => {
     }
   });
 
-  function selectVesselOnMap(mmsi) {
+  let _selectedPopup = null;
+
+  function selectVesselOnMap(mmsi, vesselName, confidence, lat, lon) {
     map.setFilter('vessels-circle-selected', ['==', 'mmsi', mmsi || '']);
+
+    // Remove previous popup
+    if (_selectedPopup) { _selectedPopup.remove(); _selectedPopup = null; }
+
+    // Show label popup if position is known
+    if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+      const score = confidence ? Number(confidence).toFixed(2) : '—';
+      const name = vesselName || mmsi;
+      _selectedPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 16,
+        className: 'vessel-selected-popup',
+      })
+        .setLngLat([lon, lat])
+        .setHTML(`<strong>${name}</strong><br/><span>Score: ${score}</span><br/><span style="color:#94a3b8;font-size:0.68rem;">${mmsi}</span>`)
+        .addTo(map);
+    }
+
     document.querySelectorAll('tr.watchlist-row.selected').forEach(r => r.classList.remove('selected'));
     const matchingRow = document.querySelector(`tr.watchlist-row[data-mmsi='${mmsi}']`);
     if (matchingRow) {
@@ -731,8 +768,9 @@ map.on('load', () => {
     const p = e.features[0].properties;
     const mmsi = String(p.mmsi);
     const vesselName = p.vessel_name || mmsi;
+    const coords = e.features[0].geometry.coordinates;
 
-    selectVesselOnMap(mmsi);
+    selectVesselOnMap(mmsi, vesselName, p.confidence, coords[1], coords[0]);
     const matchingRow = document.querySelector(`tr.watchlist-row[data-mmsi='${mmsi}']`);
 
     // Open review panel with vessel meta
@@ -786,7 +824,7 @@ document.getElementById('watchlist-tbody').addEventListener('click', (e) => {
   };
   if (isNaN(lat) || isNaN(lon)) return;
 
-  selectVesselOnMap(vesselMeta.mmsi);
+  selectVesselOnMap(vesselMeta.mmsi, vesselMeta.name, vesselMeta.confidence, lat, lon);
   map.flyTo({ center: [lon, lat], zoom: 8, duration: 1000 });
   openReviewPanel(vesselMeta.mmsi, vesselMeta.name, vesselMeta);
   loadBriefForReviewPanel(vesselMeta.mmsi, vesselMeta.name);
