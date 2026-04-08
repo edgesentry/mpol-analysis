@@ -526,6 +526,158 @@ else:
 PY
 }
 
+run_sar_feature_smoke() {
+  echo
+  echo "[11] SAR Feature Smoke Test"
+
+  local db_path
+  db_path="$(prompt "DuckDB path (will be created fresh, OVERWRITES existing file)" "data/processed/mpol.duckdb")"
+
+  local gap_hours
+  gap_hours="$(prompt "AIS gap duration hours" "12")"
+
+  local vessel_lat
+  vessel_lat="$(prompt "Vessel last-known lat" "1.0")"
+
+  local vessel_lon
+  vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
+
+  # Always init schema fresh so the test is self-contained
+  export DB_PATH="$db_path" GAP_HOURS="$gap_hours" \
+         VESSEL_LAT="$vessel_lat" VESSEL_LON="$vessel_lon"
+  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
+import os
+from datetime import UTC, datetime, timedelta
+import duckdb
+from src.ingest.schema import init_schema
+from src.ingest.sar import ingest_sar_records
+from src.features.sar_detections import compute_unmatched_sar_detections
+
+db      = os.environ["DB_PATH"]
+gap_h   = float(os.environ.get("GAP_HOURS", "12"))
+v_lat   = float(os.environ.get("VESSEL_LAT", "1.0"))
+v_lon   = float(os.environ.get("VESSEL_LON", "103.0"))
+
+# Always start from a clean slate
+import os as _os
+if _os.path.exists(db):
+    _os.remove(db)
+init_schema(db)
+
+now        = datetime.now(UTC)
+gap_start  = now - timedelta(days=3)
+gap_end    = gap_start + timedelta(hours=gap_h)
+
+# Seed: target vessel (two AIS pings bracketing the gap) + normal background
+# vessels so Isolation Forest has enough samples to train (needs ≥4).
+con = duckdb.connect(db)
+con.execute("""
+    INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
+    VALUES
+      ('123456789', ?, ?, ?, 8.0, 0, 70),
+      ('123456789', ?, ?, ?, 7.0, 0, 70)
+""", [gap_start - timedelta(hours=1), v_lat, v_lon,
+      gap_end   + timedelta(hours=1), v_lat, v_lon])
+
+# Five normal vessels — frequent pings, no gaps, different positions
+normal_vessels = [
+    ("200000001", 1.3,  103.8, 70),
+    ("200000002", 1.4,  104.0, 70),
+    ("200000003", 1.2,  103.5, 80),
+    ("200000004", 1.5,  103.9, 70),
+    ("200000005", 1.1,  104.1, 80),
+]
+for mmsi, lat, lon, stype in normal_vessels:
+    for h in range(0, 72, 3):   # ping every 3 hours over 3 days — no gaps
+        ts = now - timedelta(hours=72 - h)
+        con.execute(
+            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) "
+            "VALUES (?, ?, ?, ?, 8.0, 0, ?)",
+            [mmsi, ts, lat, lon, stype],
+        )
+
+con.execute("""
+    INSERT INTO vessel_meta (mmsi, flag, ship_type)
+    VALUES
+      ('123456789', 'IR', 70),
+      ('200000001', 'SG', 70), ('200000002', 'SG', 70),
+      ('200000003', 'SG', 80), ('200000004', 'SG', 70),
+      ('200000005', 'SG', 80)
+""")
+con.close()
+print(f"Seeded vessel 123456789 with {gap_h}h AIS gap at ({v_lat}, {v_lon})")
+print(f"Seeded 5 normal background vessels for Isolation Forest training")
+
+# Seed: three unmatched SAR detections during the gap (~11 km offset)
+detections = [
+    {"detection_id": "smoke-d1",
+     "detected_at": gap_start + timedelta(hours=2),
+     "lat": v_lat + 0.1, "lon": v_lon,      "source_scene": "S1A_IW_GRDH_smoke_1"},
+    {"detection_id": "smoke-d2",
+     "detected_at": gap_start + timedelta(hours=gap_h / 2),
+     "lat": v_lat + 0.1, "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_2"},
+    {"detection_id": "smoke-d3",
+     "detected_at": gap_end - timedelta(hours=2),
+     "lat": v_lat,       "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_3"},
+]
+ingest_sar_records(detections, db_path=db)
+print(f"Seeded {len(detections)} unmatched SAR detections during the gap")
+
+# Run feature computation
+result = compute_unmatched_sar_detections(db, window_days=30)
+if result.is_empty():
+    print("Result: FAILED — no unmatched detections attributed (expected 1 vessel)")
+    raise SystemExit(1)
+
+row = result.filter(result["mmsi"] == "123456789")
+if row.is_empty():
+    print("Result: FAILED — vessel 123456789 not in output")
+    raise SystemExit(1)
+
+count = row["unmatched_sar_detections_30d"][0]
+print(f"Result: SUCCESS — mmsi=123456789 unmatched_sar_detections_30d={count}")
+print(result)
+PY
+  )
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "Result: FAILED"
+    return
+  fi
+  echo "Artifact: $db_path"
+
+  if ! prompt_yes_no "Run full pipeline + launch dashboard to verify in app" "false"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  docker compose up dashboard"
+  echo "  2. Open: http://localhost:8000"
+  echo "  3. Click vessel 123456789 on the map → detail panel → Signals tab"
+  echo "     Look for: 'Unmatched Sar Detections 30D  3 detections'"
+  echo "  4. Open: http://localhost:8000/api/vessels/123456789/dispatch-brief"
+  echo "     Check 'signals' array for unmatched_sar_detections_30d"
+}
+
 run_seed_dev_data() {
   echo
   echo "[6] Seed Dev Data"
@@ -614,6 +766,13 @@ main_menu() {
     echo "     When: after job 9, or when the demo dataset is out of date"
     echo "      Who: developer, product"
     echo
+    echo "11) SAR Feature Smoke Test"
+    echo "     What: initialise a fresh DuckDB, seed one vessel with an AIS gap + three"
+    echo "           unmatched SAR detections nearby, run unmatched_sar_detections_30d,"
+    echo "           and verify the attribution count is correct"
+    echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -632,6 +791,7 @@ main_menu() {
       8) run_prelabel_evaluation ;;
       9) run_prepare_sanctions_db ;;
       10) run_build_sanctions_demo ;;
+      11) run_sar_feature_smoke ;;
       q|quit|exit)
         echo "Bye"
         return

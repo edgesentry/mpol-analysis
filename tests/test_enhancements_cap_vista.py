@@ -59,6 +59,7 @@ ANOMALY_FEATURE_COLUMNS = [
     "sts_hub_degree",
     "route_cargo_mismatch",
     "declared_vs_estimated_cargo_value",
+    "unmatched_sar_detections_30d",
 ]
 
 

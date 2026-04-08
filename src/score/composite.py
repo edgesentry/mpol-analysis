@@ -74,6 +74,7 @@ FEATURE_VALUE_COLUMNS = [
     "sanctions_distance",
     "shared_address_centrality",
     "sts_hub_degree",
+    "unmatched_sar_detections_30d",
 ]
 
 

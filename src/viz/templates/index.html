@@ -1108,6 +1108,7 @@ function renderVesselDetails(meta) {
         if (feature.includes('name_changes')) return `${v} changes`;
         if (feature.includes('owner_changes')) return `${v} changes`;
         if (feature.includes('position_jump')) return `${v} jumps`;
+        if (feature.includes('unmatched_sar')) return `${v} detection${v !== 1 ? 's' : ''}`;
         return v % 1 === 0 ? String(v) : v.toFixed(2);
       };
       const rows = signals.map(s => {

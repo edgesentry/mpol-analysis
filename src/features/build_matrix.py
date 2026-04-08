@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from src.features.ais_behavior import DEFAULT_DB_PATH, compute_ais_features
 from src.features.identity import compute_identity_features
 from src.features.ownership_graph import compute_ownership_graph_features
+from src.features.sar_detections import compute_unmatched_sar_detections
 from src.features.trade_mismatch import compute_trade_features
 
 load_dotenv()
@@ -39,6 +40,7 @@ DEFAULTS = {
     "sts_hub_degree": 0,
     "route_cargo_mismatch": 0.0,
     "declared_vs_estimated_cargo_value": 0.0,
+    "unmatched_sar_detections_30d": 0,
 }
 
 CORE_COLUMNS = [
@@ -92,12 +94,14 @@ def _merge_feature_frames(
     identity_df: pl.DataFrame,
     ownership_df: pl.DataFrame,
     trade_df: pl.DataFrame,
+    sar_df: pl.DataFrame,
 ) -> pl.DataFrame:
     frames = [
         _normalize(ais_df),
         _normalize(identity_df),
         _normalize(ownership_df),
         _normalize(trade_df),
+        _normalize(sar_df),
     ]
     non_empty = [f for f in frames if not f.is_empty()]
     if not non_empty:
@@ -111,6 +115,7 @@ def _merge_feature_frames(
         .join(frames[1].lazy(), on="mmsi", how="left")
         .join(frames[2].lazy(), on="mmsi", how="left")
         .join(frames[3].lazy(), on="mmsi", how="left")
+        .join(frames[4].lazy(), on="mmsi", how="left")
         .collect()
     )
 
@@ -123,6 +128,15 @@ def _merge_feature_frames(
     return out.select(["mmsi", *DEFAULTS.keys()])
 
 
+def _empty_sar() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            "mmsi": pl.Utf8,
+            "unmatched_sar_detections_30d": pl.Int32,
+        }
+    )
+
+
 def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 30,
@@ -130,6 +144,7 @@ def build_feature_matrix(
 ) -> pl.DataFrame:
     ais_df = compute_ais_features(db_path=db_path, window_days=window_days)
     trade_df = compute_trade_features(db_path=db_path)
+    sar_df = compute_unmatched_sar_detections(db_path=db_path, window_days=window_days)
 
     if skip_graph:
         identity_df = _empty_identity()
@@ -138,7 +153,7 @@ def build_feature_matrix(
         identity_df = compute_identity_features(db_path=db_path)
         ownership_df = compute_ownership_graph_features(db_path=db_path)
 
-    return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df)
+    return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df, sar_df)
 
 
 def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
@@ -172,6 +187,7 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 sts_hub_degree,
                 route_cargo_mismatch,
                 declared_vs_estimated_cargo_value,
+                unmatched_sar_detections_30d,
                 computed_at
             )
             SELECT
@@ -194,6 +210,7 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 sts_hub_degree,
                 route_cargo_mismatch,
                 declared_vs_estimated_cargo_value,
+                unmatched_sar_detections_30d,
                 now()
             FROM feature_df
             """

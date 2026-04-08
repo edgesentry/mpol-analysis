@@ -131,28 +131,49 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             ON analyst_prelabels (mmsi, evidence_timestamp)
         """)
         con.execute("""
-            CREATE TABLE IF NOT EXISTS vessel_features (
-                mmsi                       VARCHAR PRIMARY KEY,
-                ais_gap_count_30d          INTEGER,
-                ais_gap_max_hours          FLOAT,
-                position_jump_count        INTEGER,
-                sts_candidate_count        INTEGER,
-                port_call_ratio            FLOAT,
-                loitering_hours_30d        FLOAT,
-                flag_changes_2y            INTEGER,
-                name_changes_2y            INTEGER,
-                owner_changes_2y           INTEGER,
-                high_risk_flag_ratio       FLOAT,
-                ownership_depth            INTEGER,
-                sanctions_distance         INTEGER,
-                cluster_sanctions_ratio    FLOAT,
-                shared_manager_risk        INTEGER,
-                shared_address_centrality  INTEGER,
-                sts_hub_degree             INTEGER,
-                route_cargo_mismatch       FLOAT,
-                declared_vs_estimated_cargo_value FLOAT,
-                computed_at                TIMESTAMPTZ DEFAULT now()
+            CREATE TABLE IF NOT EXISTS sar_detections (
+                detection_id    VARCHAR PRIMARY KEY,
+                detected_at     TIMESTAMPTZ NOT NULL,
+                lat             DOUBLE NOT NULL,
+                lon             DOUBLE NOT NULL,
+                length_m        FLOAT,
+                source_scene    VARCHAR,
+                confidence      FLOAT DEFAULT 1.0
             )
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sar_detections_time
+            ON sar_detections (detected_at)
+        """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS vessel_features (
+                mmsi                              VARCHAR PRIMARY KEY,
+                ais_gap_count_30d                 INTEGER,
+                ais_gap_max_hours                 FLOAT,
+                position_jump_count               INTEGER,
+                sts_candidate_count               INTEGER,
+                port_call_ratio                   FLOAT,
+                loitering_hours_30d               FLOAT,
+                flag_changes_2y                   INTEGER,
+                name_changes_2y                   INTEGER,
+                owner_changes_2y                  INTEGER,
+                high_risk_flag_ratio              FLOAT,
+                ownership_depth                   INTEGER,
+                sanctions_distance                INTEGER,
+                cluster_sanctions_ratio           FLOAT,
+                shared_manager_risk               INTEGER,
+                shared_address_centrality         INTEGER,
+                sts_hub_degree                    INTEGER,
+                route_cargo_mismatch              FLOAT,
+                declared_vs_estimated_cargo_value FLOAT,
+                unmatched_sar_detections_30d      INTEGER,
+                computed_at                       TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        # Migrations: add columns introduced after initial schema creation
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS unmatched_sar_detections_30d INTEGER DEFAULT 0
         """)
     finally:
         con.close()
