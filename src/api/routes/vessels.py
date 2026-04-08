@@ -360,10 +360,10 @@ def _ownership_chain(mmsi: str) -> list[dict]:
         db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
         tables = load_tables(db_path)
 
-        ob = pl.from_arrow(tables["OWNED_BY"])
-        mb = pl.from_arrow(tables["MANAGED_BY"])
-        sb = pl.from_arrow(tables["SANCTIONED_BY"])
-        co = pl.from_arrow(tables["Company"])
+        ob: pl.DataFrame = pl.from_arrow(tables["OWNED_BY"])  # type: ignore[assignment]
+        mb: pl.DataFrame = pl.from_arrow(tables["MANAGED_BY"])  # type: ignore[assignment]
+        sb: pl.DataFrame = pl.from_arrow(tables["SANCTIONED_BY"])  # type: ignore[assignment]
+        co: pl.DataFrame = pl.from_arrow(tables["Company"])  # type: ignore[assignment]
 
         sanctioned_ids: set[str] = set(sb["src_id"].to_list()) if len(sb) else set()
         chain: list[dict] = []
@@ -385,7 +385,7 @@ def _ownership_chain(mmsi: str) -> list[dict]:
                 )
                 # next hop via CONTROLLED_BY
                 if "CONTROLLED_BY" in tables:
-                    cb = pl.from_arrow(tables["CONTROLLED_BY"])
+                    cb: pl.DataFrame = pl.from_arrow(tables["CONTROLLED_BY"])  # type: ignore[assignment]
                     next_ids += cb.filter(pl.col("src_id") == row["id"])["dst_id"].to_list()
             _add_companies(list(set(next_ids) - {r["id"] for r in chain}), hop + 1)
 
