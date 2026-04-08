@@ -245,7 +245,7 @@ Per-region weight tuning recommendations are in [regional-playbooks.md](regional
 
 ### Explainability (SHAP)
 
-SHAP TreeExplainer computes per-feature contributions to the anomaly score for each vessel. The top 3 contributing features are serialised as `top_signals` JSON in the watchlist output, enabling a duty officer to understand *why* a vessel was flagged without reading raw feature values.
+SHAP TreeExplainer computes per-feature contributions to the anomaly score for each vessel. The top 5 contributing features are serialised as `top_signals` JSON in the watchlist output and served via `GET /api/vessels/{mmsi}/signals`. The review panel renders them as a mini-table (Feature / Value / SHAP contribution / bar) so a duty officer can understand *why* a vessel was flagged without reading raw feature values.
 
 ---
 

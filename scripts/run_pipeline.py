@@ -754,6 +754,17 @@ def main() -> None:
             "See config/geopolitical_events.json for the sample format."
         ),
     )
+    parser.add_argument(
+        "--cadence",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help=(
+            "Re-score interval in seconds after the initial full pipeline run "
+            "(0 = run once; e.g. 900 = re-run feature engineering + scoring every 15 minutes). "
+            "Press Ctrl-C to stop the re-score loop."
+        ),
+    )
     args = parser.parse_args()
 
     non_interactive: bool = args.non_interactive
@@ -780,6 +791,7 @@ def main() -> None:
     seed_dummy: bool = args.seed_dummy
     marine_cadastre_years: list[int] = args.marine_cadastre_years or []
     geo_filter_path: str | None = args.geopolitical_event_filter
+    cadence: int = args.cadence
 
     steps = [
         step_schema,
@@ -798,6 +810,28 @@ def main() -> None:
         if not ok and non_interactive:
             print(_red(f"\nPipeline aborted at step {steps.index(step_fn) + 1}."), file=sys.stderr)
             sys.exit(1)
+
+    if cadence > 0:
+        import time
+
+        rescore_steps = [
+            lambda p, ni: step_features(p, ni, seed_dummy),
+            lambda p, ni: step_score(p, ni, geo_filter_path),
+        ]
+        print(_dim(f"\nContinuous re-score mode — interval {cadence}s. Press Ctrl-C to stop."))
+        try:
+            while True:
+                time.sleep(cadence)
+                import datetime
+
+                print(_dim(f"\n[re-score] {datetime.datetime.now().strftime('%H:%M:%S')}"))
+                for step_fn in rescore_steps:
+                    ok = step_fn(preset, non_interactive)
+                    if not ok and non_interactive:
+                        print(_red("\nRe-score step failed; stopping cadence loop."), file=sys.stderr)
+                        sys.exit(1)
+        except KeyboardInterrupt:
+            print(_dim("\nRe-score loop stopped."))
 
 
 if __name__ == "__main__":

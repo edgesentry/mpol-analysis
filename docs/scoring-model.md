@@ -178,17 +178,19 @@ Sanction regimes are configured dynamically in `config/sanction_regimes.yaml`. T
 
 ## SHAP explainability (`src/score/composite.py → _compute_top_signals`)
 
-Each row on the watchlist includes a `top_signals` JSON array identifying the 3 features that most influenced the vessel's anomaly score, using SHAP TreeExplainer values from the Isolation Forest:
+Each row on the watchlist includes a `top_signals` JSON array identifying the top 5 features that most influenced the vessel's anomaly score, using SHAP TreeExplainer values from the Isolation Forest:
 
 ```json
 [
-  {"feature": "ais_gap_count_30d",  "value": 14,   "contribution": 0.42},
-  {"feature": "sanctions_distance", "value": 1,    "contribution": 0.31},
-  {"feature": "sts_hub_degree",     "value": 6,    "contribution": 0.18}
+  {"feature": "ais_gap_count_30d",    "value": 14,  "contribution": 0.42},
+  {"feature": "sanctions_distance",   "value": 1,   "contribution": 0.31},
+  {"feature": "sts_hub_degree",       "value": 6,   "contribution": 0.18},
+  {"feature": "flag_changes_2y",      "value": 3,   "contribution": 0.11},
+  {"feature": "position_jump_count",  "value": 2,   "contribution": 0.08}
 ]
 ```
 
-Contributions are normalised to sum to 1.0 across the top 3. This satisfies the Cap Vista explainability requirement and is rendered in the dashboard alongside the confidence badge.
+Contributions are normalised to sum to 1.0 across all features. The top 5 are stored and served via `GET /api/vessels/{mmsi}/signals`. The review panel renders them as a mini-table (Feature / Value / SHAP / bar chart) so analysts can understand why a vessel was flagged without reading raw scores.
 
 ---
 
@@ -256,6 +258,6 @@ This is a network-propagation prediction: it identifies who is most likely to be
 | anomaly_score | float32 | Stage 2 output |
 | graph_risk_score | float32 | Ownership graph component |
 | identity_score | float32 | Identity volatility component |
-| top_signals | JSON str | Top-3 SHAP contributing features |
+| top_signals | JSON str | Top-5 SHAP contributing features (feature, value, contribution) |
 | last_lat / last_lon | float64 | Most recent AIS position |
 | last_seen | timestamptz | Most recent AIS timestamp |

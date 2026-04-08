@@ -153,7 +153,15 @@ The dashboard container reads from `data/processed/` via the bind mount and refl
 
 ### 6. Automate re-scoring (optional)
 
-Add a cron job to re-score every 15 minutes:
+**Preferred — built-in cadence loop:**
+
+```bash
+uv run python scripts/run_pipeline.py --region strait --non-interactive --cadence 900
+```
+
+This runs the full initial pipeline once, then loops `step_features` + `step_score` every 900 seconds (15 minutes). Press Ctrl-C to stop.
+
+**Alternative — cron (if you need OS-level scheduling):**
 
 ```bash
 crontab -e
