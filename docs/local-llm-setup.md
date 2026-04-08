@@ -101,7 +101,7 @@ LLM_MODEL=gpt-4o-mini
 # LLM_BASE_URL defaults to https://api.openai.com/v1 if not set
 ```
 
-**Self-hosted (Ollama, MLX LM, LM Studio, etc.):**
+**Self-hosted (Ollama, LM Studio, etc.):**
 ```bash
 LLM_PROVIDER=openai
 LLM_BASE_URL=http://localhost:11434/v1   # Ollama

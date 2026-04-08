@@ -21,7 +21,9 @@ services:
   # Set MODEL_NAME to: gemma-4-e4b-it (default, ~2.5 GB) or gemma-4-e2b-it (~1.4 GB)
   # Set HF_TOKEN if the model repo is gated.
   model_init:
-    build: .
+    build:
+      context: .
+      target: downloader
     container_name: mpol-model-init
     volumes:
       - models:/app/models
@@ -29,11 +31,11 @@ services:
       MODEL_NAME: ${MODEL_NAME:-gemma-4-e4b-it}
       MODEL_DIR: /app/models
       HF_TOKEN: ${HF_TOKEN:-}
-    command: ["uv", "run", "python", "scripts/download_model.py"]
+    command: ["python", "scripts/download_model.py"]
 
   # Creates the default bucket on first run
   minio_init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: mpol-minio-init
     depends_on:
       minio:

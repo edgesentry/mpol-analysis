@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1
 
+# ── model-downloader: minimal image just for huggingface-hub ──────────────────
+# Used by model_init service — no Rust, no lance-graph, no llama-cpp-python.
+FROM python:3.12-slim AS downloader
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir "huggingface-hub>=0.24"
+
+COPY scripts/ ./scripts/
+
 # ── builder: compiles Rust/maturin packages (lance-graph) ─────────────────────
 FROM python:3.12-slim AS builder
 
@@ -18,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Limit cargo parallelism to avoid OOM during Rust release builds.
-# deltalake-core and similar crates are very memory-hungry at opt-level=3.
 ENV CARGO_BUILD_JOBS=2
 
 RUN pip install --no-cache-dir uv
@@ -31,12 +40,17 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev --frozen && \
-    uv pip install --no-cache "llama-cpp-python>=0.3" "huggingface-hub>=0.24"
+    uv pip install --no-cache "huggingface-hub>=0.24" "llama-cpp-python>=0.3"
 
 # ── runtime: lean image without build tools ────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
+
+# libgomp1 is required by llama-cpp-python (libllama.so links against libgomp)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy the pre-built virtualenv from the builder
 COPY --from=builder /app/.venv /app/.venv

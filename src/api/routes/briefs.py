@@ -7,13 +7,13 @@ import logging
 import os
 from pathlib import Path
 
-import duckdb
 import polars as pl
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.analysis.causal import score_unknown_unknowns
+from src.api.db import get_conn
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
@@ -122,43 +122,36 @@ def _watchlist_version() -> str:
 
 
 def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> str | None:
-    if db_path is None:
-        db_path = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
-    if not os.path.exists(db_path):
-        return None
     try:
-        con = duckdb.connect(db_path)
-        rows = con.execute(
-            "SELECT brief FROM analyst_briefs WHERE mmsi = ? AND watchlist_version = ?",
-            [mmsi, version],
-        ).fetchall()
-        con.close()
-        return rows[0][0] if rows else None
+        with get_conn() as con:
+            if con is None:
+                return None
+            rows = con.execute(
+                "SELECT brief FROM analyst_briefs WHERE mmsi = ? AND watchlist_version = ?",
+                [mmsi, version],
+            ).fetchall()
+            return rows[0][0] if rows else None
     except Exception:
         return None
 
 
 def _write_cached_brief(mmsi: str, version: str, brief: str, db_path: str | None = None) -> None:
-    if db_path is None:
-        db_path = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
-    if not os.path.exists(db_path):
-        return
     try:
-        con = duckdb.connect(db_path)
-        con.execute(
-            """
-            INSERT OR REPLACE INTO analyst_briefs (mmsi, watchlist_version, brief)
-            VALUES (?, ?, ?)
-            """,
-            [mmsi, version, brief],
-        )
-        con.close()
+        with get_conn() as con:
+            if con is None:
+                return
+            con.execute(
+                """
+                INSERT OR REPLACE INTO analyst_briefs (mmsi, watchlist_version, brief)
+                VALUES (?, ?, ?)
+                """,
+                [mmsi, version, brief],
+            )
     except Exception:
         logger.exception(
-            "Failed to write cached brief to DuckDB (mmsi=%s, version=%s, db_path=%s)",
+            "Failed to write cached brief to DuckDB (mmsi=%s, version=%s)",
             mmsi,
             version,
-            db_path,
         )
 
 

@@ -187,6 +187,12 @@ run_demo_smoke() {
   if ! (cd "$PROJECT_ROOT" && seed_demo_causal_effects); then
     echo "Warning: causal effects seeding failed — ATT badge will not appear in dashboard"
   fi
+
+  echo
+  echo "── Seeding SAR demo signals (unmatched_sar_detections_30d in SHAP panel) ──────"
+  if ! run_cmd uv run python scripts/seed_demo_sar.py; then
+    echo "Warning: SAR seeding failed — SAR SHAP screenshot (05_sar_shap.png) will not render"
+  fi
 }
 
 run_backtracking() {
@@ -555,9 +561,10 @@ main_menu() {
     echo
     echo "── DEVELOPMENT / LOCAL TESTING ─────────────────────────────────────────────────"
     echo "5) Demo/Smoke"
-    echo "     What: load a fixed demo watchlist + seed dummy causal_effects.parquet so the"
-    echo "           dashboard has realistic data without running a full pipeline"
-    echo "           (populates watchlist, ATT causal badge, SHAP signals)"
+    echo "     What: load a fixed demo watchlist + seed dummy causal_effects.parquet +"
+    echo "           inject SAR signals so the dashboard has realistic data without running"
+    echo "           a full pipeline (populates watchlist, ATT causal badge, SHAP signals,"
+    echo "           SAR dark-vessel detection in SHAP panel)"
     echo "     When: preparing a demo, smoke-testing UI changes, or onboarding a new dev"
     echo "      Who: developer, product"
     echo

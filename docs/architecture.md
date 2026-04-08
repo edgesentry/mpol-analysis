@@ -273,13 +273,13 @@ The LLM converts a deterministic, structured risk assessment into readable Engli
 
 | Value | Backend |
 |-------|---------|
-| `ollama` | Ollama local server (default) |
-| `mlx` | mlx-lm-coding-agent-proxy (Apple Silicon) |
-| `lmstudio` | LM Studio local server |
-| `anthropic` | Anthropic API (requires `ANTHROPIC_API_KEY`) |
-| `gemini` | Google Gemini API (requires `GEMINI_API_KEY`) |
+| `llamacpp` *(default)* | Bundled llamacpp server — no external process required |
+| `ollama` | Ollama local server |
+| `anthropic` | Anthropic API (requires `LLM_API_KEY`) |
+| `gemini` | Google Gemini API (requires `LLM_API_KEY`) |
+| `openai` | Any OpenAI-compatible endpoint |
 
-Recommended local model: **Qwen 2.5 Coder 7B Instruct (4-bit)** via Ollama or mlx-lm. Context window fits within ~1 200 tokens; no GPU required for 4-bit on Apple Silicon.
+Recommended local model: **Gemma 4 4B Instruct (Q4_K_M)** via llamacpp — downloaded automatically on first `docker compose up`. Context window fits within ~1 200 tokens; no GPU required.
 
 **No cloud dependency:** inference runs entirely on-device by default. The LLM has no tool access, no function calling, and no internet connectivity during inference. Context is injected via the context window only.
 

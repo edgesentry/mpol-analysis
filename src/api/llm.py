@@ -20,10 +20,30 @@ Provider selection via environment variables:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
+
+
+@contextlib.contextmanager
+def _quiet_stderr():
+    """Redirect C-level stderr to /dev/null for the duration of the block.
+
+    llama.cpp emits informational warnings (kv-cache padding, context size) via
+    C fprintf(stderr, …) which Python's logging or verbose=False cannot suppress.
+    Used only during one-time model initialisation so runtime errors are unaffected.
+    """
+    stderr_fd = 2
+    saved = os.dup(stderr_fd)
+    try:
+        with open(os.devnull, "w") as devnull:
+            os.dup2(devnull.fileno(), stderr_fd)
+            yield
+    finally:
+        os.dup2(saved, stderr_fd)
+        os.close(saved)
 
 
 @runtime_checkable
@@ -154,24 +174,25 @@ class LlamaCppClient:
         repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
 
         try:
-            if model_path and os.path.exists(model_path):
-                LlamaCppClient._instance = Llama(
-                    model_path=model_path,
-                    n_ctx=4096,
-                    n_threads=os.cpu_count() or 4,
-                    verbose=False,
-                )
-            elif repo_id:
-                filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
-                LlamaCppClient._instance = Llama.from_pretrained(
-                    repo_id=repo_id,
-                    filename=filename,
-                    n_ctx=4096,
-                    n_threads=os.cpu_count() or 4,
-                    verbose=False,
-                )
-            else:
-                return None
+            with _quiet_stderr():
+                if model_path and os.path.exists(model_path):
+                    LlamaCppClient._instance = Llama(
+                        model_path=model_path,
+                        n_ctx=2048,
+                        n_threads=os.cpu_count() or 4,
+                        verbose=False,
+                    )
+                elif repo_id:
+                    filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
+                    LlamaCppClient._instance = Llama.from_pretrained(
+                        repo_id=repo_id,
+                        filename=filename,
+                        n_ctx=2048,
+                        n_threads=os.cpu_count() or 4,
+                        verbose=False,
+                    )
+                else:
+                    return None
         except Exception:
             return None
 
@@ -197,16 +218,17 @@ class LlamaCppClient:
 
         def _run() -> None:
             try:
-                response = model.create_chat_completion(  # type: ignore[attr-defined]
-                    messages=full_messages,
-                    stream=True,
-                    max_tokens=512,
-                    temperature=0.2,
-                )
-                for chunk in response:
-                    delta = chunk["choices"][0]["delta"].get("content") or ""
-                    if delta:
-                        loop.call_soon_threadsafe(queue.put_nowait, delta)
+                with _quiet_stderr():
+                    response = model.create_chat_completion(  # type: ignore[attr-defined]
+                        messages=full_messages,
+                        stream=True,
+                        max_tokens=512,
+                        temperature=0.2,
+                    )
+                    for chunk in response:
+                        delta = chunk["choices"][0]["delta"].get("content") or ""
+                        if delta:
+                            loop.call_soon_threadsafe(queue.put_nowait, delta)
             except Exception as exc:
                 loop.call_soon_threadsafe(queue.put_nowait, f"[error: {exc}]")
             finally:

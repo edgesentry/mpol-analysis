@@ -19,12 +19,12 @@ import logging
 import os
 from pathlib import Path
 
-import duckdb
 import polars as pl
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from src.api.db import get_conn
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
@@ -33,7 +33,6 @@ from src.storage.config import read_parquet as read_parquet_uri
 DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
     "candidate_watchlist.parquet"
 )
-_DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -108,38 +107,32 @@ def _cache_key(mmsi: str | None, q_hash: str, version: str) -> str:
     return f"{mmsi or 'global'}:{q_hash}:{version}"
 
 
-def _db_path() -> str:
-    return os.getenv("DB_PATH", _DEFAULT_DB_PATH)
-
-
 def _read_cache(key: str) -> str | None:
-    path = _db_path()
-    if not os.path.exists(path):
-        return None
     try:
-        con = duckdb.connect(path)
-        rows = con.execute("SELECT response FROM chat_cache WHERE cache_key = ?", [key]).fetchall()
-        con.close()
-        return rows[0][0] if rows else None
+        with get_conn() as con:
+            if con is None:
+                return None
+            rows = con.execute(
+                "SELECT response FROM chat_cache WHERE cache_key = ?", [key]
+            ).fetchall()
+            return rows[0][0] if rows else None
     except Exception:
         return None
 
 
 def _write_cache(key: str, mmsi: str | None, q_hash: str, version: str, response: str) -> None:
-    path = _db_path()
-    if not os.path.exists(path):
-        return
     try:
-        con = duckdb.connect(path)
-        con.execute(
-            """
-            INSERT OR REPLACE INTO chat_cache
-                (cache_key, mmsi, question_hash, watchlist_version, response)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            [key, mmsi, q_hash, version, response],
-        )
-        con.close()
+        with get_conn() as con:
+            if con is None:
+                return
+            con.execute(
+                """
+                INSERT OR REPLACE INTO chat_cache
+                    (cache_key, mmsi, question_hash, watchlist_version, response)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [key, mmsi, q_hash, version, response],
+            )
     except Exception:
         logger.exception("Failed to write chat_cache (key=%s)", key)
 

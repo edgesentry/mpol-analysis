@@ -24,7 +24,38 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
+
+
+class _LogTqdm:
+    """tqdm-compatible shim that writes download progress to stdout (no TTY needed)."""
+
+    def __init__(self, *, total: int | None = None, **_kwargs):
+        self.total = total
+        self.n = 0
+        self._last_report = 0.0
+
+    def update(self, n: int = 1) -> None:
+        self.n += n
+        now = time.monotonic()
+        if now - self._last_report >= 5.0:  # print every 5 seconds
+            if self.total:
+                pct = self.n / self.total * 100
+                mb_done = self.n / 1_048_576
+                mb_total = self.total / 1_048_576
+                print(f"  {pct:.1f}%  {mb_done:.0f} / {mb_total:.0f} MB", flush=True)
+            else:
+                print(f"  {self.n / 1_048_576:.0f} MB downloaded …", flush=True)
+            self._last_report = now
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        if self.total:
+            print(f"  100%  {self.total / 1_048_576:.0f} MB — done", flush=True)
+        return False
 
 # repo_id, filename (Q4_K_M quantisation — good quality/size balance)
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
@@ -62,14 +93,15 @@ def download(model_name: str, output_dir: Path, token: str | None) -> Path:
         print(f"Already present: {dest}")
         return dest
 
-    print(f"Downloading {filename} from {repo_id} …")
+    print(f"Downloading {filename} from {repo_id} …", flush=True)
     path = hf_hub_download(
         repo_id=repo_id,
         filename=filename,
         local_dir=str(output_dir),
         token=token or None,
+        tqdm_class=_LogTqdm,
     )
-    print(f"Saved to {path}")
+    print(f"Saved to {path}", flush=True)
     return Path(path)
 
 

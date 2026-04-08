@@ -318,23 +318,21 @@ def causal_effects() -> JSONResponse:
 def _ais_history(mmsi: str, limit: int = 10) -> list[dict]:
     """Return last N AIS positions for a vessel from DuckDB. Fails gracefully."""
     try:
-        import duckdb
+        from src.api.db import get_conn
 
-        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-        if not Path(db_path).exists():
-            return []
-        con = duckdb.connect(db_path, read_only=True)
-        rows = con.execute(
-            """
-            SELECT timestamp, lat, lon, sog, cog, nav_status
-            FROM ais_positions
-            WHERE mmsi = ?
-            ORDER BY timestamp DESC
-            LIMIT ?
-            """,
-            [mmsi, limit],
-        ).fetchall()
-        con.close()
+        with get_conn() as con:
+            if con is None:
+                return []
+            rows = con.execute(
+                """
+                SELECT timestamp, lat, lon, sog, cog, nav_status
+                FROM ais_positions
+                WHERE mmsi = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                [mmsi, limit],
+            ).fetchall()
         return [
             {
                 "timestamp": str(r[0]),

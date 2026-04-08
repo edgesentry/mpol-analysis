@@ -193,8 +193,8 @@ All configurable paths are also settable via environment variables (useful in Do
 |---|---|---|
 | `DB_PATH` | `data/processed/mpol.duckdb` | Active DuckDB path |
 | `AISSTREAM_API_KEY` | — | Required for live AIS ingestion |
-| `LLM_PROVIDER` | `openai` | LLM client: `openai`, `anthropic`, `gemini`, `mlx`, `ollama` |
-| `LLM_BASE_URL` | — | OpenAI-compatible base URL (required for `gemini`, `mlx`, `ollama`) |
+| `LLM_PROVIDER` | `llamacpp` | LLM client: `llamacpp`, `openai`, `anthropic`, `gemini`, `ollama` |
+| `LLM_BASE_URL` | — | OpenAI-compatible base URL (required for `gemini`, `ollama`, custom endpoints) |
 | `LLM_MODEL` | — | Model identifier (e.g., `gpt-4o-mini`, `llama3.2:3b`) |
 | `WATCHLIST_OUTPUT_PATH` | `data/processed/candidate_watchlist.parquet` | Watchlist parquet output |
 | `COMPOSITE_SCORES_PATH` | `data/processed/composite_scores.parquet` | Composite scores output |

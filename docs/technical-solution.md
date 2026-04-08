@@ -332,7 +332,7 @@ Completed briefs are written to the `analyst_briefs` table keyed on `(mmsi, watc
 | Assert a risk signal not in `top_signals` | Structured prompt — only listed signals are present in context |
 | Claim a causal relationship without statistical support | ATT + CI + p-value required in prompt; LLM instructed to cite them |
 | Modify a vessel's confidence score | Score is computed deterministically before LLM is called; LLM receives it read-only |
-| Retrieve information from the internet | No tool access; local-first LLM (mlx / Ollama / LM Studio) or API with no browsing |
+| Retrieve information from the internet | No tool access; local-first LLM (llamacpp / Ollama / LM Studio) or API with no browsing |
 | Produce a different answer for the same inputs | DuckDB cache enforces identical output for identical `(mmsi, watchlist_version)` |
 
 ### Summary

@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import UTC, datetime
 from typing import Any
 
-import duckdb
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.ingest.schema import DEFAULT_DB_PATH
+from src.api.db import get_conn
 
 router = APIRouter()
 
@@ -49,14 +47,6 @@ class ReviewResponse(BaseModel):
     reviewed_by: str
     reviewed_at: str
     evidence_refs: list[EvidenceRef]
-
-
-def _db_path() -> str:
-    return os.getenv("DB_PATH", DEFAULT_DB_PATH)
-
-
-def _connect() -> duckdb.DuckDBPyConnection:
-    return duckdb.connect(_db_path())
 
 
 def _normalize_tier(tier: str) -> str:
@@ -97,8 +87,9 @@ def create_review(payload: ReviewUpsertRequest) -> ReviewResponse:
     handoff_state = _normalize_handoff_state(payload.handoff_state)
     evidence_json = json.dumps([r.model_dump() for r in payload.evidence_refs])
 
-    con = _connect()
-    try:
+    with get_conn() as con:
+        if con is None:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         con.execute(
             """
             INSERT INTO vessel_reviews (mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by)
@@ -129,14 +120,13 @@ def create_review(payload: ReviewUpsertRequest) -> ReviewResponse:
             .to_dict("records")[0]
         )
         return _row_to_response(row)
-    finally:
-        con.close()
 
 
 @router.get("/api/reviews/export")
 def export_latest_reviews() -> dict[str, Any]:
-    con = _connect()
-    try:
+    with get_conn() as con:
+        if con is None:
+            return {"generated_at_utc": datetime.now(UTC).isoformat(), "count": 0, "items": []}
         rows = (
             con.execute(
                 """
@@ -152,9 +142,6 @@ def export_latest_reviews() -> dict[str, Any]:
             .fetchdf()
             .to_dict("records")
         )
-    finally:
-        con.close()
-
     return {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "count": len(rows),
@@ -164,8 +151,9 @@ def export_latest_reviews() -> dict[str, Any]:
 
 @router.get("/api/reviews/{mmsi}", response_model=ReviewResponse)
 def get_latest_review(mmsi: str) -> ReviewResponse:
-    con = _connect()
-    try:
+    with get_conn() as con:
+        if con is None:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         rows = (
             con.execute(
                 """
@@ -180,18 +168,17 @@ def get_latest_review(mmsi: str) -> ReviewResponse:
             .fetchdf()
             .to_dict("records")
         )
-        if not rows:
-            raise HTTPException(status_code=404, detail="No review found for MMSI")
-        return _row_to_response(rows[0])
-    finally:
-        con.close()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No review found for MMSI")
+    return _row_to_response(rows[0])
 
 
 @router.get("/api/reviews/{mmsi}/history")
 def get_review_history(mmsi: str, limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 200))
-    con = _connect()
-    try:
+    with get_conn() as con:
+        if con is None:
+            return {"mmsi": mmsi.strip(), "count": 0, "items": []}
         rows = (
             con.execute(
                 """
@@ -206,9 +193,6 @@ def get_review_history(mmsi: str, limit: int = 20) -> dict[str, Any]:
             .fetchdf()
             .to_dict("records")
         )
-    finally:
-        con.close()
-
     return {
         "mmsi": mmsi.strip(),
         "count": len(rows),

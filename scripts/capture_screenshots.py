@@ -7,6 +7,7 @@ Prerequisites:
     2. Seed demo data so the dashboard has realistic vessels:
            uv run python scripts/use_demo_watchlist.py --backup
            uv run python scripts/seed_demo_causal_effects.py
+           uv run python scripts/seed_demo_sar.py
     3. Start the dashboard in a separate terminal:
            uv run uvicorn src.api.main:app --reload
     4. Run this script:
@@ -17,6 +18,7 @@ Outputs are written to _outputs/screenshots/:
     02_map_watchlist.png       — map + ranked watchlist side-by-side
     03_causal_badge.png        — ATT estimate + 95% CI causal badge
     04_dispatch_brief.png      — patrol dispatch brief modal
+    05_sar_shap.png            — SHAP panel showing unmatched_sar_detections_30d as top signal
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ from pathlib import Path
 BASE_URL = "http://localhost:8000"
 # Demo vessel seeded by seed_demo_causal_effects.py / use_demo_watchlist.py
 DEMO_MMSI = "123456789"
+# SAR demo vessel: SARI NOUR — seeded by seed_demo_sar.py with unmatched_sar_detections_30d
+SAR_MMSI = "613115678"
 OUTPUT_DIR = Path(__file__).parent.parent / "_outputs" / "screenshots"
 VIEWPORT = {"width": 1440, "height": 900}
 
@@ -85,6 +89,26 @@ def capture_causal_badge(page, out: Path) -> None:
     print(f"  saved {out.name}")
 
 
+def capture_sar_shap(page, out: Path) -> None:
+    """Screenshot 5: SHAP panel for SAR-flagged vessel (unmatched_sar_detections_30d top signal).
+
+    Requires seed_demo_sar.py to have been run so SARI NOUR (613115678) has
+    unmatched_sar_detections_30d injected as its primary SHAP contribution.
+    """
+    goto(page, BASE_URL)
+    wait_for_dashboard(page)
+    row = page.locator(f"tr.watchlist-row[data-mmsi='{SAR_MMSI}']")
+    if row.count() == 0:
+        print(f"  WARNING: SAR vessel {SAR_MMSI} not found in watchlist — run seed_demo_sar.py first")
+        return
+    row.click()
+    page.wait_for_selector(".shap-table", timeout=10_000)
+    time.sleep(0.5)
+    panel = page.locator("#review-panel")
+    panel.screenshot(path=str(out))
+    print(f"  saved {out.name}")
+
+
 def capture_dispatch_brief(page, out: Path) -> None:
     """Screenshot 4: patrol dispatch brief modal."""
     goto(page, BASE_URL)
@@ -126,6 +150,7 @@ def main() -> int:
         ("02_map_watchlist.png", capture_map_watchlist),
         ("03_causal_badge.png", capture_causal_badge),
         ("04_dispatch_brief.png", capture_dispatch_brief),
+        ("05_sar_shap.png", capture_sar_shap),
     ]
 
     with sync_playwright() as p:
