@@ -266,8 +266,13 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
             yield f"data: Brief unavailable — {exc}\n\n"
         finally:
             yield "data: [DONE]\n\n"
-            if tokens:
-                _write_cached_brief(mmsi, version, "".join(tokens))
+            full = "".join(tokens)
+            if (
+                full
+                and not full.startswith("LLM not configured")
+                and not full.startswith("Brief unavailable")
+            ):
+                _write_cached_brief(mmsi, version, full)
 
     return StreamingResponse(
         _stream(),

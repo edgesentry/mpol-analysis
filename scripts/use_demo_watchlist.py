@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 from pathlib import Path
 
 
@@ -27,19 +26,29 @@ def main() -> None:
     args = parser.parse_args()
 
     source = Path(args.source)
-    target = Path(args.target)
 
     if not source.exists():
         raise SystemExit(f"Source demo watchlist not found: {source}")
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if args.backup and target.exists():
-        backup = target.with_suffix(target.suffix + ".bak")
-        shutil.copy2(target, backup)
-        print(f"Backed up: {backup}")
+    import polars as pl
 
-    shutil.copy2(source, target)
-    print(f"Copied demo watchlist: {source} -> {target}")
+    from src.storage.config import output_uri, write_parquet
+
+    df = pl.read_parquet(source)
+    uri = output_uri("candidate_watchlist.parquet")
+
+    # For local paths, we can still do a backup. S3 backing up is out of scope for this.
+    if not uri.startswith("s3://") and args.backup:
+        target_path = Path(uri)
+        if target_path.exists():
+            backup = target_path.with_suffix(target_path.suffix + ".bak")
+            import shutil
+
+            shutil.copy2(target_path, backup)
+            print(f"Backed up: {backup}")
+
+    write_parquet(df, uri)
+    print(f"Copied demo watchlist: {source} -> {uri}")
 
 
 if __name__ == "__main__":

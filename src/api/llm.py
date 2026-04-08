@@ -173,28 +173,40 @@ class LlamaCppClient:
         model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
         repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
 
+        import logging as _logging
+
+        _log = _logging.getLogger(__name__)
+
+        _common_kwargs: dict = dict(
+            n_ctx=2048,
+            n_threads=os.cpu_count() or 4,
+            n_gpu_layers=-1,  # offload all layers to Metal on Apple Silicon
+            verbose=False,
+        )
+
         try:
             with _quiet_stderr():
                 if model_path and os.path.exists(model_path):
-                    LlamaCppClient._instance = Llama(
-                        model_path=model_path,
-                        n_ctx=2048,
-                        n_threads=os.cpu_count() or 4,
-                        verbose=False,
-                    )
+                    _log.info("Loading LLM from %s", model_path)
+                    LlamaCppClient._instance = Llama(model_path=model_path, **_common_kwargs)
                 elif repo_id:
                     filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
+                    _log.info("Loading LLM from HF repo %s (%s)", repo_id, filename)
                     LlamaCppClient._instance = Llama.from_pretrained(
-                        repo_id=repo_id,
-                        filename=filename,
-                        n_ctx=2048,
-                        n_threads=os.cpu_count() or 4,
-                        verbose=False,
+                        repo_id=repo_id, filename=filename, **_common_kwargs
                     )
                 else:
                     return None
-        except Exception:
+        except Exception as e:
+            import sys
+            import traceback
+
+            _log.error("Failed to initialise llama-cpp model: %s: %s", type(e).__name__, e)
+            print(f"FAILED TO INIT LLAMACPP: {type(e).__name__}: {str(e)}", file=sys.stderr)
+            traceback.print_exc()
             return None
+
+        _log.info("LLM ready (%s)", type(LlamaCppClient._instance).__name__)
 
         return LlamaCppClient._instance
 

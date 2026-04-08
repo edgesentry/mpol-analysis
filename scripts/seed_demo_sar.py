@@ -11,11 +11,12 @@ Usage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import polars as pl
 
-WATCHLIST_PATH = Path("data/processed/candidate_watchlist.parquet")
+from src.storage.config import output_uri, read_parquet, write_parquet
+
+WATCHLIST_URI = output_uri("candidate_watchlist.parquet")
 SAR_MMSI = "613115678"
 
 SAR_SIGNALS = [
@@ -28,13 +29,12 @@ SAR_SIGNALS = [
 
 
 def main() -> None:
-    if not WATCHLIST_PATH.exists():
+    df = read_parquet(WATCHLIST_URI)
+    if df is None:
         raise SystemExit(
-            f"Watchlist not found at {WATCHLIST_PATH}. "
+            f"Watchlist not found at {WATCHLIST_URI}. "
             "Run: uv run python scripts/use_demo_watchlist.py --backup"
         )
-
-    df = pl.read_parquet(WATCHLIST_PATH)
 
     if SAR_MMSI not in df["mmsi"].to_list():
         raise SystemExit(f"MMSI {SAR_MMSI} not found in watchlist.")
@@ -46,8 +46,8 @@ def main() -> None:
         .alias("top_signals")
     )
 
-    updated.write_parquet(WATCHLIST_PATH)
-    print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_PATH}")
+    write_parquet(updated, WATCHLIST_URI)
+    print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_URI}")
     print("  Top signal: unmatched_sar_detections_30d = 3 (contribution 0.24)")
 
 
