@@ -142,11 +142,11 @@ class LlamaCppClient:
 
     _instance: object = None  # lazy singleton — loaded once on first call
 
-    def _get_model(self) -> object | None:  # type: ignore[return]
+    def _get_model(self) -> object | None:
         if LlamaCppClient._instance is not None:
             return LlamaCppClient._instance
         try:
-            from llama_cpp import Llama  # type: ignore[import-untyped]
+            from llama_cpp import Llama  # noqa: PLC0415
         except ImportError:
             return None
 
@@ -197,7 +197,7 @@ class LlamaCppClient:
 
         def _run() -> None:
             try:
-                response = model.create_chat_completion(  # type: ignore[union-attr,attr-defined]
+                response = model.create_chat_completion(  # type: ignore[attr-defined]
                     messages=full_messages,
                     stream=True,
                     max_tokens=512,
