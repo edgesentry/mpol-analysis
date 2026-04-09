@@ -517,6 +517,66 @@ print(f'Exported {df.height} rows to $sample_path')
   echo "  3. API:  curl http://localhost:8000/api/vessels"
 }
 
+run_ingest_custom_feeds() {
+  echo
+  echo "[15] Ingest custom feed drop-ins (_inputs/custom_feeds/)"
+
+  local feeds_dir
+  feeds_dir="$(prompt "Feeds directory" "_inputs/custom_feeds")"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  local dry_run_flag=""
+  if prompt_yes_no "Dry-run (detect feed types without inserting rows)" "false"; then
+    dry_run_flag="--dry-run"
+  fi
+
+  local cmd=(uv run python src/ingest/custom_feeds.py --dir "$feeds_dir" --db "$db_path")
+  if [[ -n "$dry_run_flag" ]]; then
+    cmd+=("$dry_run_flag")
+  fi
+
+  if ! run_cmd "${cmd[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if [[ -n "$dry_run_flag" ]]; then
+    return
+  fi
+
+  if ! prompt_yes_no "Run feature matrix + scoring to verify in dashboard" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  uv run uvicorn src.api.main:app --reload"
+  echo "  2. Open: http://localhost:8000"
+  echo "  3. API:  curl http://localhost:8000/api/vessels"
+}
+
 run_ingest_eo_csv() {
   echo
   echo "[13] Ingest EO Detections from CSV"
@@ -732,8 +792,15 @@ main_menu() {
     echo "           or NMEA 0183 VDM/VDO sentence file into ais_positions; then optionally"
     echo "           re-run feature matrix + scoring so new vessels appear on the dashboard"
     echo "     When: testing a new S-AIS provider feed (Spire, exactEarth, Orbcomm, etc.)"
-    echo "           or verifying issue #138 acceptance criteria"
     echo "      Who: developer, data engineer"
+    echo
+    echo "15) Ingest custom feed drop-ins"
+    echo "     What: run all CSV files in _inputs/custom_feeds/ through the auto-detector;"
+    echo "           auto-routes AIS/SAR/cargo/sanctions feeds to the appropriate DuckDB table;"
+    echo "           then optionally re-run feature matrix + scoring"
+    echo "     When: loading proprietary AIS, SAR detections, cargo manifests, or sanctions"
+    echo "           lists without writing any ingestion code"
+    echo "      Who: analyst, developer, data engineer"
     echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
@@ -757,6 +824,7 @@ main_menu() {
       12) run_eo_feature_smoke ;;
       13) run_ingest_eo_csv ;;
       14) run_ingest_ais_csv ;;
+      15) run_ingest_custom_feeds ;;
       q|quit|exit)
         echo "Bye"
         return

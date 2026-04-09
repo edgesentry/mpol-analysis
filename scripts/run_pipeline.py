@@ -348,7 +348,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 9
+TOTAL_STEPS = 10
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -485,8 +485,27 @@ def step_sanctions(p: RegionPreset, non_interactive: bool) -> bool:
     return False
 
 
+def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
+    _step(5, TOTAL_STEPS, "Ingesting custom feeds...")
+    from src.ingest.custom_feeds import ingest_custom_feeds
+
+    try:
+        results = ingest_custom_feeds(db_path=p.db_path)
+        total = sum(results.values())
+        if results:
+            _ok(f"{len(results)} file(s), {total} rows inserted")
+        else:
+            _ok("no files in _inputs/custom_feeds/")
+        return True
+    except Exception as exc:
+        _fail(str(exc))
+        if non_interactive:
+            return False
+        return _ask_retry_skip("custom_feeds") == "skip"
+
+
 def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(5, TOTAL_STEPS, "Building ownership graph...")
+    _step(6, TOTAL_STEPS, "Building ownership graph...")
     # vessel_registry builds Lance datasets from DuckDB vessel_meta
     reg = _run([sys.executable, "-m", "src.ingest.vessel_registry", "--db", p.db_path])
     if reg.returncode != 0:
@@ -508,7 +527,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
-    _step(6, TOTAL_STEPS, "Computing features...")
+    _step(7, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         (
@@ -582,7 +601,7 @@ def step_score(
     non_interactive: bool,
     geo_filter_path: str | None = None,
 ) -> bool:
-    _step(7, TOTAL_STEPS, "Scoring...")
+    _step(8, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
 
     # C3: calibrate graph_risk_score weight before composite scoring
@@ -648,7 +667,7 @@ def step_score(
 
 
 def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
-    _step(8, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    _step(9, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
         count_line = next((l for l in result.stdout.splitlines() if "total" in l.lower()), "")
@@ -661,7 +680,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
 
 
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(9, TOTAL_STEPS, "Launching dashboard...")
+    _step(10, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -798,6 +817,7 @@ def main() -> None:
         lambda p, ni: step_marine_cadastre(p, ni, marine_cadastre_years),
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
+        step_custom_feeds,
         step_ownership_graph,
         lambda p, ni: step_features(p, ni, seed_dummy),
         lambda p, ni: step_score(p, ni, geo_filter_path),
@@ -815,6 +835,7 @@ def main() -> None:
         import time
 
         rescore_steps = [
+            step_custom_feeds,
             lambda p, ni: step_features(p, ni, seed_dummy),
             lambda p, ni: step_score(p, ni, geo_filter_path),
         ]

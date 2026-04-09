@@ -212,6 +212,9 @@ data/processed/     # DuckDB files, Parquet outputs, Neo4j database
 site/               # MkDocs build output
 .env                # API keys (aisstream.io, Equasis)
 _inputs/
+!_inputs/custom_feeds/
+!_inputs/custom_feeds/.gitkeep
+_inputs/custom_feeds/*.csv
 _outputs/
 .DS_Store
 
