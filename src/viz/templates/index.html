@@ -60,24 +60,103 @@
     /* ── Sidebar ─────────────────────────────────────────── */
     .sidebar {
       width: 320px;
-      min-width: 280px;
+      min-width: 200px;
+      max-width: 600px;
       display: flex;
       flex-direction: column;
       background: #1a1f2e;
-      border-right: 1px solid #2d3748;
-      overflow: hidden;
-    }
-
-    .filter-panel {
-      padding: 1rem;
-      border-bottom: 1px solid #2d3748;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+      overflow: hidden;          /* clip horizontal overflows from resize */
+      min-height: 0;             /* allow flex child to shrink below content */
       flex-shrink: 0;
     }
 
-    .filter-panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #718096; }
+    /* ── Resize handles ────────────────────────────────────── */
+    .resize-handle-x {
+      width: 8px;          /* wider than the scrollbar so it's easier to target */
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: #1a1f2e;
+      border-left: 1px solid #2d3748;
+      border-right: 1px solid #2d3748;
+      /* Dotted grip pattern — visually distinct from a scrollbar */
+      background-image: repeating-linear-gradient(
+        180deg,
+        transparent 0px,
+        transparent 3px,
+        #2d3748 3px,
+        #2d3748 4px
+      );
+      transition: background-color 0.15s, border-color 0.15s;
+      z-index: 10;
+    }
+    .resize-handle-x:hover,
+    .resize-handle-x.dragging {
+      background-color: rgba(59,130,246,0.15);
+      border-color: #3b82f6;
+      background-image: repeating-linear-gradient(
+        180deg,
+        transparent 0px,
+        transparent 3px,
+        #3b82f6 3px,
+        #3b82f6 4px
+      );
+    }
+
+    .resize-handle-y {
+      width: 100%;
+      height: 5px;
+      cursor: row-resize;
+      background: #2d3748;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .resize-handle-y:hover,
+    .resize-handle-y.dragging { background: #3b82f6; }
+
+    /* Prevent text selection while dragging */
+    body.resizing { user-select: none; cursor: col-resize; }
+    body.resizing-y { user-select: none; cursor: row-resize; }
+
+    /* ── Filter panel (collapsible) ──────────────────────────── */
+    .filter-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #2d3748;
+      flex-shrink: 0;
+      cursor: pointer;
+      background: #161b27;
+      user-select: none;
+    }
+    .filter-panel-header:hover { background: #1a2233; }
+    .filter-panel-header h2 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #718096;
+      margin: 0;
+    }
+    .filter-toggle-icon {
+      font-size: 0.65rem;
+      color: #718096;
+      transition: transform 0.2s;
+    }
+    .filter-panel-body {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      overflow-y: auto;
+      max-height: 180px;  /* compact — gives the table panel majority of space */
+      flex-shrink: 0;
+    }
+    .filter-panel-body.collapsed {
+      display: none;
+    }
+
+    .filter-panel-header h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #718096; }
 
     label { font-size: 0.8rem; color: #a0aec0; display: block; margin-bottom: 0.25rem; }
 
@@ -92,7 +171,7 @@
       border-radius: 4px;
       padding: 0.3rem;
       font-size: 0.8rem;
-      max-height: 110px;
+      max-height: 60px;
     }
 
     input[type="number"] {
@@ -118,11 +197,13 @@
     }
     button.apply-btn:hover { background: #2563eb; }
 
-    /* ── Ranked table ───────────────────────────────────── */
+    /* ── Ranked table ────────────────────────────────────── */
     .table-panel {
-      flex: 1;
+      flex: 1 1 0;      /* grow to fill remaining sidebar height */
+      min-height: 0;    /* critical: lets flex child scroll */
       overflow-y: auto;
-      padding: 0.5rem 0;
+      overflow-x: hidden;
+      padding: 0.5rem 0 0.5rem 0;
     }
 
     table {
@@ -161,6 +242,135 @@
     .badge-red    { background: rgba(220,38,38,0.2);   color: #f87171; }
     .badge-yellow { background: rgba(245,158,11,0.2);  color: #fbbf24; }
     .badge-green  { background: rgba(34,197,94,0.2);   color: #4ade80; }
+
+    /* ── UX-01: vessel search ───────────────────────────────── */
+    #vessel-search {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      color: #e2e8f0;
+      border-radius: 4px;
+      padding: 0.4rem 0.5rem 0.4rem 1.8rem;
+      font-size: 0.8rem;
+      font-family: inherit;
+    }
+    #vessel-search:focus { outline: 1px solid #3b82f6; }
+    .search-wrap {
+      position: relative;
+    }
+    .search-icon {
+      position: absolute;
+      left: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #718096;
+      font-size: 0.8rem;
+      pointer-events: none;
+    }
+    tr.watchlist-row.search-hidden { display: none; }
+    tr.watchlist-row.search-match td { background: rgba(59,130,246,0.07); }
+
+    /* ── UX-02: row badge colours ───────────────────────────── */
+    .row-badge {
+      display: inline-block;
+      padding: 0.08rem 0.32rem;
+      border-radius: 3px;
+      font-size: 0.63rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.4;
+    }
+    .row-badge-confirmed    { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid #166534; }
+    .row-badge-probable     { background: rgba(250,204,21,0.15); color: #facc15; border: 1px solid #854d0e; }
+    .row-badge-suspect      { background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid #9a3412; }
+    .row-badge-cleared      { background: rgba(96,165,250,0.15); color: #60a5fa; border: 1px solid #1d4ed8; }
+    .row-badge-inconclusive { background: rgba(196,181,253,0.15);color: #c4b5fd; border: 1px solid #5b21b6; }
+    .row-badge-handoff      { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.4); }
+
+    /* ── UX-03: alert history drawer ────────────────────────── */
+    #bell-btn {
+      position: relative;
+      background: none;
+      border: none;
+      color: #718096;
+      font-size: 1.05rem;
+      cursor: pointer;
+      padding: 0.15rem 0.3rem;
+      line-height: 1;
+      margin-left: auto;
+    }
+    #bell-btn:hover { color: #e2e8f0; }
+    #bell-unread {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      background: #dc2626;
+      color: white;
+      font-size: 0.55rem;
+      font-weight: 700;
+      min-width: 14px;
+      height: 14px;
+      border-radius: 7px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0 2px;
+    }
+    #alert-drawer {
+      display: none;
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 340px;
+      height: 100vh;
+      background: #1a1f2e;
+      border-left: 1px solid #2d3748;
+      z-index: 2000;
+      flex-direction: column;
+    }
+    #alert-drawer.open { display: flex; }
+    .alert-drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #2d3748;
+      background: #161b27;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #93c5fd;
+      flex-shrink: 0;
+    }
+    .alert-drawer-close {
+      background: none;
+      border: none;
+      color: #718096;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    .alert-drawer-close:hover { color: #e2e8f0; }
+    #alert-history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .alert-history-item {
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.74rem;
+      line-height: 1.45;
+      cursor: pointer;
+    }
+    .alert-history-item:hover { border-color: #3b82f6; }
+    .alert-history-item .ah-time { color: #718096; font-size: 0.65rem; }
+    .alert-history-item .ah-name { color: #e2e8f0; font-weight: 600; }
+    .alert-history-item .ah-meta { color: #94a3b8; }
 
     /* ── Map ────────────────────────────────────────────── */
     #map { flex: 1; }
@@ -458,9 +668,9 @@
       display: none;
       flex-direction: column;
       height: 320px;
-      min-height: 260px;
+      min-height: 140px;
+      max-height: 80vh;
       background: #131a25;
-      border-top: 1px solid #2d3748;
       flex-shrink: 0;
     }
     #review-panel.active { display: flex; }
@@ -486,11 +696,12 @@
     }
 
     .review-grid {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 0.8rem;
+      display: flex;
+      flex-direction: row;
+      gap: 0;
       padding: 0.75rem 1rem;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
       overflow: hidden;
     }
 
@@ -500,6 +711,55 @@
       border-radius: 6px;
       padding: 0.65rem;
       overflow-y: auto;
+      min-width: 140px;
+      flex: 1 1 0;
+      transition: flex 0.15s;
+    }
+
+    /* Inner vertical drag handle between the two panels */
+    .review-inner-handle {
+      width: 5px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: #1e2535;
+      border-radius: 2px;
+      margin: 0 0.4rem;
+      transition: background 0.15s;
+      align-self: stretch;
+    }
+    .review-inner-handle:hover,
+    .review-inner-handle.dragging { background: #3b82f6; }
+
+    /* panel header row for title + toggle button */
+    .panel-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.45rem;
+    }
+    .panel-header-row h3 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin: 0;
+    }
+    .panel-toggle-btn {
+      background: none;
+      border: 1px solid #2d3748;
+      color: #718096;
+      font-size: 0.7rem;
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 0.05rem 0.3rem;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+    .panel-toggle-btn:hover { color: #e2e8f0; border-color: #3b82f6; }
+    /* collapsed state — show only the title strip */
+    .review-panel-collapsed {
+      flex: 0 0 32px !important;
+      overflow: hidden;
     }
 
     .review-form h3, .review-summary h3 {
@@ -569,14 +829,31 @@
   <div class="kpi" id="kpi-auroc-wrap" style="display:none">
     <span class="kpi-label">AUROC</span><span class="kpi-value" id="kpi-auroc">—</span>
   </div>
+  <!-- UX-03: Bell icon -->
+  <button id="bell-btn" title="Alert history" onclick="toggleAlertDrawer()">
+    &#x1F514;
+    <span id="bell-unread">0</span>
+  </button>
 </div>
 
 <div class="main">
 
   <!-- Sidebar: filters + ranked table -->
   <aside class="sidebar">
-    <div class="filter-panel">
-      <h2>Filters</h2>
+    <!-- Filter header: always visible, click to expand/collapse -->
+    <div class="filter-panel-header" id="filter-panel-header" onclick="toggleFilterPanel()">
+      <h2>&#x25BC; Filters</h2>
+      <span class="filter-toggle-icon" id="filter-toggle-icon">&#x25BC;</span>
+    </div>
+    <!-- Filter body: starts collapsed so table panel gets full height -->
+    <div class="filter-panel-body collapsed" id="filter-panel-body">
+
+      <!-- UX-01: Global vessel search -->
+      <div class="search-wrap">
+        <span class="search-icon">&#x1F50D;</span>
+        <input type="search" id="vessel-search" placeholder="Search name, MMSI, IMO&hellip;"
+          oninput="applyVesselSearch(this.value)" autocomplete="off" />
+      </div>
 
       <div>
         <label>Min confidence: <span id="conf-value">0.40</span></label>
@@ -587,6 +864,19 @@
       <div>
         <label>Vessel types</label>
         <select id="vessel-type-select" multiple onchange="applyFilters()"></select>
+      </div>
+
+      <!-- UX-04: Handoff-state filter -->
+      <div>
+        <label>Handoff state</label>
+        <select id="handoff-state-select" multiple onchange="applyHandoffFilter()">
+          <option value="queued_review" selected>Queued review</option>
+          <option value="in_review" selected>In review</option>
+          <option value="handoff_recommended" selected>Handoff recommended</option>
+          <option value="handoff_accepted" selected>Handoff accepted</option>
+          <option value="handoff_completed" selected>Handoff completed</option>
+          <option value="closed" selected>Closed</option>
+        </select>
       </div>
 
       <div>
@@ -621,6 +911,8 @@
       </table>
     </div>
   </aside>
+  <!-- Sidebar horizontal resize handle -->
+  <div class="resize-handle-x" id="sidebar-resize-handle"></div>
 
   <!-- Map -->
   <div id="map"></div>
@@ -628,15 +920,20 @@
 
 <!-- Review panel (bottom) -->
 <div id="review-panel">
+  <!-- Vertical resize handle -->
+  <div class="resize-handle-y" id="review-resize-handle"></div>
   <div class="review-header">
     <span class="review-header-label" id="review-vessel-label">Review Decision</span>
     <div class="review-header-actions">
       <button class="chat-close-btn" onclick="closeReviewPanel()" title="Close">&#x2715;</button>
     </div>
   </div>
-  <div class="review-grid">
-    <div class="review-form">
-      <h3>Decision Input</h3>
+  <div class="review-grid" id="review-grid">
+    <div class="review-form" id="review-form-panel">
+      <div class="panel-header-row">
+        <h3>Decision Input</h3>
+        <button class="panel-toggle-btn" id="review-form-toggle" onclick="toggleReviewPanel('form')" title="Expand / collapse">&#x2922;</button>
+      </div>
       <div class="review-form-row">
         <div>
           <label>Tier</label>
@@ -690,8 +987,15 @@
       </div>
       <div class="review-status" id="review-status">Select a vessel to review.</div>
     </div>
-    <div class="review-summary">
-      <h3>Selected Vessel</h3>
+
+    <!-- Inner horizontal drag handle -->
+    <div class="review-inner-handle" id="review-inner-handle"></div>
+
+    <div class="review-summary" id="review-summary-panel">
+      <div class="panel-header-row">
+        <h3>Selected Vessel</h3>
+        <button class="panel-toggle-btn" id="review-summary-toggle" onclick="toggleReviewPanel('summary')" title="Expand / collapse">&#x2922;</button>
+      </div>
       <div id="review-vessel-details" style="font-size:0.76rem;line-height:1.45;color:#cbd5e1;margin-bottom:0.6rem;">Select a vessel from the list.</div>
       <h3>Latest Review Summary</h3>
       <div id="review-summary-content" style="font-size:0.76rem;line-height:1.45;color:#cbd5e1;margin-bottom:0.6rem;">No review loaded.</div>
@@ -705,6 +1009,17 @@
 
 <!-- Alert toasts -->
 <div id="alert-container"></div>
+
+<!-- UX-03: Alert history drawer -->
+<div id="alert-drawer">
+  <div class="alert-drawer-header">
+    <span>&#x1F514; Alert History</span>
+    <button class="alert-drawer-close" onclick="toggleAlertDrawer()" title="Close">&#x2715;</button>
+  </div>
+  <div id="alert-history-list">
+    <div style="color:#718096;font-size:0.75rem;padding:0.5rem;">No alerts yet.</div>
+  </div>
+</div>
 
 <!-- Dispatch brief modal -->
 <div id="dispatch-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);overflow-y:auto;">
@@ -887,6 +1202,49 @@ document.getElementById('watchlist-tbody').addEventListener('click', (e) => {
   loadBriefForReviewPanel(vesselMeta.mmsi, vesselMeta.name);
 });
 
+// ── UX-01: Vessel search ───────────────────────────────────────────────────
+function applyVesselSearch(query) {
+  const q = query.trim().toLowerCase();
+  let matchCount = 0;
+  document.querySelectorAll('#watchlist-tbody tr.watchlist-row').forEach(row => {
+    const name = (row.dataset.name || '').toLowerCase();
+    const mmsi = (row.dataset.mmsi || '').toLowerCase();
+    // IMO is not in dataset by default, but check for it if present
+    const imo = (row.dataset.imo || '').toLowerCase();
+    const matches = !q || name.includes(q) || mmsi.includes(q) || imo.includes(q);
+    row.classList.toggle('search-hidden', !matches);
+    row.classList.toggle('search-match', !!(q && matches));
+    if (matches) matchCount++;
+  });
+  // Pan map to first match
+  if (q) {
+    const firstMatch = document.querySelector('#watchlist-tbody tr.watchlist-row.search-match');
+    if (firstMatch) {
+      const lat = parseFloat(firstMatch.dataset.lat);
+      const lon = parseFloat(firstMatch.dataset.lon);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        map.flyTo({ center: [lon, lat], zoom: 8, duration: 800 });
+      }
+    }
+  }
+}
+
+// ── UX-04: Handoff-state filter ────────────────────────────────────────────
+// Keyed by mmsi → handoff_state, populated during refreshReviewBadges
+const _handoffStateCache = new Map();
+
+function applyHandoffFilter() {
+  const sel = document.getElementById('handoff-state-select');
+  const allowed = new Set(Array.from(sel.selectedOptions).map(o => o.value));
+  document.querySelectorAll('#watchlist-tbody tr.watchlist-row').forEach(row => {
+    const mmsi = row.dataset.mmsi;
+    const state = _handoffStateCache.get(mmsi) || 'unreviewed';
+    // Unreviewed rows are always shown (they don't have a handoff state yet)
+    const show = state === 'unreviewed' || allowed.has(state);
+    row.classList.toggle('search-hidden', !show);
+  });
+}
+
 // ── Filter state ───────────────────────────────────────────────────────────
 function getFilters() {
   const minConf = parseFloat(document.getElementById('min-conf').value);
@@ -1009,17 +1367,35 @@ function _pillForHandoff(handoff) {
   return `<span class="review-pill">${handoff.replaceAll('_', ' ')}</span>`;
 }
 
+// ── UX-02: Coloured row badges ─────────────────────────────────────────────
+function _rowBadgeForTier(tier) {
+  if (!tier) return '';
+  return `<span class="row-badge row-badge-${tier}">${tier}</span>`;
+}
+
+function _rowBadgeForHandoff(state) {
+  if (!state) return '';
+  const label = state.replaceAll('_', '\u00A0');
+  const isActive = state === 'handoff_recommended' || state === 'handoff_accepted';
+  if (isActive) return `<span class="row-badge row-badge-handoff">${label}</span>`;
+  return `<span class="row-badge" style="background:rgba(100,116,139,0.12);color:#64748b;border:1px solid #334155;">${label}</span>`;
+}
+
 function setRowReviewState(mmsi, review) {
   const tierCell = document.querySelector(`.review-tier[data-mmsi='${mmsi}']`);
   const handoffCell = document.querySelector(`.review-handoff[data-mmsi='${mmsi}']`);
   if (!tierCell || !handoffCell) return;
   if (!review) {
-    tierCell.textContent = '—';
-    handoffCell.textContent = '—';
+    // UX-02: unreviewed → no pill (not grey noise)
+    tierCell.innerHTML = '';
+    handoffCell.innerHTML = '';
+    _handoffStateCache.set(mmsi, 'unreviewed');
     return;
   }
-  tierCell.innerHTML = _pillForTier(review.review_tier);
-  handoffCell.innerHTML = _pillForHandoff(review.handoff_state);
+  // UX-02: coloured pills
+  tierCell.innerHTML = _rowBadgeForTier(review.review_tier);
+  handoffCell.innerHTML = _rowBadgeForHandoff(review.handoff_state);
+  _handoffStateCache.set(mmsi, review.handoff_state || 'unreviewed');
 }
 
 async function refreshReviewBadges() {
@@ -1034,6 +1410,8 @@ async function refreshReviewBadges() {
       setRowReviewState(mmsi, null);
     }
   }));
+  // Re-apply handoff filter after badges are loaded
+  applyHandoffFilter();
 }
 
 function _escapeHtml(s) {
@@ -1364,6 +1742,83 @@ function refreshCausalBadges() {
     .catch(() => {});
 }
 
+// ── UX-03: Alert history ring buffer + bell icon ───────────────────────────
+const _alertHistory = [];    // ring buffer, max 50
+const ALERT_HISTORY_MAX = 50;
+let _alertUnread = 0;
+let _alertDrawerOpen = false;
+
+function _pushAlertHistory(data) {
+  _alertHistory.unshift({
+    mmsi: data.mmsi,
+    vessel_name: data.vessel_name || data.mmsi,
+    confidence: data.confidence,
+    flag: data.flag || '—',
+    ts: new Date().toLocaleTimeString(),
+  });
+  if (_alertHistory.length > ALERT_HISTORY_MAX) _alertHistory.pop();
+
+  if (!_alertDrawerOpen) {
+    _alertUnread++;
+    const badge = document.getElementById('bell-unread');
+    badge.textContent = _alertUnread > 9 ? '9+' : _alertUnread;
+    badge.style.display = 'flex';
+  }
+  _renderAlertHistory();
+}
+
+function _renderAlertHistory() {
+  const list = document.getElementById('alert-history-list');
+  if (!_alertHistory.length) {
+    list.innerHTML = '<div style="color:#718096;font-size:0.75rem;padding:0.5rem;">No alerts yet.</div>';
+    return;
+  }
+  list.innerHTML = _alertHistory.map((a, i) =>
+    `<div class="alert-history-item" onclick="_alertHistoryClick('${a.mmsi}')">
+      <div class="ah-time">${a.ts}</div>
+      <div class="ah-name">&#9888; ${_escapeHtml(a.vessel_name)}</div>
+      <div class="ah-meta">MMSI: ${_escapeHtml(a.mmsi)} &bull; Score: ${parseFloat(a.confidence).toFixed(2)} &bull; Flag: ${_escapeHtml(a.flag)}</div>
+    </div>`
+  ).join('');
+}
+
+function _alertHistoryClick(mmsi) {
+  const row = document.querySelector(`tr.watchlist-row[data-mmsi='${mmsi}']`);
+  if (row) {
+    const lat = parseFloat(row.dataset.lat);
+    const lon = parseFloat(row.dataset.lon);
+    selectVesselOnMap(mmsi, row.dataset.name, row.dataset.confidence, lat, lon);
+    if (!isNaN(lat) && !isNaN(lon)) map.flyTo({ center: [lon, lat], zoom: 8, duration: 800 });
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  toggleAlertDrawer();
+}
+
+function toggleAlertDrawer() {
+  const drawer = document.getElementById('alert-drawer');
+  _alertDrawerOpen = !_alertDrawerOpen;
+  drawer.classList.toggle('open', _alertDrawerOpen);
+  if (_alertDrawerOpen) {
+    _alertUnread = 0;
+    const badge = document.getElementById('bell-unread');
+    badge.style.display = 'none';
+    _renderAlertHistory();
+  }
+}
+
+// ── Filter panel collapse / expand ────────────────────────────────────────
+let _filterOpen = false;
+function toggleFilterPanel() {
+  _filterOpen = !_filterOpen;
+  const body = document.getElementById('filter-panel-body');
+  const icon = document.getElementById('filter-toggle-icon');
+  const hdr  = document.getElementById('filter-panel-header');
+  body.classList.toggle('collapsed', !_filterOpen);
+  // Rotate icon: ▼ when closed, ▲ when open
+  icon.innerHTML = _filterOpen ? '&#x25B2;' : '&#x25BC;';
+  hdr.querySelector('h2').innerHTML = (_filterOpen ? '&#x25B2;' : '&#x25BC;') + ' Filters';
+}
+
 // ── SSE alert stream ───────────────────────────────────────────────────────
 function startAlertStream() {
   const es = new EventSource('/api/alerts/stream');
@@ -1371,6 +1826,9 @@ function startAlertStream() {
     let data;
     try { data = JSON.parse(e.data); } catch { return; }
     if (data.error) return;
+
+    // UX-03: push to ring buffer
+    _pushAlertHistory(data);
 
     const container = document.getElementById('alert-container');
     const toast = document.createElement('div');
@@ -1541,6 +1999,165 @@ function renderDispatchBrief() {
   </div>`;
 
   document.getElementById('dispatch-brief-body').innerHTML = html;
+}
+
+// ── Drag-to-resize: sidebar (horizontal) ─────────────────────────────────
+(function () {
+  const handle = document.getElementById('sidebar-resize-handle');
+  const sidebar = document.querySelector('.sidebar');
+  if (!handle || !sidebar) return;
+
+  let startX, startWidth;
+
+  handle.addEventListener('mousedown', (e) => {
+    startX = e.clientX;
+    startWidth = sidebar.getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing');
+
+    function onMove(ev) {
+      const delta = ev.clientX - startX;
+      const newWidth = Math.min(600, Math.max(200, startWidth + delta));
+      sidebar.style.width = newWidth + 'px';
+    }
+
+    function onUp() {
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+})();
+
+// ── Drag-to-resize: review panel (vertical) ─────────────────────────────
+(function () {
+  const handle = document.getElementById('review-resize-handle');
+  const panel = document.getElementById('review-panel');
+  if (!handle || !panel) return;
+
+  let startY, startHeight;
+
+  handle.addEventListener('mousedown', (e) => {
+    startY = e.clientY;
+    startHeight = panel.getBoundingClientRect().height;
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing-y');
+
+    function onMove(ev) {
+      // Dragging up = delta negative = panel grows
+      const delta = startY - ev.clientY;
+      const newHeight = Math.min(window.innerHeight * 0.8, Math.max(140, startHeight + delta));
+      panel.style.height = newHeight + 'px';
+    }
+
+    function onUp() {
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing-y');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+})();
+
+// ── Drag-to-resize: inner review panel handle (horizontal) ────────────────
+(function () {
+  const handle = document.getElementById('review-inner-handle');
+  const leftPanel = document.getElementById('review-form-panel');
+  const rightPanel = document.getElementById('review-summary-panel');
+  if (!handle || !leftPanel || !rightPanel) return;
+
+  let startX, startLeftW, startRightW;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startLeftW = leftPanel.getBoundingClientRect().width;
+    startRightW = rightPanel.getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing');
+
+    function onMove(ev) {
+      const delta = ev.clientX - startX;
+      const newLeft = Math.max(140, startLeftW + delta);
+      const newRight = Math.max(140, startRightW - delta);
+      leftPanel.style.flex = `0 0 ${newLeft}px`;
+      rightPanel.style.flex = `0 0 ${newRight}px`;
+    }
+
+    function onUp() {
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+})();
+
+// ── Toggle expand / collapse for inner review panels ─────────────────────
+const _reviewPanelState = { form: 'normal', summary: 'normal' };
+
+function toggleReviewPanel(which) {
+  const formPanel    = document.getElementById('review-form-panel');
+  const summaryPanel = document.getElementById('review-summary-panel');
+  const formBtn      = document.getElementById('review-form-toggle');
+  const summaryBtn   = document.getElementById('review-summary-toggle');
+
+  const ICON_EXPAND   = '&#x2922;'; // ⤢ expand
+  const ICON_COLLAPSE = '&#x2923;'; // ⤣ restore
+
+  if (which === 'form') {
+    if (_reviewPanelState.form === 'normal') {
+      // Expand form → collapse summary
+      formPanel.style.flex    = '1 1 auto';
+      summaryPanel.classList.add('review-panel-collapsed');
+      formPanel.classList.remove('review-panel-collapsed');
+      formBtn.innerHTML    = ICON_COLLAPSE;
+      summaryBtn.innerHTML = ICON_EXPAND;
+      _reviewPanelState.form    = 'expanded';
+      _reviewPanelState.summary = 'collapsed';
+    } else {
+      // Restore both
+      formPanel.style.flex    = '1 1 0';
+      summaryPanel.style.flex = '1 1 0';
+      formPanel.classList.remove('review-panel-collapsed');
+      summaryPanel.classList.remove('review-panel-collapsed');
+      formBtn.innerHTML    = ICON_EXPAND;
+      summaryBtn.innerHTML = ICON_EXPAND;
+      _reviewPanelState.form    = 'normal';
+      _reviewPanelState.summary = 'normal';
+    }
+  } else {
+    if (_reviewPanelState.summary === 'normal') {
+      // Expand summary → collapse form
+      summaryPanel.style.flex = '1 1 auto';
+      formPanel.classList.add('review-panel-collapsed');
+      summaryPanel.classList.remove('review-panel-collapsed');
+      summaryBtn.innerHTML = ICON_COLLAPSE;
+      formBtn.innerHTML    = ICON_EXPAND;
+      _reviewPanelState.summary = 'expanded';
+      _reviewPanelState.form    = 'collapsed';
+    } else {
+      // Restore both
+      formPanel.style.flex    = '1 1 0';
+      summaryPanel.style.flex = '1 1 0';
+      formPanel.classList.remove('review-panel-collapsed');
+      summaryPanel.classList.remove('review-panel-collapsed');
+      formBtn.innerHTML    = ICON_EXPAND;
+      summaryBtn.innerHTML = ICON_EXPAND;
+      _reviewPanelState.form    = 'normal';
+      _reviewPanelState.summary = 'normal';
+    }
+  }
 }
 </script>
 
