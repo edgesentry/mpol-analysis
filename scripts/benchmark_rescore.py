@@ -36,14 +36,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-import duckdb
+import duckdb  # noqa: E402
 
-from src.features.build_matrix import build_feature_matrix, write_vessel_features
-from src.ingest.schema import init_schema
-from src.score.composite import compute_composite_scores
-from src.score.watchlist import write_candidate_watchlist
+from src.features.build_matrix import build_feature_matrix, write_vessel_features  # noqa: E402
+from src.ingest.schema import init_schema  # noqa: E402
+from src.score.composite import compute_composite_scores  # noqa: E402
+from src.score.watchlist import write_candidate_watchlist  # noqa: E402
 
 
 def _seed_vessels(db_path: str, n_vessels: int, rng: random.Random) -> None:
@@ -122,7 +123,7 @@ def main() -> None:
 
     try:
         print(f"\n{'='*60}")
-        print(f"  arktrace edge gateway re-score benchmark")
+        print("  arktrace edge gateway re-score benchmark")
         print(f"  Vessels: {args.vessels:,}  |  seed: {args.seed}")
         print(f"  DB: {db_path}")
         print(f"{'='*60}\n")
