@@ -405,6 +405,77 @@ run_sar_feature_smoke() {
   echo "     Check 'signals' array for unmatched_sar_detections_30d"
 }
 
+run_ingest_ais_csv() {
+  echo
+  echo "[14] Ingest AIS Positions from CSV / NMEA file"
+
+  local file_path
+  file_path="$(prompt "Path to AIS file (CSV or NMEA)" "data/raw/ais_feed.csv")"
+
+  local mode="csv"
+  if prompt_yes_no "Parse as NMEA 0183 VDM/VDO sentences (default: CSV)" "false"; then
+    mode="nmea"
+  fi
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  local bbox_str
+  bbox_str="$(prompt "Bounding box lat_min lon_min lat_max lon_max (leave blank for no filter)" "")"
+
+  local cmd=(uv run python src/ingest/ais_csv.py --file "$file_path" --db "$db_path")
+
+  if [[ "$mode" == "nmea" ]]; then
+    cmd+=(--nmea)
+  else
+    local col_map
+    col_map="$(prompt "Column map overrides key=col,... (leave blank for MarineCadastre defaults)" "")"
+    if [[ -n "$col_map" ]]; then
+      cmd+=(--column-map "$col_map")
+    fi
+  fi
+
+  if [[ -n "$bbox_str" ]]; then
+    # shellcheck disable=SC2206
+    cmd+=(--bbox $bbox_str)
+  fi
+
+  if ! run_cmd "${cmd[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring to verify in dashboard" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  uv run uvicorn src.api.main:app --reload"
+  echo "  2. Open: http://localhost:8000 — new vessels from your file appear on the map"
+  echo "  3. API:  curl http://localhost:8000/api/vessels"
+}
+
 run_ingest_eo_csv() {
   echo
   echo "[13] Ingest EO Detections from CSV"
@@ -615,6 +686,14 @@ main_menu() {
     echo "     When: testing EO fusion with sample or real CSV data before GFW API access"
     echo "      Who: developer, data engineer"
     echo
+    echo "14) Ingest AIS Positions from CSV / NMEA"
+    echo "     What: load AIS positions from a CSV (any provider, configurable column map)"
+    echo "           or NMEA 0183 VDM/VDO sentence file into ais_positions; then optionally"
+    echo "           re-run feature matrix + scoring so new vessels appear on the dashboard"
+    echo "     When: testing a new S-AIS provider feed (Spire, exactEarth, Orbcomm, etc.)"
+    echo "           or verifying issue #138 acceptance criteria"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -636,6 +715,7 @@ main_menu() {
       11) run_sar_feature_smoke ;;
       12) run_eo_feature_smoke ;;
       13) run_ingest_eo_csv ;;
+      14) run_ingest_ais_csv ;;
       q|quit|exit)
         echo "Bye"
         return
