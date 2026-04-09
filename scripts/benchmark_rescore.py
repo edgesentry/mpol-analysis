@@ -68,16 +68,18 @@ def _seed_vessels(db_path: str, n_vessels: int, rng: random.Random) -> None:
         ship_type = rng.choice([70, 71, 72, 80, 81, 82])
         for j in range(10):
             ts = base_ts + timedelta(days=j * 3, hours=rng.randint(0, 23))
-            positions.append((
-                mmsi,
-                ts,
-                round(lat + rng.uniform(-0.05, 0.05), 6),
-                round(lon + rng.uniform(-0.05, 0.05), 6),
-                round(rng.uniform(0, 15), 1),   # sog
-                round(rng.uniform(0, 360), 1),  # cog
-                rng.randint(0, 8),               # nav_status
-                ship_type,
-            ))
+            positions.append(
+                (
+                    mmsi,
+                    ts,
+                    round(lat + rng.uniform(-0.05, 0.05), 6),
+                    round(lon + rng.uniform(-0.05, 0.05), 6),
+                    round(rng.uniform(0, 15), 1),  # sog
+                    round(rng.uniform(0, 360), 1),  # cog
+                    rng.randint(0, 8),  # nav_status
+                    ship_type,
+                )
+            )
 
     con.executemany(
         "INSERT OR IGNORE INTO ais_positions VALUES (?,?,?,?,?,?,?,?)",
@@ -122,11 +124,11 @@ def main() -> None:
     db_path = str(Path(tempfile.mkdtemp()) / "benchmark.duckdb")
 
     try:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  arktrace edge gateway re-score benchmark")
         print(f"  Vessels: {args.vessels:,}  |  seed: {args.seed}")
         print(f"  DB: {db_path}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         # ── Seed ──────────────────────────────────────────────────────────
         print("[1/4] Seeding synthetic AIS data ...")
@@ -161,16 +163,16 @@ def main() -> None:
         t_pipeline = t_features + t_score + t_watchlist
         t_total = t_seed + t_pipeline
 
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  RESULTS  ({args.vessels:,} vessels)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  Seed (excluded from pipeline time)  {_fmt(t_seed):>10}")
         print(f"  Feature matrix (build_matrix)        {_fmt(t_features):>10}")
         print(f"  Composite score (HDBSCAN + IF + SHAP){_fmt(t_score):>10}")
         print(f"  Watchlist output                     {_fmt(t_watchlist):>10}")
         print(f"  ── Pipeline total ──────────────────  {_fmt(t_pipeline):>10}")
         print(f"  Total wall-clock (incl. seed)        {_fmt(t_total):>10}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         target = 30.0
         if t_pipeline <= target:
@@ -181,8 +183,11 @@ def main() -> None:
 
         # Machine info for documentation
         import platform
+
         cpu_count = os.cpu_count() or 1
-        print(f"  Host: {platform.node()}  |  CPUs: {cpu_count}  |  Python {platform.python_version()}")
+        print(
+            f"  Host: {platform.node()}  |  CPUs: {cpu_count}  |  Python {platform.python_version()}"
+        )
         print()
 
     finally:
