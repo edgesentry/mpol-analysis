@@ -32,6 +32,8 @@ Available menu jobs:
 - SAR Feature Smoke Test (job 11)
 - EO Feature Smoke Test (job 12)
 - Ingest EO Detections from CSV (job 13) — load a local EO CSV into `eo_detections` without a GFW API token, then optionally run feature matrix + scoring to verify in the dashboard
+- Ingest AIS CSV / NMEA file (job 14) — load a provider CSV or NMEA 0183 file into `ais_positions`
+- Ingest custom feed drop-ins (job 15) — run all CSV files in `_inputs/custom_feeds/` through the auto-detector
 
 ### Delayed-label intelligence loop (backtracking)
 
@@ -65,7 +67,7 @@ The preset weights are starting points. The pipeline auto-calibrates `w_graph` o
 
 ## Pipeline steps
 
-The pipeline runs 9 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
+The pipeline runs 10 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
 
 | # | Step | Key modules |
 |---|---|---|
@@ -73,11 +75,12 @@ The pipeline runs 9 steps in sequence. Each step prints a status line; in intera
 | 2 | Marine Cadastre historical backfill | `src/ingest/marine_cadastre.py` |
 | 3 | Live AIS streaming | `src/ingest/ais_stream.py` |
 | 4 | Sanctions loading | `src/ingest/sanctions.py` |
-| 5 | Ownership graph | `src/ingest/vessel_registry.py` (→ Lance Graph) + `src/features/ownership_graph.py` |
-| 6 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
-| 7 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
-| 8 | GDELT ingestion | `src/ingest/gdelt.py` |
-| 9 | Dashboard | `src/api/main.py` (uvicorn) |
+| 5 | Custom feed drop-ins | `src/ingest/custom_feeds.py` |
+| 6 | Ownership graph | `src/ingest/vessel_registry.py` (→ Lance Graph) + `src/features/ownership_graph.py` |
+| 7 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
+| 8 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
+| 9 | GDELT ingestion | `src/ingest/gdelt.py` |
+| 10 | Dashboard | `src/api/main.py` (uvicorn) |
 
 ---
 
@@ -143,6 +146,63 @@ Injects four realistic shadow fleet vessels (PETROVSKY ZVEZDA, SARI NOUR, OCEAN 
 ```bash
 uv run python scripts/run_pipeline.py --region singapore \
   --non-interactive --seed-dummy
+```
+
+---
+
+## Custom feed drop-ins (`_inputs/custom_feeds/`)
+
+Drop any CSV file into `_inputs/custom_feeds/` and it is auto-detected and ingested on the next pipeline run — no code changes required. Step 5 (`step_custom_feeds`) runs before the ownership graph build so proprietary position and detection data is included in feature engineering.
+
+### Supported feed types
+
+| Feed type | Required columns | Target table |
+|---|---|---|
+| AIS positions | `mmsi` (or `MMSI`), `lat` (or `LAT`), `lon` (or `LON`), `timestamp` (or `BaseDateTime`) | `ais_positions` |
+| SAR detections | `lat`, `lon`, `detected_at` | `sar_detections` |
+| Cargo manifest | `reporter`, `partner`, `hs_code`, `period` | `trade_flow` |
+| Custom sanctions | `name`, `list_source` | `sanctions_entities` |
+
+Detection is column-first; if columns are ambiguous, the filename prefix is used (`ais_*`, `sar_*`, `cargo_*`, `manifest_*`, `sanctions_*`).
+
+### Optional columns
+
+| Feed | Optional columns | Default when absent |
+|---|---|---|
+| SAR | `detection_id`, `length_m`, `source_scene`, `confidence` | UUID / null / filename stem / 1.0 |
+| Cargo | `trade_value_usd`, `route_key` | null |
+| Sanctions | `entity_id`, `mmsi`, `imo`, `flag`, `type` | UUID / null |
+
+### AIS column-map sidecar
+
+For AIS feeds with non-standard column names, create a JSON sidecar alongside the CSV:
+
+```
+_inputs/custom_feeds/spire_feed.csv
+_inputs/custom_feeds/spire_feed.columnmap.json
+```
+
+```json
+{"mmsi": "vessel_id", "lat": "latitude", "lon": "longitude", "timestamp": "time_utc"}
+```
+
+### Run standalone
+
+```bash
+# Ingest all pending files
+uv run python src/ingest/custom_feeds.py
+
+# Dry-run (detect types without inserting)
+uv run python src/ingest/custom_feeds.py --dry-run
+
+# Custom directory
+uv run python src/ingest/custom_feeds.py --dir /path/to/feeds
+```
+
+Or use the operations shell:
+
+```bash
+bash scripts/run_operations_shell.sh   # → job 15: Ingest custom feed drop-ins
 ```
 
 ---
