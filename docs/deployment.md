@@ -171,6 +171,65 @@ crontab -e
 
 ---
 
+## AIS providers
+
+arktrace is AIS-provider agnostic. Three ingestion paths are available — switch or combine them without code changes.
+
+### Live WebSocket (aisstream.io)
+
+Default for real-time feeds. Requires `AISSTREAM_API_KEY` in `.env`.
+
+```bash
+uv run python src/ingest/ais_stream.py --bbox -5 92 22 122
+```
+
+### CSV file (any provider)
+
+Accepts any CSV with configurable column mapping. Default layout matches MarineCadastre (NOAA):
+
+```bash
+# MarineCadastre / NOAA (default column names):
+uv run python src/ingest/ais_csv.py --file data/raw/ais_2024.csv
+
+# Spire / exactEarth / Orbcomm — map provider columns to internal schema:
+uv run python src/ingest/ais_csv.py --file spire_feed.csv \
+    --column-map mmsi=vessel_id,lat=latitude,lon=longitude,timestamp=time_utc,sog=speed,cog=course
+
+# With bounding-box filter (lat_min lon_min lat_max lon_max):
+uv run python src/ingest/ais_csv.py --file feed.csv --bbox -5 92 22 122
+```
+
+**Default CSV column mapping (MarineCadastre layout):**
+
+| Internal field | Default provider column |
+|---|---|
+| `mmsi` | `MMSI` |
+| `timestamp` | `BaseDateTime` |
+| `lat` | `LAT` |
+| `lon` | `LON` |
+| `sog` | `SOG` |
+| `cog` | `COG` |
+| `nav_status` | `Status` |
+| `ship_type` | `VesselType` |
+
+Override any field with `--column-map key=ProviderColumnName,...`. Unspecified fields use the defaults above.
+
+### NMEA 0183 sentence file (S-AIS raw feed)
+
+Parses VDM/VDO sentences — AIS message types 1, 2, 3 (Class A) and 18 (Class B). Multi-part sentences are assembled automatically.
+
+```bash
+# NMEA file from any S-AIS provider:
+uv run python src/ingest/ais_csv.py --file feed.nmea --nmea
+
+# With bounding-box filter:
+uv run python src/ingest/ais_csv.py --file feed.nmea --nmea --bbox -5 92 22 122
+```
+
+All three paths write to the same `ais_positions` table in DuckDB, so downstream feature engineering and scoring are unaffected by which provider supplies the data.
+
+---
+
 ## Cloud — container registry (CI/CD path)
 
 Build and push the dashboard image to a registry, then deploy on any container platform (ECS, Cloud Run, Fly.io, etc.).
