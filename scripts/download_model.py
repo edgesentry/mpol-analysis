@@ -2,21 +2,30 @@
 
 Supported model names:
 
-    gemma-4-e4b-it   unsloth/gemma-4-E4B-it-GGUF  (4B instruct, ~2.5 GB Q4_K_M)
-    gemma-4-e2b-it   unsloth/gemma-4-E2B-it-GGUF  (2B instruct, ~1.4 GB Q4_K_M)
+    phi-4-mini-it    bartowski/microsoft_Phi-4-mini-instruct-GGUF  (3.8B instruct, ~2.4 GB Q4_K_M)
+                     MIT licence — no restrictions on government or defence use
+
+    qwen2.5-3b-it    bartowski/Qwen2.5-3B-Instruct-GGUF  (3B instruct, ~2.0 GB Q4_K_M)
+                     Apache 2.0 — no restrictions on government or defence use
+
+    smollm2-1.7b-it  bartowski/SmolLM2-1.7B-Instruct-GGUF  (1.7B instruct, ~1.1 GB Q4_K_M)
+                     Apache 2.0 — smallest supported model; runs on 6 GB RAM
+
+    mistral-7b-it    bartowski/Mistral-7B-Instruct-v0.3-GGUF  (7B instruct, ~4.4 GB Q4_K_M) [DEFAULT]
+                     Apache 2.0 — highest quality local option; requires 10 GB RAM
 
 Usage:
     # By short name (recommended):
-    uv run python scripts/download_model.py gemma-4-e4b-it
+    uv run python scripts/download_model.py phi-4-mini-it
 
     # Override output directory:
-    uv run python scripts/download_model.py gemma-4-e4b-it --dir ~/models
+    uv run python scripts/download_model.py phi-4-mini-it --dir ~/models
 
     # Via environment variable (used by docker-compose model_init):
-    MODEL_NAME=gemma-4-e2b-it uv run python scripts/download_model.py
+    MODEL_NAME=phi-4-mini-it uv run python scripts/download_model.py
 
 Gated models require a HuggingFace token:
-    HF_TOKEN=hf_... uv run python scripts/download_model.py gemma-4-e4b-it
+    HF_TOKEN=hf_... uv run python scripts/download_model.py phi-4-mini-it
 """
 
 from __future__ import annotations
@@ -60,17 +69,25 @@ class _LogTqdm:
 
 # repo_id, filename (Q4_K_M quantisation — good quality/size balance)
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
-    "gemma-4-e4b-it": (
-        "unsloth/gemma-4-E4B-it-GGUF",
-        "gemma-4-E4B-it-Q4_K_M.gguf",
+    "phi-4-mini-it": (
+        "bartowski/microsoft_Phi-4-mini-instruct-GGUF",
+        "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
     ),
-    "gemma-4-e2b-it": (
-        "unsloth/gemma-4-E2B-it-GGUF",
-        "gemma-4-E2B-it-Q4_K_M.gguf",
+    "qwen2.5-3b-it": (
+        "bartowski/Qwen2.5-3B-Instruct-GGUF",
+        "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+    ),
+    "smollm2-1.7b-it": (
+        "bartowski/SmolLM2-1.7B-Instruct-GGUF",
+        "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    ),
+    "mistral-7b-it": (
+        "bartowski/Mistral-7B-Instruct-v0.3-GGUF",
+        "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
     ),
 }
 
-DEFAULT_MODEL = "gemma-4-e4b-it"
+DEFAULT_MODEL = "mistral-7b-it"
 DEFAULT_DIR = Path.home() / "models"
 
 
