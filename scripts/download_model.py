@@ -2,7 +2,7 @@
 
 Supported model names:
 
-    phi-4-mini-it    bartowski/Phi-4-mini-instruct-GGUF  (3.8B instruct, ~2.4 GB Q4_K_M) [DEFAULT]
+    phi-4-mini-it    bartowski/microsoft_Phi-4-mini-instruct-GGUF  (3.8B instruct, ~2.4 GB Q4_K_M) [DEFAULT]
                      MIT licence — no restrictions on government or defence use
 
 Usage:
@@ -61,8 +61,8 @@ class _LogTqdm:
 # repo_id, filename (Q4_K_M quantisation — good quality/size balance)
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
     "phi-4-mini-it": (
-        "bartowski/Phi-4-mini-instruct-GGUF",
-        "Phi-4-mini-instruct-Q4_K_M.gguf",
+        "bartowski/microsoft_Phi-4-mini-instruct-GGUF",
+        "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
     ),
 }
 

@@ -46,7 +46,7 @@ bash scripts/run_dev.sh
 docker compose -f docker-compose.infra.yml up -d   # MinIO only, no dashboard container
 
 S3_ENDPOINT=http://localhost:9000 \
-LLAMACPP_MODEL_PATH=~/models/Phi-4-mini-instruct-Q4_K_M.gguf \
+LLAMACPP_MODEL_PATH=~/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf \
   uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -83,13 +83,13 @@ Models are saved to `~/models/` by default. Override with `--dir /path/to/dir`.
 **3. Configure `.env`:**
 ```bash
 LLM_PROVIDER=llamacpp
-LLAMACPP_MODEL_PATH=/Users/yourname/models/Phi-4-mini-instruct-Q4_K_M.gguf
+LLAMACPP_MODEL_PATH=/Users/yourname/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf
 ```
 
 Alternatively, skip the download step and let the dashboard pull the model from HuggingFace on first request:
 ```bash
 LLM_PROVIDER=llamacpp
-LLAMACPP_MODEL_REPO=bartowski/Phi-4-mini-instruct-GGUF
+LLAMACPP_MODEL_REPO=bartowski/microsoft_Phi-4-mini-instruct-GGUF
 LLAMACPP_MODEL_FILE=*Q4_K_M*
 ```
 
@@ -116,7 +116,7 @@ The model loads once on first request. If `LLAMACPP_MODEL_PATH` is unset or the 
 
 | Short name | HuggingFace repo | Licence | Q4_K_M size | Min RAM |
 |---|---|---|---|---|
-| `phi-4-mini-it` | `bartowski/Phi-4-mini-instruct-GGUF` | **MIT** — no restrictions on government or defence use | ~2.4 GB | 8 GB |
+| `phi-4-mini-it` | `bartowski/microsoft_Phi-4-mini-instruct-GGUF` | **MIT** — no restrictions on government or defence use | ~2.4 GB | 8 GB |
 
 ---
 

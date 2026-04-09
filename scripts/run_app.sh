@@ -13,7 +13,7 @@
 #
 # Usage:
 #   bash scripts/run_dev.sh
-#   bash scripts/run_dev.sh --model ~/models/Phi-4-mini-instruct-Q4_K_M.gguf
+#   bash scripts/run_dev.sh --model ~/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf
 #   bash scripts/run_dev.sh --provider anthropic   # skip local LLM entirely
 #
 # Options:
@@ -66,8 +66,8 @@ fi
 
 # ── Resolve model path if not set ────────────────────────────────────────────
 if [[ -z "${LLAMACPP_MODEL_PATH:-}" ]]; then
-  DEFAULT_MODEL="${HOME}/.cache/arktrace/models/Phi-4-mini-instruct-Q4_K_M.gguf"
-  FALLBACK_MODEL="${HOME}/models/Phi-4-mini-instruct-Q4_K_M.gguf"
+  DEFAULT_MODEL="${HOME}/.cache/arktrace/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
+  FALLBACK_MODEL="${HOME}/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
   if [[ -f "${DEFAULT_MODEL}" ]]; then
     export LLAMACPP_MODEL_PATH="${DEFAULT_MODEL}"
   elif [[ -f "${FALLBACK_MODEL}" ]]; then
@@ -75,7 +75,7 @@ if [[ -z "${LLAMACPP_MODEL_PATH:-}" ]]; then
   elif [[ "${LLM_PROVIDER:-llamacpp}" == "llamacpp" ]]; then
     echo "⬇️  No GGUF model found. Downloading default model (phi-4-mini-it)…"
     uv run --with huggingface-hub python scripts/download_model.py phi-4-mini-it --dir "${HOME}/models"
-    export LLAMACPP_MODEL_PATH="${HOME}/models/Phi-4-mini-instruct-Q4_K_M.gguf"
+    export LLAMACPP_MODEL_PATH="${HOME}/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"
   fi
 fi
 

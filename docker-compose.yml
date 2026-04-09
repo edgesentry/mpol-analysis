@@ -65,7 +65,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       # Local LLM — defaults to llamacpp with the model downloaded by model_init
       LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
-      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/Phi-4-mini-instruct-Q4_K_M.gguf}
+      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf}
     volumes:
       - ./data:/app/data   # DuckDB working file stays local
       - models:/app/models  # GGUF model downloaded by model_init
