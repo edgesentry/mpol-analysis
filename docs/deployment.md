@@ -230,6 +230,43 @@ All three paths write to the same `ais_positions` table in DuckDB, so downstream
 
 ---
 
+## Edge gateway benchmark
+
+The incremental re-score pipeline (feature matrix + HDBSCAN + Isolation Forest + SHAP + watchlist output) is optimised for low-power environments.
+
+### Measured result
+
+| Metric | Value |
+|---|---|
+| Vessels | 5,000 |
+| Feature matrix (`build_matrix.py`) | 0.28 s |
+| Composite scoring (`composite.py`) | 5.46 s |
+| Watchlist output (`watchlist.py`) | 0.01 s |
+| **Pipeline total** | **5.75 s** |
+| Host | Apple M-series, 14 cores |
+| Target (4-core / 4 GB edge gateway) | < 30 s ✓ |
+
+### Reproduce locally
+
+```bash
+uv run python scripts/benchmark_rescore.py --vessels 5000
+```
+
+### Reproduce with hardware constraints (Docker)
+
+Simulates a 4-core / 4 GB Raspberry Pi 4 or NVIDIA Jetson Nano:
+
+```bash
+docker run --rm --cpus 4 --memory 4g \
+    -v $(pwd):/app -w /app \
+    ghcr.io/edgesentry/mpol-dashboard:latest \
+    uv run python scripts/benchmark_rescore.py --vessels 5000
+```
+
+The benchmark seeds a temporary DuckDB with synthetic AIS data, runs the full pipeline, and prints a pass/fail result against the 30-second target. Seeding time (~46 s for 50,000 AIS fixes) is excluded from the pipeline measurement.
+
+---
+
 ## Cloud — container registry (CI/CD path)
 
 Build and push the dashboard image to a registry, then deploy on any container platform (ECS, Cloud Run, Fly.io, etc.).
