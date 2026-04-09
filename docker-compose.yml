@@ -18,7 +18,7 @@ services:
       retries: 5
 
   # Downloads the GGUF model on first run; skips if already present in the volume.
-  # Set MODEL_NAME to: gemma-4-e4b-it (default, ~2.5 GB) or gemma-4-e2b-it (~1.4 GB)
+  # Set MODEL_NAME to override the default (phi-4-mini-it, MIT, ~2.4 GB).
   # Set HF_TOKEN if the model repo is gated.
   model_init:
     build:
@@ -28,7 +28,7 @@ services:
     volumes:
       - models:/app/models
     environment:
-      MODEL_NAME: ${MODEL_NAME:-gemma-4-e4b-it}
+      MODEL_NAME: ${MODEL_NAME:-phi-4-mini-it}
       MODEL_DIR: /app/models
       HF_TOKEN: ${HF_TOKEN:-}
     command: ["python", "scripts/download_model.py"]
@@ -65,7 +65,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       # Local LLM — defaults to llamacpp with the model downloaded by model_init
       LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
-      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/gemma-4-E4B-it-Q4_K_M.gguf}
+      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/Phi-4-mini-instruct-Q4_K_M.gguf}
     volumes:
       - ./data:/app/data   # DuckDB working file stays local
       - models:/app/models  # GGUF model downloaded by model_init

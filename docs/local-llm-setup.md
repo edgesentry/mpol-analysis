@@ -33,7 +33,7 @@ Running the dashboard natively on the host bypasses the VM and enables Metal-acc
 CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
 
 # 2. Download the model (saves to ~/models/ by default)
-uv run python scripts/download_model.py gemma-4-e4b-it
+uv run python scripts/download_model.py phi-4-mini-it
 ```
 
 ### Start infra + dashboard
@@ -46,7 +46,7 @@ bash scripts/run_dev.sh
 docker compose -f docker-compose.infra.yml up -d   # MinIO only, no dashboard container
 
 S3_ENDPOINT=http://localhost:9000 \
-LLAMACPP_MODEL_PATH=~/models/gemma-4-E4B-it-Q4_K_M.gguf \
+LLAMACPP_MODEL_PATH=~/models/Phi-4-mini-instruct-Q4_K_M.gguf \
   uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -74,11 +74,8 @@ CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
 
 **2. Download a GGUF model:**
 ```bash
-# Gemma 4 4B Instruct (~2.5 GB) — recommended for 8 GB+ RAM:
-uv run python scripts/download_model.py gemma-4-e4b-it
-
-# Gemma 4 2B Instruct (~1.4 GB) — for 8 GB RAM with other apps running:
-uv run python scripts/download_model.py gemma-4-e2b-it
+# Phi-4 Mini Instruct (~2.4 GB) — MIT licence, no restrictions on government or defence use:
+uv run python scripts/download_model.py phi-4-mini-it
 ```
 
 Models are saved to `~/models/` by default. Override with `--dir /path/to/dir`.
@@ -86,13 +83,13 @@ Models are saved to `~/models/` by default. Override with `--dir /path/to/dir`.
 **3. Configure `.env`:**
 ```bash
 LLM_PROVIDER=llamacpp
-LLAMACPP_MODEL_PATH=/Users/yourname/models/gemma-4-E4B-it-Q4_K_M.gguf
+LLAMACPP_MODEL_PATH=/Users/yourname/models/Phi-4-mini-instruct-Q4_K_M.gguf
 ```
 
 Alternatively, skip the download step and let the dashboard pull the model from HuggingFace on first request:
 ```bash
 LLM_PROVIDER=llamacpp
-LLAMACPP_MODEL_REPO=unsloth/gemma-4-E4B-it-GGUF
+LLAMACPP_MODEL_REPO=bartowski/Phi-4-mini-instruct-GGUF
 LLAMACPP_MODEL_FILE=*Q4_K_M*
 ```
 
@@ -103,11 +100,7 @@ uv run uvicorn src.api.main:app --reload
 
 **Docker (full stack, no Metal):** `docker compose up` handles everything — `model_init` downloads the model into a named volume on first run, then the dashboard starts automatically:
 ```bash
-# Default: gemma-4-e4b-it
 docker compose up
-
-# Use the 2B model instead:
-MODEL_NAME=gemma-4-e2b-it docker compose up
 ```
 
 **Docker infra only (for native macOS dev):** Start only MinIO without the dashboard container:
@@ -121,10 +114,9 @@ The model loads once on first request. If `LLAMACPP_MODEL_PATH` is unset or the 
 
 **Model guide:**
 
-| Short name | HuggingFace repo | Q4_K_M size | Min RAM |
-|---|---|---|---|
-| `gemma-4-e4b-it` | `unsloth/gemma-4-E4B-it-GGUF` | ~2.5 GB | 8 GB |
-| `gemma-4-e2b-it` | `unsloth/gemma-4-E2B-it-GGUF` | ~1.4 GB | 8 GB |
+| Short name | HuggingFace repo | Licence | Q4_K_M size | Min RAM |
+|---|---|---|---|---|
+| `phi-4-mini-it` | `bartowski/Phi-4-mini-instruct-GGUF` | **MIT** — no restrictions on government or defence use | ~2.4 GB | 8 GB |
 
 ---
 

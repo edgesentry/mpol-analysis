@@ -2,21 +2,21 @@
 
 Supported model names:
 
-    gemma-4-e4b-it   unsloth/gemma-4-E4B-it-GGUF  (4B instruct, ~2.5 GB Q4_K_M)
-    gemma-4-e2b-it   unsloth/gemma-4-E2B-it-GGUF  (2B instruct, ~1.4 GB Q4_K_M)
+    phi-4-mini-it    bartowski/Phi-4-mini-instruct-GGUF  (3.8B instruct, ~2.4 GB Q4_K_M) [DEFAULT]
+                     MIT licence — no restrictions on government or defence use
 
 Usage:
     # By short name (recommended):
-    uv run python scripts/download_model.py gemma-4-e4b-it
+    uv run python scripts/download_model.py phi-4-mini-it
 
     # Override output directory:
-    uv run python scripts/download_model.py gemma-4-e4b-it --dir ~/models
+    uv run python scripts/download_model.py phi-4-mini-it --dir ~/models
 
     # Via environment variable (used by docker-compose model_init):
-    MODEL_NAME=gemma-4-e2b-it uv run python scripts/download_model.py
+    MODEL_NAME=phi-4-mini-it uv run python scripts/download_model.py
 
 Gated models require a HuggingFace token:
-    HF_TOKEN=hf_... uv run python scripts/download_model.py gemma-4-e4b-it
+    HF_TOKEN=hf_... uv run python scripts/download_model.py phi-4-mini-it
 """
 
 from __future__ import annotations
@@ -60,17 +60,13 @@ class _LogTqdm:
 
 # repo_id, filename (Q4_K_M quantisation — good quality/size balance)
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
-    "gemma-4-e4b-it": (
-        "unsloth/gemma-4-E4B-it-GGUF",
-        "gemma-4-E4B-it-Q4_K_M.gguf",
-    ),
-    "gemma-4-e2b-it": (
-        "unsloth/gemma-4-E2B-it-GGUF",
-        "gemma-4-E2B-it-Q4_K_M.gguf",
+    "phi-4-mini-it": (
+        "bartowski/Phi-4-mini-instruct-GGUF",
+        "Phi-4-mini-instruct-Q4_K_M.gguf",
     ),
 }
 
-DEFAULT_MODEL = "gemma-4-e4b-it"
+DEFAULT_MODEL = "phi-4-mini-it"
 DEFAULT_DIR = Path.home() / "models"
 
 

@@ -14,7 +14,7 @@ Provider selection via environment variables:
     LLM_MODEL           model name / ID
     ANTHROPIC_API_KEY   required when LLM_PROVIDER=anthropic
     LLAMACPP_MODEL_PATH path to a local GGUF file  (takes priority)
-    LLAMACPP_MODEL_REPO HuggingFace repo ID to download from (e.g. unsloth/gemma-4-E4B-it-GGUF)
+    LLAMACPP_MODEL_REPO HuggingFace repo ID to download from (e.g. bartowski/Phi-4-mini-instruct-GGUF)
     LLAMACPP_MODEL_FILE filename / glob within the repo   (default: *Q4_K_M*)
 """
 
@@ -154,7 +154,7 @@ class LlamaCppClient:
     Model resolution (first match wins):
       1. LLAMACPP_MODEL_PATH  — path to a local .gguf file
       2. LLAMACPP_MODEL_REPO  — HuggingFace repo ID; downloads on first use
-                                e.g. unsloth/gemma-4-E4B-it-GGUF
+                                e.g. bartowski/Phi-4-mini-instruct-GGUF
          LLAMACPP_MODEL_FILE  — filename within the repo (glob ok, e.g. *Q4_K_M*)
 
     Falls back gracefully if no model is configured or the package is not installed.
