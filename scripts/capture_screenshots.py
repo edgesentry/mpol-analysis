@@ -160,6 +160,7 @@ def main() -> int:
         context = browser.new_context(
             viewport=VIEWPORT,
             color_scheme="dark",
+            device_scale_factor=2,
         )
         page = context.new_page()
 
