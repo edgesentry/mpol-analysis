@@ -25,8 +25,7 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 llm = [
-    "llama-cpp-python>=0.3",
-    "huggingface-hub>=0.24",
+    "mlx-lm>=0.19",
 ]
 
 [build-system]
