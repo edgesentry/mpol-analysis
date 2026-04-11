@@ -376,11 +376,13 @@ def _compute_graph_risk(df: pl.DataFrame) -> pl.Series:
 
 
 def _compute_identity_score(df: pl.DataFrame) -> pl.Series:
+    # flag_changes_2y is excluded: vessel_meta stores only the current flag state,
+    # not change history, so this field is always 0. Its former 0.30 weight is
+    # redistributed to the live signals (name_changes, owner_changes, high_risk_flag).
     score = (
-        0.30 * np.clip(df["flag_changes_2y"].to_numpy() / 5.0, 0.0, 1.0)
-        + 0.25 * np.clip(df["name_changes_2y"].to_numpy() / 5.0, 0.0, 1.0)
-        + 0.20 * np.clip(df["owner_changes_2y"].to_numpy() / 5.0, 0.0, 1.0)
-        + 0.15 * np.clip(df["high_risk_flag_ratio"].to_numpy(), 0.0, 1.0)
+        0.40 * np.clip(df["name_changes_2y"].to_numpy() / 5.0, 0.0, 1.0)
+        + 0.30 * np.clip(df["owner_changes_2y"].to_numpy() / 5.0, 0.0, 1.0)
+        + 0.20 * np.clip(df["high_risk_flag_ratio"].to_numpy(), 0.0, 1.0)
         + 0.10 * np.clip(df["ownership_depth"].to_numpy() / 6.0, 0.0, 1.0)
     )
     return pl.Series("identity_score", score.astype(np.float32))
