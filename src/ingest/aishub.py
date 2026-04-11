@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import duckdb
 import httpx
@@ -123,7 +123,7 @@ def _parse_timestamp(raw: str | None) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -138,7 +138,7 @@ def load_to_duckdb(records: list[dict], db_path: str = DEFAULT_DB_PATH) -> int:
 
     rows = []
     meta_rows = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     for r in records:
         mmsi = str(r.get("MMSI", "")).strip()
@@ -151,28 +151,32 @@ def load_to_duckdb(records: list[dict], db_path: str = DEFAULT_DB_PATH) -> int:
         if lat is None or lon is None:
             continue
 
-        rows.append({
-            "mmsi": mmsi,
-            "timestamp": ts,
-            "lat": float(lat),
-            "lon": float(lon),
-            "sog": float(r["SOG"]) if r.get("SOG") is not None else None,
-            "cog": float(r["COG"]) if r.get("COG") is not None else None,
-            "nav_status": None,
-            "ship_type": int(r["SHIPTYPE"]) if r.get("SHIPTYPE") else None,
-        })
+        rows.append(
+            {
+                "mmsi": mmsi,
+                "timestamp": ts,
+                "lat": float(lat),
+                "lon": float(lon),
+                "sog": float(r["SOG"]) if r.get("SOG") is not None else None,
+                "cog": float(r["COG"]) if r.get("COG") is not None else None,
+                "nav_status": None,
+                "ship_type": int(r["SHIPTYPE"]) if r.get("SHIPTYPE") else None,
+            }
+        )
 
         imo = str(r.get("IMO", "")).strip()
         name = str(r.get("NAME", "")).strip()
         flag = str(r.get("FLAG", "")).strip()
-        meta_rows.append({
-            "mmsi": mmsi,
-            "imo": imo or None,
-            "name": name or None,
-            "flag": flag or None,
-            "ship_type": int(r["SHIPTYPE"]) if r.get("SHIPTYPE") else None,
-            "gross_tonnage": None,
-        })
+        meta_rows.append(
+            {
+                "mmsi": mmsi,
+                "imo": imo or None,
+                "name": name or None,
+                "flag": flag or None,
+                "ship_type": int(r["SHIPTYPE"]) if r.get("SHIPTYPE") else None,
+                "gross_tonnage": None,
+            }
+        )
 
     if not rows:
         return 0
