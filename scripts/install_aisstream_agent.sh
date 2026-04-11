@@ -20,6 +20,7 @@ PLIST_PATH="$HOME/Library/LaunchAgents/${LABEL}.plist"
 LOG_DIR="$HOME/.arktrace"
 LOG_FILE="$LOG_DIR/aisstream.log"
 ERR_FILE="$LOG_DIR/aisstream.err"
+NEWSYSLOG_CONF="$HOME/Library/LaunchAgents/${LABEL}.newsyslog.conf"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DOT_ENV="$PROJECT_ROOT/.env"
@@ -84,6 +85,15 @@ cmd_install() {
 
   mkdir -p "$LOG_DIR"
 
+  # Log rotation via newsyslog (runs hourly on macOS).
+  # Rotate at 50 MB, keep 5 archives, compress with bzip2 (flag J).
+  # Format: path  owner:group  mode  count  size(KB)  when  flags  [pid-file  sig]
+  cat > "$NEWSYSLOG_CONF" <<NEWSYSLOG
+# arktrace aisstream.io log rotation — managed by install_aisstream_agent.sh
+${LOG_FILE}	$(id -un):$(id -gn)	644	5	51200	*	JN
+${ERR_FILE}	$(id -un):$(id -gn)	644	5	51200	*	JN
+NEWSYSLOG
+
   cat > "$PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -132,8 +142,8 @@ cmd_install() {
   <key>KeepAlive</key>
   <true/>
 
-  <!-- Wait 30 s before restarting to avoid tight crash loops -->
-  <key>TimeOut</key>
+  <!-- Wait 30 s between crash restarts to avoid tight crash loops -->
+  <key>ThrottleInterval</key>
   <integer>30</integer>
 
   <!-- Start on login -->
@@ -157,9 +167,21 @@ PLIST
   launchctl load "$PLIST_PATH"
   echo "Agent loaded. aisstream.io collector is now running."
   echo
-  echo "  Logs : $LOG_FILE"
-  echo "  Errors: $ERR_FILE"
-  echo "  Status: scripts/install_aisstream_agent.sh status"
+  echo "  Logs   : $LOG_FILE"
+  echo "  Errors : $ERR_FILE"
+  echo "  Rotation: $NEWSYSLOG_CONF (newsyslog, max 50 MB × 5 archives)"
+  echo "  Status : scripts/install_aisstream_agent.sh status"
+  echo
+  echo "━━━  PRE-FLIGHT: keep MacBook running for 48–72 h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  1. Plug into power."
+  echo "  2. Disable sleep: System Settings → Battery → Options →"
+  echo "       set display and disk sleep to Never while plugged in; disable Power Nap."
+  echo "  3. Keep lid open (or attach external display + keyboard/mouse for clamshell)."
+  echo "  4. Run as a safety net:  caffeinate -i &"
+  echo "  5. Verify aisstream.io free-tier rate for Singapore/Malacca bbox;"
+  echo "       narrow bbox with --bbox if messages are throttled."
+  echo "  6. Confirm ais_stream.py handles WebSocket disconnects with backoff (not a tight loop)."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # --------------------------------------------------------------------------- #
@@ -173,6 +195,7 @@ cmd_uninstall() {
   fi
   launchctl unload "$PLIST_PATH" 2>/dev/null || true
   rm -f "$PLIST_PATH"
+  rm -f "$NEWSYSLOG_CONF"
   echo "Agent unloaded and plist removed."
   echo "Logs are kept at $LOG_DIR — delete manually if no longer needed."
 }
