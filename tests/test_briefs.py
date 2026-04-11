@@ -245,3 +245,48 @@ def test_brief_with_no_gdelt_still_generates(client):
     assert resp.status_code == 200
     lines = [l for l in resp.text.split("\n") if l.startswith("data: ")]
     assert any(l != "data: [DONE]" for l in lines)
+
+
+# ── /api/briefs/{mmsi}/dispatch ────────────────────────────────────────────
+
+
+def test_dispatch_brief_streams_and_caches(client):
+    mock_llm = MagicMock()
+    mock_llm.chat = _fake_chat
+
+    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm):
+        # 1. Initially not cached
+        resp = client.get("/api/briefs/123456789/dispatch/cached")
+        assert resp.json()["available"] is False
+
+        # 2. Stream and cache
+        resp = client.get("/api/briefs/123456789/dispatch")
+        assert resp.status_code == 200
+        # Check for tokens in SSE stream
+        assert "data: Test " in resp.text
+        assert "data: brief " in resp.text
+        assert "data: text." in resp.text
+
+        # 3. Now it should be cached
+        resp = client.get("/api/briefs/123456789/dispatch/cached")
+        body = resp.json()
+        assert body["available"] is True
+        assert body["brief"] == "Test brief text."
+
+
+def test_dispatch_brief_served_from_cache(client):
+    mock_llm = MagicMock()
+    call_count = 0
+
+    async def _counting_chat(system: str, user: str):
+        nonlocal call_count
+        call_count += 1
+        yield "dispatch cached."
+
+    mock_llm.chat = _counting_chat
+
+    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm):
+        client.get("/api/briefs/123456789/dispatch")  # call 1: LLM
+        client.get("/api/briefs/123456789/dispatch")  # call 2: Cache
+
+    assert call_count == 1

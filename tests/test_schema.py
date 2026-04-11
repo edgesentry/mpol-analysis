@@ -14,6 +14,7 @@ def test_all_tables_created(tmp_db):
         "trade_flow",
         "vessel_features",
         "analyst_briefs",
+        "dispatch_briefs",
         "chat_cache",
         "cleared_vessels",
         "vessel_reviews",

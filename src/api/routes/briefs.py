@@ -144,13 +144,15 @@ def _watchlist_version() -> str:
         return "0"
 
 
-def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> str | None:
+def _read_cached_brief(
+    mmsi: str, version: str, table: str = "analyst_briefs", db_path: str | None = None
+) -> str | None:
     try:
         with get_conn() as con:
             if con is None:
                 return None
             rows = con.execute(
-                "SELECT brief FROM analyst_briefs WHERE mmsi = ? AND watchlist_version = ?",
+                f"SELECT brief FROM {table} WHERE mmsi = ? AND watchlist_version = ?",
                 [mmsi, version],
             ).fetchall()
             return rows[0][0] if rows else None
@@ -158,21 +160,24 @@ def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> s
         return None
 
 
-def _write_cached_brief(mmsi: str, version: str, brief: str, db_path: str | None = None) -> None:
+def _write_cached_brief(
+    mmsi: str, version: str, brief: str, table: str = "analyst_briefs", db_path: str | None = None
+) -> None:
     try:
         with get_conn() as con:
             if con is None:
                 return
             con.execute(
-                """
-                INSERT OR REPLACE INTO analyst_briefs (mmsi, watchlist_version, brief)
+                f"""
+                INSERT OR REPLACE INTO {table} (mmsi, watchlist_version, brief)
                 VALUES (?, ?, ?)
                 """,
                 [mmsi, version, brief],
             )
     except Exception:
         logger.exception(
-            "Failed to write cached brief to DuckDB (mmsi=%s, version=%s)",
+            "Failed to write cached brief to DuckDB (table=%s, mmsi=%s, version=%s)",
+            table,
             mmsi,
             version,
         )
@@ -274,6 +279,24 @@ async def vessel_dispatch_brief_stream(mmsi: str) -> StreamingResponse:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    version = _watchlist_version()
+    cached = _read_cached_brief(mmsi, version, table="dispatch_briefs")
+    if cached:
+
+        async def _cached_stream():
+            # Stream cached brief word by word so the UI sees progressive output
+            words = cached.split(" ")
+            for i, word in enumerate(words):
+                chunk = word if i == 0 else " " + word
+                yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _cached_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     dispatch = _extract_dispatch_fields(vessel)
     vessel_name = str(vessel.get("vessel_name") or vessel.get("mmsi", ""))
 
@@ -293,14 +316,23 @@ async def vessel_dispatch_brief_stream(mmsi: str) -> StreamingResponse:
     )
 
     async def _stream():
+        tokens: list[str] = []
         try:
             llm = get_llm_client()
             async for token in llm.chat(system, user):
+                tokens.append(token)
                 yield f"data: {token}\n\n"
         except Exception as exc:
             yield f"data: Brief unavailable — {exc}\n\n"
         finally:
             yield "data: [DONE]\n\n"
+            full = "".join(tokens)
+            if (
+                full
+                and not full.startswith("LLM not configured")
+                and not full.startswith("Brief unavailable")
+            ):
+                _write_cached_brief(mmsi, version, full, table="dispatch_briefs")
 
     return StreamingResponse(
         _stream(),
@@ -331,7 +363,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
         )
 
     version = _watchlist_version()
-    cached = _read_cached_brief(mmsi, version)
+    cached = _read_cached_brief(mmsi, version, table="analyst_briefs")
     if cached:
 
         async def _cached_stream():
@@ -391,7 +423,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
                 and not full.startswith("LLM not configured")
                 and not full.startswith("Brief unavailable")
             ):
-                _write_cached_brief(mmsi, version, full)
+                _write_cached_brief(mmsi, version, full, table="analyst_briefs")
 
     return StreamingResponse(
         _stream(),
@@ -471,7 +503,17 @@ async def vessel_chat(mmsi: str, body: _ChatRequest) -> StreamingResponse:
 def vessel_brief_cached(mmsi: str) -> JSONResponse:
     """Return the cached analyst brief for a vessel, if available."""
     version = _watchlist_version()
-    cached = _read_cached_brief(mmsi, version)
+    cached = _read_cached_brief(mmsi, version, table="analyst_briefs")
+    if cached is None:
+        return JSONResponse({"available": False, "mmsi": mmsi})
+    return JSONResponse({"available": True, "mmsi": mmsi, "brief": cached})
+
+
+@router.get("/api/briefs/{mmsi}/dispatch/cached")
+def vessel_dispatch_brief_cached(mmsi: str) -> JSONResponse:
+    """Return the cached officer-to-commander dispatch brief for a vessel, if available."""
+    version = _watchlist_version()
+    cached = _read_cached_brief(mmsi, version, table="dispatch_briefs")
     if cached is None:
         return JSONResponse({"available": False, "mmsi": mmsi})
     return JSONResponse({"available": True, "mmsi": mmsi, "brief": cached})

@@ -1900,20 +1900,33 @@ function openDispatchBrief() {
         '<span style="color:#f87171;">Failed to load dispatch brief.</span>';
     });
 
-  // Stream officer-to-commander verbal brief
+  // Stream officer-to-commander verbal brief (check cache first)
   const verbalBox = document.getElementById('dispatch-verbal-brief');
   const verbalText = document.getElementById('dispatch-verbal-text');
   verbalBox.style.display = 'block';
-  verbalText.textContent = '';
-  const es = new EventSource(`/api/briefs/${encodeURIComponent(currentReviewMmsi)}/dispatch`);
-  es.onmessage = e => {
-    if (e.data === '[DONE]') { es.close(); return; }
-    verbalText.textContent += e.data;
-  };
-  es.onerror = () => {
-    es.close();
-    if (!verbalText.textContent) verbalText.textContent = 'Verbal brief unavailable — LLM not configured.';
-  };
+  verbalText.textContent = 'Loading…';
+
+  fetch(`/api/briefs/${encodeURIComponent(currentReviewMmsi)}/dispatch/cached`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.available && data.brief) {
+        verbalText.textContent = data.brief;
+      } else {
+        verbalText.textContent = '';
+        const es = new EventSource(`/api/briefs/${encodeURIComponent(currentReviewMmsi)}/dispatch`);
+        es.onmessage = e => {
+          if (e.data === '[DONE]') { es.close(); return; }
+          verbalText.textContent += e.data;
+        };
+        es.onerror = () => {
+          es.close();
+          if (!verbalText.textContent) verbalText.textContent = 'Verbal brief unavailable — LLM not configured.';
+        };
+      }
+    })
+    .catch(() => {
+      verbalText.textContent = 'Verbal brief unavailable — cache check failed.';
+    });
 }
 
 function renderDispatchBrief() {
