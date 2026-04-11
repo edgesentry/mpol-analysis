@@ -1035,6 +1035,10 @@
         <button onclick="document.getElementById('dispatch-modal').style.display='none'" style="padding:0.25rem 0.7rem;background:#1e2a3a;border:1px solid #334155;border-radius:4px;color:#94a3b8;cursor:pointer;font-size:0.72rem;">&#x2715; Close</button>
       </div>
     </div>
+    <div id="dispatch-verbal-brief" style="margin-bottom:1.2rem;padding:1rem;background:#0c2340;border:1px solid #1e4d6b;border-radius:6px;display:none;">
+      <div style="font-size:0.68rem;font-weight:700;letter-spacing:0.08em;color:#38bdf8;margin-bottom:0.5rem;text-transform:uppercase;">Verbal Brief — Officer to Commander</div>
+      <div id="dispatch-verbal-text" style="color:#e2e8f0;font-size:0.82rem;line-height:1.7;font-style:italic;"></div>
+    </div>
     <div id="dispatch-brief-body">Loading…</div>
   </div>
 </div>
@@ -1883,6 +1887,8 @@ function openDispatchBrief() {
   const modal = document.getElementById('dispatch-modal');
   modal.style.display = 'block';
   document.getElementById('dispatch-brief-body').innerHTML = 'Loading…';
+
+  // Load structured brief data
   fetch(`/api/vessels/${encodeURIComponent(currentReviewMmsi)}/dispatch-brief`)
     .then(r => r.json())
     .then(data => {
@@ -1892,6 +1898,34 @@ function openDispatchBrief() {
     .catch(() => {
       document.getElementById('dispatch-brief-body').innerHTML =
         '<span style="color:#f87171;">Failed to load dispatch brief.</span>';
+    });
+
+  // Stream officer-to-commander verbal brief (check cache first)
+  const verbalBox = document.getElementById('dispatch-verbal-brief');
+  const verbalText = document.getElementById('dispatch-verbal-text');
+  verbalBox.style.display = 'block';
+  verbalText.textContent = 'Loading…';
+
+  fetch(`/api/briefs/${encodeURIComponent(currentReviewMmsi)}/dispatch/cached`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.available && data.brief) {
+        verbalText.textContent = data.brief;
+      } else {
+        verbalText.textContent = '';
+        const es = new EventSource(`/api/briefs/${encodeURIComponent(currentReviewMmsi)}/dispatch`);
+        es.onmessage = e => {
+          if (e.data === '[DONE]') { es.close(); return; }
+          verbalText.textContent += e.data;
+        };
+        es.onerror = () => {
+          es.close();
+          if (!verbalText.textContent) verbalText.textContent = 'Verbal brief unavailable — LLM not configured.';
+        };
+      }
+    })
+    .catch(() => {
+      verbalText.textContent = 'Verbal brief unavailable — cache check failed.';
     });
 }
 

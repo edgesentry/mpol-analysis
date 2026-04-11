@@ -79,6 +79,15 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS dispatch_briefs (
+                mmsi                VARCHAR NOT NULL,
+                watchlist_version   VARCHAR NOT NULL,
+                brief               TEXT NOT NULL,
+                generated_at        TIMESTAMPTZ DEFAULT now(),
+                PRIMARY KEY (mmsi, watchlist_version)
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS chat_cache (
                 cache_key           VARCHAR PRIMARY KEY,
                 mmsi                VARCHAR,

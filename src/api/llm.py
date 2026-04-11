@@ -15,10 +15,15 @@ Provider selection via environment variables:
 
 Recommended local backend: mlx-lm (Apple Silicon, OpenAI-compatible server)
 
-    pip install mlx-lm
-    mlx_lm.server --model mlx-community/Mistral-7B-Instruct-v0.3-4bit
+    uv pip install mlx-lm
+    bash scripts/run_app.sh
 
-Then set LLM_BASE_URL=http://localhost:8080/v1 (default) and LLM_PROVIDER=openai (default).
+Then set:
+
+    LLM_PROVIDER=openai
+    LLM_BASE_URL=http://localhost:8080/v1
+    LLM_API_KEY=local
+    LLM_MODEL=mlx-community/Qwen2.5-7B-Instruct-4bit
 """
 
 from __future__ import annotations
@@ -143,5 +148,5 @@ def get_llm_client() -> LLMClient:
     return OpenAICompatClient(
         base_url=os.getenv("LLM_BASE_URL", "http://localhost:8080/v1"),
         api_key=os.getenv("LLM_API_KEY", "local"),
-        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        model=os.getenv("LLM_MODEL", "mlx-community/Qwen2.5-7B-Instruct-4bit"),
     )

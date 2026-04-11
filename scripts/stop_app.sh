@@ -43,6 +43,22 @@ if [[ "${STOP_APP}" == true ]]; then
   else
     echo "   uvicorn is not running."
   fi
+
+  # ── Stop mlx-lm server ─────────────────────────────────────────────────────
+  MLX_PIDS=$(pgrep -f "mlx_lm.server" 2>/dev/null || true)
+  if [[ -n "${MLX_PIDS}" ]]; then
+    echo "🤖 Stopping mlx-lm server (PIDs: ${MLX_PIDS})…"
+    kill ${MLX_PIDS}
+    sleep 1
+    # Force kill if still running
+    REMAINING_MLX=$(pgrep -f "mlx_lm.server" 2>/dev/null || true)
+    if [[ -n "${REMAINING_MLX}" ]]; then
+      echo "   Force-killing mlx-lm…"
+      kill -9 ${REMAINING_MLX} 2>/dev/null || true
+    fi
+    echo "   mlx-lm stopped."
+  fi
+
   # Kill any multiprocessing worker processes spawned by the venv's python
   # (these hold the DuckDB lock and survive the uvicorn parent being killed)
   pkill -9 -f "${REPO_ROOT}/.venv/bin/python" 2>/dev/null || true

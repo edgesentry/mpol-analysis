@@ -52,6 +52,31 @@ _USER_TEMPLATE = (
     "Cite at least one geopolitical event above."
 )
 
+_DISPATCH_SYSTEM_TEMPLATE = """\
+You are a maritime patrol officer producing a verbal dispatch brief to relay to a commander. \
+Output exactly one paragraph in the following structure — no headings, no bullet points, no markdown:
+
+"Vessel [VESSEL_NAME] (MMSI [MMSI]) is recommended for priority dispatch. \
+It went dark [DARK_COUNT] times in the past 30 days, is [HOP_DISTANCE] ownership hop(s) from a designated entity, \
+and changed flag [FLAG_CHANGES] time(s) in the past 2 years. \
+Causal analysis confirms its evasion behaviour began within the window of a sanction event \
+(ATT = [ATT_ESTIMATE], p < [P_VALUE]) — this is not coincidental route variation. \
+Confidence score: [CONFIDENCE_SCORE]."
+
+Replace the bracketed placeholders with the values below. Do not add any text outside this format.
+
+VESSEL DATA:
+Name: {vessel_name} | MMSI: {mmsi}
+AIS dark periods (30d): {dark_count}
+Ownership hops to sanctioned entity: {hop_distance}
+Flag changes (2y): {flag_changes}
+ATT estimate: {att_estimate} | p-value: {p_value}
+Confidence score: {confidence:.2f}"""
+
+_DISPATCH_USER_TEMPLATE = (
+    "Generate the officer-to-commander dispatch brief for {vessel_name} (MMSI {mmsi})."
+)
+
 
 def _load_vessel(mmsi: str) -> dict | None:
     df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
@@ -121,13 +146,15 @@ def _watchlist_version() -> str:
         return "0"
 
 
-def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> str | None:
+def _read_cached_brief(
+    mmsi: str, version: str, table: str = "analyst_briefs", db_path: str | None = None
+) -> str | None:
     try:
         with get_conn() as con:
             if con is None:
                 return None
             rows = con.execute(
-                "SELECT brief FROM analyst_briefs WHERE mmsi = ? AND watchlist_version = ?",
+                f"SELECT brief FROM {table} WHERE mmsi = ? AND watchlist_version = ?",
                 [mmsi, version],
             ).fetchall()
             return rows[0][0] if rows else None
@@ -135,21 +162,24 @@ def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> s
         return None
 
 
-def _write_cached_brief(mmsi: str, version: str, brief: str, db_path: str | None = None) -> None:
+def _write_cached_brief(
+    mmsi: str, version: str, brief: str, table: str = "analyst_briefs", db_path: str | None = None
+) -> None:
     try:
         with get_conn() as con:
             if con is None:
                 return
             con.execute(
-                """
-                INSERT OR REPLACE INTO analyst_briefs (mmsi, watchlist_version, brief)
+                f"""
+                INSERT OR REPLACE INTO {table} (mmsi, watchlist_version, brief)
                 VALUES (?, ?, ?)
                 """,
                 [mmsi, version, brief],
             )
     except Exception:
         logger.exception(
-            "Failed to write cached brief to DuckDB (mmsi=%s, version=%s)",
+            "Failed to write cached brief to DuckDB (table=%s, mmsi=%s, version=%s)",
+            table,
             mmsi,
             version,
         )
@@ -190,6 +220,129 @@ async def _generate_brief_tokens(vessel: dict) -> list[str]:
     return tokens
 
 
+def _extract_dispatch_fields(vessel: dict) -> dict:
+    """Extract numeric fields needed for the officer-to-commander dispatch brief."""
+    dark_count = int(vessel.get("ais_gap_count_30d") or 0)
+    flag_changes = int(vessel.get("flag_changes_2y") or 0)
+
+    # sanctions_distance is the shortest ownership path to a sanctioned entity (0 = direct match)
+    raw_dist = vessel.get("sanctions_distance")
+    if raw_dist is None:
+        hop_distance = "unknown"
+    else:
+        hops = int(raw_dist)
+        hop_distance = str(hops) if hops > 0 else "direct"
+
+    # Pull the strongest significant causal regime
+    att_estimate: float | None = None
+    p_value: float | None = None
+    effects_df = read_parquet_uri(
+        os.getenv("CAUSAL_EFFECTS_OUTPUT_PATH") or output_uri("causal_effects.parquet")
+    )
+    if effects_df is not None and not effects_df.is_empty():
+        import polars as _pl
+
+        sig = effects_df.filter(_pl.col("is_significant")).sort("att_estimate", descending=True)
+        if not sig.is_empty():
+            er = sig.row(0, named=True)
+            att_estimate = float(er.get("att_estimate", 0.0))
+            p_value = float(er.get("p_value", 1.0))
+
+    att_str = f"{att_estimate:+.2f}" if att_estimate is not None else "n/a"
+    p_str = f"{p_value:.4f}" if p_value is not None else "n/a"
+
+    return {
+        "dark_count": dark_count,
+        "hop_distance": hop_distance,
+        "flag_changes": flag_changes,
+        "att_estimate": att_str,
+        "p_value": p_str,
+    }
+
+
+@router.get("/api/briefs/{mmsi}/dispatch")
+async def vessel_dispatch_brief_stream(mmsi: str) -> StreamingResponse:
+    """Stream an officer-to-commander dispatch brief for a vessel.
+
+    Produces a single paragraph in a fixed verbal format suitable for relaying
+    directly from a patrol officer to a commander without referencing raw data.
+    Returns SSE lines of the form ``data: <token>\\n\\n``.
+    """
+    vessel = _load_vessel(mmsi)
+    if vessel is None:
+
+        async def _not_found():
+            yield "data: Vessel not found in watchlist.\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _not_found(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    version = _watchlist_version()
+    cached = _read_cached_brief(mmsi, version, table="dispatch_briefs")
+    if cached:
+
+        async def _cached_stream():
+            # Stream cached brief word by word so the UI sees progressive output
+            words = cached.split(" ")
+            for i, word in enumerate(words):
+                chunk = word if i == 0 else " " + word
+                yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _cached_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    dispatch = _extract_dispatch_fields(vessel)
+    vessel_name = str(vessel.get("vessel_name") or vessel.get("mmsi", ""))
+
+    system = _DISPATCH_SYSTEM_TEMPLATE.format(
+        vessel_name=vessel_name,
+        mmsi=vessel.get("mmsi", ""),
+        dark_count=dispatch["dark_count"],
+        hop_distance=dispatch["hop_distance"],
+        flag_changes=dispatch["flag_changes"],
+        att_estimate=dispatch["att_estimate"],
+        p_value=dispatch["p_value"],
+        confidence=float(vessel.get("confidence", 0)),
+    )
+    user = _DISPATCH_USER_TEMPLATE.format(
+        vessel_name=vessel_name,
+        mmsi=vessel.get("mmsi", ""),
+    )
+
+    async def _stream():
+        tokens: list[str] = []
+        try:
+            llm = get_llm_client()
+            async for token in llm.chat(system, user):
+                tokens.append(token)
+                yield f"data: {token}\n\n"
+        except Exception as exc:
+            yield f"data: Brief unavailable — {exc}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+            full = "".join(tokens)
+            if (
+                full
+                and not full.startswith("LLM not configured")
+                and not full.startswith("Brief unavailable")
+            ):
+                _write_cached_brief(mmsi, version, full, table="dispatch_briefs")
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/api/briefs/{mmsi}")
 async def vessel_brief(mmsi: str) -> StreamingResponse:
     """Stream an analyst brief for a vessel as server-sent events.
@@ -212,7 +365,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
         )
 
     version = _watchlist_version()
-    cached = _read_cached_brief(mmsi, version)
+    cached = _read_cached_brief(mmsi, version, table="analyst_briefs")
     if cached:
 
         async def _cached_stream():
@@ -272,7 +425,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
                 and not full.startswith("LLM not configured")
                 and not full.startswith("Brief unavailable")
             ):
-                _write_cached_brief(mmsi, version, full)
+                _write_cached_brief(mmsi, version, full, table="analyst_briefs")
 
     return StreamingResponse(
         _stream(),
@@ -352,7 +505,17 @@ async def vessel_chat(mmsi: str, body: _ChatRequest) -> StreamingResponse:
 def vessel_brief_cached(mmsi: str) -> JSONResponse:
     """Return the cached analyst brief for a vessel, if available."""
     version = _watchlist_version()
-    cached = _read_cached_brief(mmsi, version)
+    cached = _read_cached_brief(mmsi, version, table="analyst_briefs")
+    if cached is None:
+        return JSONResponse({"available": False, "mmsi": mmsi})
+    return JSONResponse({"available": True, "mmsi": mmsi, "brief": cached})
+
+
+@router.get("/api/briefs/{mmsi}/dispatch/cached")
+def vessel_dispatch_brief_cached(mmsi: str) -> JSONResponse:
+    """Return the cached officer-to-commander dispatch brief for a vessel, if available."""
+    version = _watchlist_version()
+    cached = _read_cached_brief(mmsi, version, table="dispatch_briefs")
     if cached is None:
         return JSONResponse({"available": False, "mmsi": mmsi})
     return JSONResponse({"available": True, "mmsi": mmsi, "brief": cached})
