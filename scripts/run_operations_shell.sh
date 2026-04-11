@@ -517,6 +517,148 @@ print(f'Exported {df.height} rows to $sample_path')
   echo "  3. API:  curl http://localhost:8000/api/vessels"
 }
 
+run_precision_verification() {
+  echo
+  echo "[16] Precision@50 Verification"
+  echo
+  echo "  Choose a verification level:"
+  echo "    1) Quick  — re-score + validate against OFAC labels in existing DB"
+  echo "    2) Full   — run backtest with labels manifest (Precision@K, AUROC)"
+  echo "    3) Public — full public OpenSanctions integration test (pytest)"
+  echo
+  local level
+  read -r -p "  Choose [1]: " level
+  level="${level:-1}"
+
+  case "$level" in
+    1)
+      echo
+      echo "── Option 1: Quick validate ────────────────────────────────────────────────────"
+      local db_path
+      db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+      local watchlist_path
+      watchlist_path="$(prompt "Watchlist output path" "data/processed/candidate_watchlist.parquet")"
+
+      echo
+      echo "── Re-scoring vessels ──────────────────────────────────────────────────────────"
+      if ! run_cmd uv run python -m src.score.watchlist --db "$db_path" --output "$watchlist_path"; then
+        echo "Result: FAILED (scoring)"
+        return
+      fi
+
+      echo
+      echo "── Computing validation metrics ────────────────────────────────────────────────"
+      local metrics_path
+      metrics_path="$(prompt "Metrics output path" "data/processed/validation_metrics.json")"
+      if ! run_cmd uv run python -m src.score.validate \
+          --db "$db_path" \
+          --watchlist "$watchlist_path" \
+          --output "$metrics_path"; then
+        echo "Result: FAILED (validate)"
+        return
+      fi
+
+      echo
+      echo "── Results ─────────────────────────────────────────────────────────────────────"
+      (cd "$PROJECT_ROOT" && uv run python -c "
+import json, sys
+with open('$metrics_path') as f:
+    m = json.load(f)
+p50 = m.get('precision_at_50', 'n/a')
+r200 = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200    : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC         : {auroc}')
+print(f'  Candidates    : {total}  (positives: {pos})')
+")
+      ;;
+
+    2)
+      echo
+      echo "── Option 2: Full backtest ──────────────────────────────────────────────────────"
+      local manifest_path
+      manifest_path="$(prompt "Evaluation manifest JSON" "data/processed/evaluation_manifest.json")"
+      local report_path
+      report_path="$(prompt "Report output path" "data/processed/backtest_report.json")"
+
+      if [[ ! -f "$PROJECT_ROOT/$manifest_path" ]]; then
+        echo "Error: manifest not found: $manifest_path"
+        echo "Tip: run job 3 (Historical Backtesting) first to generate an evaluation manifest."
+        return
+      fi
+
+      if ! run_cmd uv run python -m src.score.backtest \
+          --manifest "$manifest_path" \
+          --output "$report_path" \
+          --k 25 50 100; then
+        echo "Result: FAILED"
+        return
+      fi
+
+      echo
+      echo "── Results ─────────────────────────────────────────────────────────────────────"
+      (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$report_path') as f:
+    r = json.load(f)
+s = r.get('summary', {})
+p50 = s.get('precision_at_50', {}).get('mean')
+auroc = s.get('auroc', {}).get('mean')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50 (mean): {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50: {p50}')
+print(f'  AUROC        (mean): {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC: {auroc}')
+print(f'  Windows            : {s.get(\"window_count\", \"n/a\")}')
+")
+      ;;
+
+    3)
+      echo
+      echo "── Option 3: Public OpenSanctions integration test ──────────────────────────────"
+      local watchlist_path
+      watchlist_path="$(prompt "Watchlist parquet path" "data/processed/candidate_watchlist.parquet")"
+      local sanctions_db
+      sanctions_db="$(prompt "Public sanctions DuckDB path" "data/processed/public_eval.duckdb")"
+
+      local prepare_flag=""
+      if [[ ! -f "$PROJECT_ROOT/$sanctions_db" ]]; then
+        echo "Warning: $sanctions_db not found."
+        if prompt_yes_no "Auto-prepare sanctions DB now (downloads ~150 MB)" "true"; then
+          prepare_flag="1"
+        else
+          echo "Aborted — run job 9 (Prepare Sanctions DB) first."
+          return
+        fi
+      fi
+
+      local env_vars="RUN_PUBLIC_DATA_TESTS=1 PUBLIC_TEST_WATCHLIST=$watchlist_path PUBLIC_SANCTIONS_DB=$sanctions_db"
+      if [[ -n "$prepare_flag" ]]; then
+        env_vars="$env_vars PREPARE_PUBLIC_DATA_IF_MISSING=1"
+      fi
+
+      if ! (cd "$PROJECT_ROOT" && env RUN_PUBLIC_DATA_TESTS=1 \
+            PUBLIC_TEST_WATCHLIST="$watchlist_path" \
+            PUBLIC_SANCTIONS_DB="$sanctions_db" \
+            PREPARE_PUBLIC_DATA_IF_MISSING="${prepare_flag:-0}" \
+            uv run pytest tests/test_public_data_backtest_integration.py -v -s); then
+        echo "Result: FAILED"
+        return
+      fi
+
+      echo "Result: SUCCESS"
+      ;;
+
+    *)
+      echo "Invalid selection"
+      ;;
+  esac
+}
+
 run_ingest_custom_feeds() {
   echo
   echo "[15] Ingest custom feed drop-ins (_inputs/custom_feeds/)"
@@ -802,6 +944,13 @@ main_menu() {
     echo "           lists without writing any ingestion code"
     echo "      Who: analyst, developer, data engineer"
     echo
+    echo "16) Precision@50 Verification"
+    echo "     What: verify scoring model quality after a parameter change; three levels:"
+    echo "           1-Quick (re-score + OFAC validate), 2-Full (backtest manifest),"
+    echo "           3-Public (OpenSanctions pytest integration test)"
+    echo "     When: after changing scoring weights, contamination, or blend ratio (#186)"
+    echo "      Who: ML engineer, data scientist"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -825,6 +974,7 @@ main_menu() {
       13) run_ingest_eo_csv ;;
       14) run_ingest_ais_csv ;;
       15) run_ingest_custom_feeds ;;
+      16) run_precision_verification ;;
       q|quit|exit)
         echo "Bye"
         return
