@@ -643,7 +643,7 @@ print(f'  Windows            : {s.get(\"window_count\", \"n/a\")}')
       if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
             --db "data/processed/mpol.duckdb" \
             --watchlist "$watchlist_path" \
-            --output "$tmp_metrics" 2>/dev/null); then
+            --output "$tmp_metrics") >/dev/null 2>&1; then
         (cd "$PROJECT_ROOT" && uv run python -c "
 import json
 with open('$tmp_metrics') as f:
