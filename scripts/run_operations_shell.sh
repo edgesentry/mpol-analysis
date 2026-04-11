@@ -873,6 +873,122 @@ run_seed_dev_data() {
   print_watchlist_summary "$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
 }
 
+run_download_ais_marine_cadastre() {
+  echo
+  echo "[17] Download & Ingest Marine Cadastre AIS (NOAA — free, US coastal waters)"
+  echo
+  echo "  Marine Cadastre publishes annual AIS archives for US coastal waters."
+  echo "  Files are ~1–4 GB zipped. Already-downloaded archives are skipped."
+  echo
+  echo "  ⚠️  Coverage is US coastal only — not Singapore/Malacca."
+  echo "      Use bbox preset 'us-gulf' or 'us-east' to get real rows."
+  echo "      Singapore preset will return 0 rows from this source."
+  echo
+
+  local year
+  year="$(prompt "Year to download" "2023")"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca (default arktrace AOI — 0 rows from MarineCadastre)"
+  echo "    2) US Gulf of Mexico   (lat 18-32, lon -98 to -80) — good for tanker traffic"
+  echo "    3) US East Coast       (lat 24-46, lon -82 to -65)"
+  echo "    4) Global              (no filter — loads everything, very large)"
+  echo "    5) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [2]: " bbox_choice
+  bbox_choice="${bbox_choice:-2}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -5 92 22 122) ;;
+    2) bbox_args=(--bbox 18 -98 32 -80) ;;
+    3) bbox_args=(--bbox 24 -82 46 -65) ;;
+    4) ;;  # no --bbox = global
+    5)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-90")"
+      lon_min="$(prompt "lon_min" "-180")"
+      lat_max="$(prompt "lat_max" "90")"
+      lon_max="$(prompt "lon_max" "180")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid selection — using US Gulf of Mexico"
+      bbox_args=(--bbox 18 -98 32 -80)
+      ;;
+  esac
+
+  echo
+  echo "── Downloading and ingesting year $year ────────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.marine_cadastre \
+      --year "$year" \
+      --db "$db_path" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring now to measure Precision@50?" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 (OFAC validate) ───────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives matched. OFAC vessels are mostly Middle East/Asia flagged —')
+    print('     US coastal AIS data rarely overlaps. Try AISHub for Singapore/Malacca data.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
 main_menu() {
   while true; do
     echo
@@ -981,6 +1097,12 @@ main_menu() {
     echo "     When: after changing scoring weights, contamination, or blend ratio (#186)"
     echo "      Who: ML engineer, data scientist"
     echo
+    echo "17) Download & Ingest Marine Cadastre AIS"
+    echo "     What: download a free NOAA annual AIS archive, filter to a bbox, ingest into"
+    echo "           DuckDB, then optionally score and measure Precision@50"
+    echo "     When: getting real AIS data without a commercial provider subscription"
+    echo "      Who: developer, data scientist"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1005,6 +1127,7 @@ main_menu() {
       14) run_ingest_ais_csv ;;
       15) run_ingest_custom_feeds ;;
       16) run_precision_verification ;;
+      17) run_download_ais_marine_cadastre ;;
       q|quit|exit)
         echo "Bye"
         return
