@@ -1268,6 +1268,109 @@ if pos == 0:
   print_watchlist_summary "$watchlist_path"
 }
 
+run_aisstream_agent() {
+  echo
+  echo "[20] aisstream.io launchd Agent — Install / Uninstall / Status / Logs"
+  echo
+  echo "  Manages a macOS launchd agent that runs src/ingest/ais_stream.py"
+  echo "  continuously in the background, surviving reboots and auto-restarting"
+  echo "  on crash. Logs go to ~/.arktrace/aisstream.log."
+  echo
+  echo "  Sub-commands:"
+  echo "    1) Install / (re-)start agent"
+  echo "    2) Uninstall agent"
+  echo "    3) Status"
+  echo "    4) View logs"
+  echo
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "Error: launchd is macOS-only. Use a systemd unit or cron on Linux."
+    return
+  fi
+
+  if [[ -z "${AISSTREAM_API_KEY:-}" ]]; then
+    echo "Error: AISSTREAM_API_KEY not set. Add it to .env or export it."
+    echo "  Register free at https://aisstream.io"
+    return
+  fi
+
+  local sub_choice
+  read -r -p "  Choose [1-4]: " sub_choice
+
+  case "$sub_choice" in
+    1)
+      echo
+      local db_path
+      db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+      echo
+      echo "  Bounding box presets:"
+      echo "    1) Singapore / Malacca Strait  (lat -2–8, lon 98–110)  [default]"
+      echo "    2) Strait of Singapore only    (lat 1.0–1.5, lon 103.5–104.5)"
+      echo "    3) Custom"
+      echo
+      local bbox_choice
+      read -r -p "  Choose bbox [1]: " bbox_choice
+      bbox_choice="${bbox_choice:-1}"
+
+      local bbox_args=()
+      case "$bbox_choice" in
+        1) bbox_args=(--bbox -2 98 8 110) ;;
+        2) bbox_args=(--bbox 1.0 103.5 1.5 104.5) ;;
+        3)
+          local lat_min lon_min lat_max lon_max
+          lat_min="$(prompt "lat_min" "-2")"
+          lon_min="$(prompt "lon_min" "98")"
+          lat_max="$(prompt "lat_max" "8")"
+          lon_max="$(prompt "lon_max" "110")"
+          bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+          ;;
+        *)
+          echo "Invalid — using Singapore / Malacca default"
+          bbox_args=(--bbox -2 98 8 110)
+          ;;
+      esac
+
+      echo
+      echo "── Installing launchd agent ───────────────────────────────────────────────────"
+      if ! "$PROJECT_ROOT/scripts/install_aisstream_agent.sh" install \
+            --db "$db_path" \
+            "${bbox_args[@]+"${bbox_args[@]}"}"; then
+        echo "Result: FAILED"
+        return
+      fi
+      echo
+      echo "Agent is running. Positions will accumulate in $db_path."
+      echo "Run job 16 or job 20/4 to check progress."
+      ;;
+
+    2)
+      echo
+      echo "── Uninstalling launchd agent ─────────────────────────────────────────────────"
+      "$PROJECT_ROOT/scripts/install_aisstream_agent.sh" uninstall
+      ;;
+
+    3)
+      echo
+      echo "── Agent status ───────────────────────────────────────────────────────────────"
+      "$PROJECT_ROOT/scripts/install_aisstream_agent.sh" status
+      ;;
+
+    4)
+      echo
+      local lines
+      lines="$(prompt "Lines to show" "50")"
+      echo
+      echo "── Agent logs ─────────────────────────────────────────────────────────────────"
+      "$PROJECT_ROOT/scripts/install_aisstream_agent.sh" logs --lines "$lines"
+      ;;
+
+    *)
+      echo "Invalid selection"
+      ;;
+  esac
+}
+
 main_menu() {
   while true; do
     echo
@@ -1394,6 +1497,12 @@ main_menu() {
     echo "     When: getting real AIS data immediately (free, instant signup, no equipment)"
     echo "      Who: developer, data scientist"
     echo
+    echo "20) aisstream.io launchd Agent (macOS) — Install / Uninstall / Status / Logs"
+    echo "     What: manage a background launchd agent that runs ais_stream.py continuously,"
+    echo "           surviving reboots and auto-restarting on crash (macOS only)"
+    echo "     When: setting up persistent AIS data collection on a MacBook"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1421,6 +1530,7 @@ main_menu() {
       17) run_download_ais_marine_cadastre ;;
       18) run_fetch_aishub ;;
       19) run_fetch_aisstream ;;
+      20) run_aisstream_agent ;;
       q|quit|exit)
         echo "Bye"
         return

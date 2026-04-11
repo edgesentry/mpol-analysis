@@ -82,7 +82,7 @@ The isolation forest raw score is min-max normalised to [0, 1], then blended 75/
 |---|---|
 | Algorithm | `sklearn.ensemble.IsolationForest` |
 | `n_estimators` | 200 |
-| `contamination` | "auto" |
+| `contamination` | 0.03 |
 | `random_state` | 42 |
 | Preprocessing | `StandardScaler` fit on clean subset |
 
@@ -102,7 +102,7 @@ confidence = w_anomaly × anomaly_score
            + w_identity × identity_score
 ```
 
-Default weights: `w_anomaly = 0.40`, `w_graph = 0.40`, `w_identity = 0.20`.
+Default weights: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`.
 
 Weights are region-configurable (see `--w-anomaly`, `--w-graph`, `--w-identity` flags) and automatically calibrated by the C3 causal model (see below).
 
@@ -113,14 +113,16 @@ Weights are region-configurable (see `--w-anomaly`, `--w-graph`, `--w-identity` 
 Weighted combination of three ownership graph signals:
 
 ```python
-graph_risk = 0.6 × sanctions_component
-           + 0.3 × cluster_component
-           + 0.1 × manager_component
+graph_risk = 0.55 × sanctions_component
+           + 0.25 × cluster_component
+           + 0.10 × manager_component
+           + 0.10 × sts_component
 ```
 
 - `sanctions_component = clip(1 − sanctions_distance / 5, 0, 1)` — maps distance 0 → 1.0, distance 5+ → 0.0
 - `cluster_component = cluster_sanctions_ratio` — direct [0, 1] value
 - `manager_component = clip(1 − shared_manager_risk / 5, 0, 1)` — same mapping as sanctions_component
+- `sts_component = clip(sts_hub_degree / 10, 0, 1)` — ship-to-ship contact count, capped at 10
 
 #### `identity_score`
 
@@ -148,7 +150,7 @@ See `config/geopolitical_events.json` for the sample file format.
 
 ## C3 causal weight calibration (`src/score/causal_sanction.py`)
 
-The default `w_graph = 0.40` is calibrated automatically by the C3 Difference-in-Differences model before each scoring cycle. 
+The default `w_graph = 0.55` is calibrated automatically by the C3 Difference-in-Differences model before each scoring cycle. 
 
 The pipeline auto-calibrates `w_graph` on every run via `_calibrate_graph_weight()`.
 Calling `src.score.composite` standalone still requires `--w-graph` (or the new `--auto-calibrate` flag).

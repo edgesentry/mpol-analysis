@@ -192,7 +192,7 @@ cat data/processed/validation_metrics.json
    duckdb -c "SELECT label, n_treated, n_control, round(att_estimate,3) AS att, round(p_value,4) AS p, is_significant, round(calibrated_weight,3) AS w_graph FROM 'data/processed/singapore_causal_effects.parquet';"
    ```
 2. Expect **3 rows** — one each for OFAC Iran, OFAC Russia, and UN DPRK.
-3. With sparse AIS data (no live streaming), `n_treated` / `n_control` will be small and `is_significant = false` — the pipeline correctly falls back to the preset `w_graph`. With ≥ 30 days of real AIS data, significant positive ATT estimates raise `w_graph` above the 0.40 default (up to 0.65).
+3. With sparse AIS data (no live streaming), `n_treated` / `n_control` will be small and `is_significant = false` — the pipeline correctly falls back to the preset `w_graph`. With ≥ 30 days of real AIS data, significant positive ATT estimates raise `w_graph` above the 0.55 default (up to 0.65).
 4. `calibrated_weight` must be the same value in all three rows — it is a single pipeline-level scalar.
 
 To run the automated structural checks against the output file:
