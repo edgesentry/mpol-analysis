@@ -52,6 +52,29 @@ _USER_TEMPLATE = (
     "Cite at least one geopolitical event above."
 )
 
+_DISPATCH_SYSTEM_TEMPLATE = """\
+You are a maritime patrol officer producing a verbal dispatch brief to relay to a commander. \
+Output exactly one paragraph in the following structure — no headings, no bullet points, no markdown:
+
+"Vessel [VESSEL_NAME] (MMSI [MMSI]) is recommended for priority dispatch. \
+It went dark [DARK_COUNT] times in the past 30 days, is [HOP_DISTANCE] ownership hop(s) from a designated entity, \
+and changed flag [FLAG_CHANGES] time(s) in the past 2 years. \
+Causal analysis confirms its evasion behaviour began within the window of a sanction event \
+(ATT = [ATT_ESTIMATE], p < [P_VALUE]) — this is not coincidental route variation. \
+Confidence score: [CONFIDENCE_SCORE]."
+
+Replace the bracketed placeholders with the values below. Do not add any text outside this format.
+
+VESSEL DATA:
+Name: {vessel_name} | MMSI: {mmsi}
+AIS dark periods (30d): {dark_count}
+Ownership hops to sanctioned entity: {hop_distance}
+Flag changes (2y): {flag_changes}
+ATT estimate: {att_estimate} | p-value: {p_value}
+Confidence score: {confidence:.2f}"""
+
+_DISPATCH_USER_TEMPLATE = "Generate the officer-to-commander dispatch brief for {vessel_name} (MMSI {mmsi})."
+
 
 def _load_vessel(mmsi: str) -> dict | None:
     df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
@@ -188,6 +211,102 @@ async def _generate_brief_tokens(vessel: dict) -> list[str]:
     async for token in llm.chat(system, user):
         tokens.append(token)
     return tokens
+
+
+def _extract_dispatch_fields(vessel: dict) -> dict:
+    """Extract numeric fields needed for the officer-to-commander dispatch brief."""
+    dark_count = int(vessel.get("ais_gap_count_30d") or 0)
+    flag_changes = int(vessel.get("flag_changes_2y") or 0)
+
+    # sanctions_distance is the shortest ownership path to a sanctioned entity (0 = direct match)
+    raw_dist = vessel.get("sanctions_distance")
+    if raw_dist is None:
+        hop_distance = "unknown"
+    else:
+        hops = int(raw_dist)
+        hop_distance = str(hops) if hops > 0 else "direct"
+
+    # Pull the strongest significant causal regime
+    att_estimate: float | None = None
+    p_value: float | None = None
+    effects_df = read_parquet_uri(
+        os.getenv("CAUSAL_EFFECTS_OUTPUT_PATH") or output_uri("causal_effects.parquet")
+    )
+    if effects_df is not None and not effects_df.is_empty():
+        import polars as _pl
+
+        sig = effects_df.filter(_pl.col("is_significant")).sort("att_estimate", descending=True)
+        if not sig.is_empty():
+            er = sig.row(0, named=True)
+            att_estimate = float(er.get("att_estimate", 0.0))
+            p_value = float(er.get("p_value", 1.0))
+
+    att_str = f"{att_estimate:+.2f}" if att_estimate is not None else "n/a"
+    p_str = f"{p_value:.4f}" if p_value is not None else "n/a"
+
+    return {
+        "dark_count": dark_count,
+        "hop_distance": hop_distance,
+        "flag_changes": flag_changes,
+        "att_estimate": att_str,
+        "p_value": p_str,
+    }
+
+
+@router.get("/api/briefs/{mmsi}/dispatch")
+async def vessel_dispatch_brief_stream(mmsi: str) -> StreamingResponse:
+    """Stream an officer-to-commander dispatch brief for a vessel.
+
+    Produces a single paragraph in a fixed verbal format suitable for relaying
+    directly from a patrol officer to a commander without referencing raw data.
+    Returns SSE lines of the form ``data: <token>\\n\\n``.
+    """
+    vessel = _load_vessel(mmsi)
+    if vessel is None:
+
+        async def _not_found():
+            yield "data: Vessel not found in watchlist.\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _not_found(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    dispatch = _extract_dispatch_fields(vessel)
+    vessel_name = str(vessel.get("vessel_name") or vessel.get("mmsi", ""))
+
+    system = _DISPATCH_SYSTEM_TEMPLATE.format(
+        vessel_name=vessel_name,
+        mmsi=vessel.get("mmsi", ""),
+        dark_count=dispatch["dark_count"],
+        hop_distance=dispatch["hop_distance"],
+        flag_changes=dispatch["flag_changes"],
+        att_estimate=dispatch["att_estimate"],
+        p_value=dispatch["p_value"],
+        confidence=float(vessel.get("confidence", 0)),
+    )
+    user = _DISPATCH_USER_TEMPLATE.format(
+        vessel_name=vessel_name,
+        mmsi=vessel.get("mmsi", ""),
+    )
+
+    async def _stream():
+        try:
+            llm = get_llm_client()
+            async for token in llm.chat(system, user):
+                yield f"data: {token}\n\n"
+        except Exception as exc:
+            yield f"data: Brief unavailable — {exc}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/api/briefs/{mmsi}")
