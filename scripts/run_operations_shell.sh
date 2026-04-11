@@ -636,11 +636,37 @@ print(f'  Windows            : {s.get(\"window_count\", \"n/a\")}')
         fi
       fi
 
-      local env_vars="RUN_PUBLIC_DATA_TESTS=1 PUBLIC_TEST_WATCHLIST=$watchlist_path PUBLIC_SANCTIONS_DB=$sanctions_db"
-      if [[ -n "$prepare_flag" ]]; then
-        env_vars="$env_vars PREPARE_PUBLIC_DATA_IF_MISSING=1"
+      echo
+      echo "── Summary (Precision@50 quick check) ──────────────────────────────────────────"
+      local tmp_metrics
+      tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+      if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+            --db "data/processed/mpol.duckdb" \
+            --watchlist "$watchlist_path" \
+            --output "$tmp_metrics" 2>/dev/null); then
+        (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+")
+      else
+        echo "  (skipped — DB not available or validate failed)"
       fi
+      rm -f "$tmp_metrics"
 
+      echo
+      echo "── Full integration test (pytest) ──────────────────────────────────────────────"
       if ! (cd "$PROJECT_ROOT" && env RUN_PUBLIC_DATA_TESTS=1 \
             PUBLIC_TEST_WATCHLIST="$watchlist_path" \
             PUBLIC_SANCTIONS_DB="$sanctions_db" \
