@@ -91,7 +91,7 @@ def fit_isolation_forest(
 
     model = IsolationForest(
         n_estimators=200,
-        contamination="auto",
+        contamination=0.03,  # ~3% matches observed OFAC positive rate in fleet
         random_state=42,
     )
     model.fit(train_scaled)
@@ -143,7 +143,7 @@ def score_anomalies(
     )
 
     result = joined.with_columns(
-        (0.75 * pl.col("isolation_norm_score") + 0.25 * pl.col("baseline_noise_score"))
+        (0.65 * pl.col("isolation_norm_score") + 0.35 * pl.col("baseline_noise_score"))
         .clip(0.0, 1.0)
         .alias("anomaly_score")
     ).select(

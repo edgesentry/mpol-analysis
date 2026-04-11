@@ -364,7 +364,14 @@ def _compute_graph_risk(df: pl.DataFrame) -> pl.Series:
         np.clip(1.0 - (df["shared_manager_risk"].to_numpy() / 5.0), 0.0, 1.0),
     )
     cluster_component = np.clip(df["cluster_sanctions_ratio"].to_numpy(), 0.0, 1.0)
-    score = 0.6 * sanctions_component + 0.3 * cluster_component + 0.1 * manager_component
+    # sts_hub_degree: cap at 10 contacts — beyond that the vessel is clearly a hub
+    sts_component = np.clip(df["sts_hub_degree"].to_numpy() / 10.0, 0.0, 1.0)
+    score = (
+        0.55 * sanctions_component
+        + 0.25 * cluster_component
+        + 0.10 * manager_component
+        + 0.10 * sts_component
+    )
     return pl.Series("graph_risk_score", score.astype(np.float32))
 
 
@@ -436,9 +443,9 @@ def _compute_top_signals(feature_df: pl.DataFrame, model, scaled_matrix: np.ndar
 
 def compute_composite_scores(
     db_path: str = DEFAULT_DB_PATH,
-    w_anomaly: float = 0.4,
-    w_graph: float = 0.4,
-    w_identity: float = 0.2,
+    w_anomaly: float = 0.35,
+    w_graph: float = 0.55,
+    w_identity: float = 0.10,
     geo_filter_path: str | None = None,
     auto_calibrate: bool = False,
 ) -> pl.DataFrame:
@@ -531,13 +538,13 @@ def main() -> None:
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     parser.add_argument(
-        "--w-anomaly", type=float, default=0.4, help="Weight for anomaly score (default: 0.4)"
+        "--w-anomaly", type=float, default=0.35, help="Weight for anomaly score (default: 0.35)"
     )
     parser.add_argument(
-        "--w-graph", type=float, default=0.4, help="Weight for graph risk score (default: 0.4)"
+        "--w-graph", type=float, default=0.55, help="Weight for graph risk score (default: 0.55)"
     )
     parser.add_argument(
-        "--w-identity", type=float, default=0.2, help="Weight for identity score (default: 0.2)"
+        "--w-identity", type=float, default=0.10, help="Weight for identity score (default: 0.10)"
     )
     parser.add_argument(
         "--auto-calibrate",
