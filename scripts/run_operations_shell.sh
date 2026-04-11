@@ -387,9 +387,14 @@ run_sar_feature_smoke() {
   echo
   echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
   local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
   if ! run_cmd uv run python src/score/composite.py \
       --db "$db_path" \
-      --output "$watchlist_path"; then
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
     echo "Result: FAILED (composite scoring)"
     return
   fi
@@ -502,9 +507,14 @@ print(f'Exported {df.height} rows to $sample_path')
   echo
   echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
   local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
   if ! run_cmd uv run python src/score/composite.py \
       --db "$db_path" \
-      --output "$watchlist_path"; then
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
     echo "Result: FAILED (composite scoring)"
     return
   fi
@@ -734,9 +744,14 @@ run_ingest_custom_feeds() {
   echo
   echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
   local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
   if ! run_cmd uv run python src/score/composite.py \
       --db "$db_path" \
-      --output "$watchlist_path"; then
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
     echo "Result: FAILED (composite scoring)"
     return
   fi
@@ -780,9 +795,14 @@ run_ingest_eo_csv() {
   echo
   echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
   local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
   if ! run_cmd uv run python src/score/composite.py \
       --db "$db_path" \
-      --output "$watchlist_path"; then
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
     echo "Result: FAILED (composite scoring)"
     return
   fi
@@ -835,9 +855,14 @@ run_eo_feature_smoke() {
   echo
   echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
   local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
   if ! run_cmd uv run python src/score/composite.py \
       --db "$db_path" \
-      --output "$watchlist_path"; then
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
     echo "Result: FAILED (composite scoring)"
     return
   fi
