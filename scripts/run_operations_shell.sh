@@ -989,6 +989,125 @@ if pos == 0:
   print_watchlist_summary "$watchlist_path"
 }
 
+run_fetch_aishub() {
+  echo
+  echo "[18] Fetch AISHub Live AIS — Singapore / Malacca Strait"
+  echo
+  echo "  AISHub (aishub.net) provides free live vessel positions via HTTP API."
+  echo "  Registration required: https://www.aishub.net/join-us"
+  echo "  Set AISHUB_USERNAME in .env or enter it below."
+  echo
+
+  local username
+  username="${AISHUB_USERNAME:-}"
+  if [[ -z "$username" ]]; then
+    username="$(prompt "AISHub username")"
+  else
+    echo "  Using AISHUB_USERNAME from environment: $username"
+  fi
+
+  if [[ -z "$username" ]]; then
+    echo "Error: username required."
+    return
+  fi
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca Strait  (lat -2–8, lon 98–110)  [default]"
+  echo "    2) Strait of Singapore only    (lat 1.0–1.5, lon 103.5–104.5)"
+  echo "    3) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [1]: " bbox_choice
+  bbox_choice="${bbox_choice:-1}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -2 98 8 110) ;;
+    2) bbox_args=(--bbox 1.0 103.5 1.5 104.5) ;;
+    3)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-2")"
+      lon_min="$(prompt "lon_min" "98")"
+      lat_max="$(prompt "lat_max" "8")"
+      lon_max="$(prompt "lon_max" "110")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid — using Singapore / Malacca default"
+      bbox_args=(--bbox -2 98 8 110)
+      ;;
+  esac
+
+  echo
+  echo "── Fetching live positions from AISHub ─────────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.aishub \
+      --username "$username" \
+      --db "$db_path" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring + Precision@50?" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 ───────────────────────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives matched yet — live data covers recent positions only.')
+    print('     Fetch repeatedly over time to build up history, then re-score.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
 main_menu() {
   while true; do
     echo
@@ -1103,6 +1222,12 @@ main_menu() {
     echo "     When: getting real AIS data without a commercial provider subscription"
     echo "      Who: developer, data scientist"
     echo
+    echo "18) Fetch AISHub Live AIS — Singapore / Malacca Strait"
+    echo "     What: pull live vessel positions from AISHub API for Singapore/Malacca bbox;"
+    echo "           ingest into DuckDB then optionally score and measure Precision@50"
+    echo "     When: getting real Singapore Strait AIS data (free, requires aishub.net account)"
+    echo "      Who: developer, data scientist"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1128,6 +1253,7 @@ main_menu() {
       15) run_ingest_custom_feeds ;;
       16) run_precision_verification ;;
       17) run_download_ais_marine_cadastre ;;
+      18) run_fetch_aishub ;;
       q|quit|exit)
         echo "Bye"
         return
