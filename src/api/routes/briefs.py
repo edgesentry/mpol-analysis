@@ -73,7 +73,9 @@ Flag changes (2y): {flag_changes}
 ATT estimate: {att_estimate} | p-value: {p_value}
 Confidence score: {confidence:.2f}"""
 
-_DISPATCH_USER_TEMPLATE = "Generate the officer-to-commander dispatch brief for {vessel_name} (MMSI {mmsi})."
+_DISPATCH_USER_TEMPLATE = (
+    "Generate the officer-to-commander dispatch brief for {vessel_name} (MMSI {mmsi})."
+)
 
 
 def _load_vessel(mmsi: str) -> dict | None:
