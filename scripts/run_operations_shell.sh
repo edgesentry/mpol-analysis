@@ -1009,6 +1009,9 @@ main_menu() {
         echo "Invalid selection"
         ;;
     esac
+
+    echo
+    read -r -p "Press Enter to return to menu..." _
   done
 }
 
