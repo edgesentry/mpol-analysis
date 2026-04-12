@@ -6,12 +6,12 @@ Storage layout in R2
     public/
       arktrace/
         latest                  ← plain-text file: "20260412T120000Z"
-        20260412T120000Z.zip     ← newest push (single zip file per generation)
-        20260411T080000Z.zip     ← previous push
-        20260410T153012Z.zip     ← oldest kept (3 generations max)
+        20260412T120000Z.zip     ← single generation zip (1 kept by default)
         gdelt.lance.zip          ← shared; push separately with `push-gdelt`
 
 Each generation is a single .zip file, so push/pull is always 1 object.
+Only 1 generation is kept by default (--keep 1) to stay within a ~10 GB
+bucket budget.  Pass --keep N to retain more generations.
 
 The public/ prefix is readable by anyone when the R2 bucket has public access
 enabled (Cloudflare R2 → Settings → Public Access).  Users can pull without
@@ -21,7 +21,7 @@ Why gdelt.lance is separate
 ---------------------------
 At 1.2 GB it dominates the bucket.  It only changes when GDELT news data is
 re-ingested, not on every pipeline run.  Keeping it outside the rotation
-avoids 3× duplication (3.6 GB) and keeps snapshot pushes fast.
+avoids duplication and keeps snapshot pushes fast.
 
 Files included in snapshots
 ---------------------------
@@ -92,7 +92,7 @@ from pathlib import Path
 
 _DEFAULT_DATA_DIR = "data/processed"
 _DEFAULT_REGION = "singapore"
-_DEFAULT_KEEP = 3
+_DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
 _PROJECT = "arktrace"
 
 # All pipeline data lives under public/ — readable by anyone when the R2 bucket
