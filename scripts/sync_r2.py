@@ -83,7 +83,7 @@ import re
 import sys
 import tempfile
 import zipfile as zipmod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -377,7 +377,7 @@ def cmd_push(args: argparse.Namespace) -> int:
         print(f"Error: data directory does not exist: {data_dir}", file=sys.stderr)
         return 1
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     fs = _build_r2_fs()
 
     print(f"Scanning {data_dir} (excluding intermediate, evaluation, and stale Lance history) ...")

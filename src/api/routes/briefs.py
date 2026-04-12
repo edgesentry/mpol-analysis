@@ -16,9 +16,7 @@ from src.analysis.causal import score_unknown_unknowns
 from src.api.db import get_conn
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
-from src.storage.config import output_uri
-from src.storage.config import watchlist_uri
-from src.storage.config import read_parquet as read_parquet_uri
+from src.storage.config import output_uri, read_parquet as read_parquet_uri, watchlist_uri
 
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 BRIEF_CONFIDENCE_THRESHOLD = float(os.getenv("BRIEF_CONFIDENCE_THRESHOLD", "0.7"))

@@ -10,8 +10,8 @@ import polars as pl
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.storage.config import read_parquet as read_parquet_uri
-from src.storage.config import watchlist_uri
+from src.storage.config import read_parquet as read_parquet_uri, watchlist_uri
+
 ALERT_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", "0.75"))
 POLL_INTERVAL_SECONDS = int(os.getenv("ALERT_POLL_INTERVAL", "60"))
 
