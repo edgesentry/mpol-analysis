@@ -113,7 +113,7 @@ def _pull(region: str, db_path: str) -> None:
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
 
-    from sync_r2 import (  # type: ignore[import-untyped]
+    from sync_r2 import (
         _DEFAULT_BUCKET,
         _build_r2_fs,
         _pull_zip,
