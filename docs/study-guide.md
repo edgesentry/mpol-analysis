@@ -230,7 +230,7 @@ We also use **SSE (Server-Sent Events)** for real-time alerts. When the ingestio
 
 For learners, the `src/api/` folder is your playground. You'll see how we use Jinja templates and HTMX to build a "Modern Web" experience with almost zero JavaScript. This is the "Simplify to Scale" philosophy—by keeping the tech stack lean, we make it easier to deploy and maintain in challenging field environments.
 
-- **Internal Docs:** [docs/architecture.md](docs/architecture.md) (UI Layer).
+- **Internal Docs:** [docs/architecture.md](architecture.md) (UI Layer).
 - **External Docs:** [HTMX: High Power Tools](https://htmx.org/essays/).
 - **Internal Source:** `src/api/main.py`, `src/api/routes/`.
 
@@ -243,7 +243,7 @@ MinIO also provides a **Console UI** on port 9001. This is where analysts can ma
 
 For developers, understanding the MinIO setup is key to troubleshooting data persistence issues. You'll learn how the `docker-compose.infra.yml` file manages the MinIO volumes and how to use the `s3fs` library in Python to interact with local buckets as if they were cloud storage.
 
-- **Internal Docs:** [docs/deployment.md](docs/deployment.md).
+- **Internal Docs:** [docs/deployment.md](deployment.md).
 - **External Docs:** [MinIO Documentation](https://min.io/docs/minio/linux/index.html).
 - **Internal Source:** `src/storage/config.py`, `docker-compose.infra.yml`.
 
@@ -256,7 +256,7 @@ We also use `uv` for fast, reproducible dependency management. The `pyproject.to
 
 For learners, studying `scripts/run_pipeline.py` is the best way to see how all the modules you've studied interact. You'll see how data flows from the `src/ingest/` modules into the `src/features/` modules and finally into the `src/score/` modules to produce the final output.
 
-- **Internal Docs:** [docs/pipeline-catalog.md](docs/pipeline-catalog.md), [docs/pipeline-operations.md](docs/pipeline-operations.md).
+- **Internal Docs:** [docs/pipeline-catalog.md](pipeline-catalog.md), [docs/pipeline-operations.md](pipeline-operations.md).
 - **Internal Source:** `scripts/run_pipeline.py`, `pyproject.toml`, `uv.lock`.
 
 ### Day 20: Local E2E Testing & Troubleshooting
@@ -268,7 +268,7 @@ Troubleshooting in Arktrace is done via **Log Analysis**. We use a centralized l
 
 For developers, Day 20 is about writing your first test case. You'll learn how to use `pytest` fixtures to set up a temporary DuckDB environment and how to use `assert` statements to verify that your new feature is producing the correct mathematical output.
 
-- **Internal Docs:** [docs/local-e2e-test.md](docs/local-e2e-test.md), [docs/development.md](docs/development.md) (Testing section).
+- **Internal Docs:** [docs/local-e2e-test.md](local-e2e-test.md), [docs/development.md](development.md) (Testing section).
 - **Internal Source:** `tests/`, `tests/test_scoring_pipeline.py`, `scripts/smoke_sar_feature.py`.
 
 ### Day 21: Final Review & Cap Vista Submission Package
