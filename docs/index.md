@@ -107,3 +107,4 @@ Full policy: [`docs/triage-governance.md`](triage-governance.md).
 | Tech stack and algorithm details | [`docs/technical-solution.md`](technical-solution.md) |
 | Pipeline operations reference | [`docs/pipeline-operations.md`](pipeline-operations.md) |
 | Regional configuration (Singapore, Japan Sea, etc.) | [`docs/regional-playbooks.md`](regional-playbooks.md) |
+| Study guide (Domain, Math, LLM, Tech) | [`docs/study-guide.md`](study-guide.md) |
