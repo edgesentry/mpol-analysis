@@ -71,8 +71,8 @@ jobs:
         env:
           S3_BUCKET: ${{ secrets.R2_BUCKET }}
           S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
         run: |
           uv run python scripts/sync_r2.py push 2>&1 | tee /tmp/push.log
@@ -82,9 +82,9 @@ jobs:
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
       - name: Send metrics email (#210)
-        if: always() && vars.NOTIFY_EMAIL != ''
+        if: always() && secrets.NOTIFY_EMAIL != ''
         env:
-          NOTIFY_EMAIL: ${{ vars.NOTIFY_EMAIL }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
