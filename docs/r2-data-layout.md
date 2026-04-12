@@ -4,23 +4,22 @@ Arktrace uses Cloudflare R2 (S3-compatible) to distribute pre-built pipeline
 artifacts so users can start the dashboard without running the pipeline
 themselves.
 
-All paths below are relative to the root of the configured bucket
-(`S3_BUCKET`).
+A dedicated public bucket (`arktrace-public`) is used exclusively for public
+OSS artifacts, so no sub-prefix is needed — all objects live at the bucket
+root.
 
 ---
 
 ## Bucket layout
 
 ```
-<bucket>/
-  public/
-    arktrace/
-      latest                       ← plain text: "20260412T120000Z"
-      20260412T120000Z.zip          ← latest generation (1 kept by default)
-      gdelt.lance.zip               ← shared GDELT Lance store (~1.2 GB)
+arktrace-public/                   ← dedicated public bucket (Cloudflare R2)
+  latest                           ← plain text: "20260412T120000Z"
+  20260412T120000Z.zip              ← latest generation (1 kept by default)
+  gdelt.lance.zip                   ← shared GDELT Lance store (~1.2 GB)
                                       pushed separately; only updated when
                                       GDELT is re-ingested
-      validation_metrics.json       ← scoring validation metrics (tiny)
+  validation_metrics.json           ← scoring validation metrics (tiny)
 ```
 
 Each **generation zip** contains artifacts for all five regions.  Users
@@ -156,10 +155,10 @@ R2 credentials are read from environment variables (or `.env`):
 
 | Variable | Description |
 |---|---|
-| `S3_BUCKET` | Bucket name (e.g. `arktrace-data`) |
+| `S3_BUCKET` | `arktrace-public` |
 | `S3_ENDPOINT` | `https://<account_id>.r2.cloudflarestorage.com` |
-| `AWS_ACCESS_KEY_ID` | R2 Access Key ID |
-| `AWS_SECRET_ACCESS_KEY` | R2 Secret Access Key |
+| `AWS_ACCESS_KEY_ID` | R2 Access Key ID (write only — not needed for pull) |
+| `AWS_SECRET_ACCESS_KEY` | R2 Secret Access Key (write only — not needed for pull) |
 | `AWS_REGION` | `auto` |
 
 These credentials are **only** used by `sync_r2.py` and `bootstrap.py` for
@@ -167,18 +166,21 @@ push/pull. The dashboard always reads from local disk — setting these
 variables does not route app reads to R2 (see `USE_S3` in
 [Deployment](deployment.md) for the opt-in S3 serving mode).
 
-For **read-only public pulls** (end users running the dashboard), no
-credentials are needed if the bucket's `public/` prefix has public access
-enabled (Cloudflare R2 → Settings → Public Access).
+**Read-only pulls require no credentials.** The `arktrace-public` bucket is
+fully public (Cloudflare R2 → Settings → Public Access). Set only
+`S3_BUCKET` and `S3_ENDPOINT` in `.env` to pull without a key.
 
 ### CI secrets
 
-| Secret | Maps to |
-|---|---|
-| `R2_BUCKET` | `S3_BUCKET` |
-| `R2_ENDPOINT` | `S3_ENDPOINT` |
-| `R2_ACCESS_KEY_ID` | `AWS_ACCESS_KEY_ID` |
-| `R2_SECRET_ACCESS_KEY` | `AWS_SECRET_ACCESS_KEY` |
+CI needs write credentials to push artifacts. Configure these as repository
+secrets:
+
+| Secret | Maps to | Value |
+|---|---|---|
+| `R2_BUCKET` | `S3_BUCKET` | `arktrace-public` |
+| `R2_ENDPOINT` | `S3_ENDPOINT` | `https://<account_id>.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID` | `AWS_ACCESS_KEY_ID` | R2 write token key ID |
+| `R2_SECRET_ACCESS_KEY` | `AWS_SECRET_ACCESS_KEY` | R2 write token secret |
 
 ---
 
@@ -206,7 +208,7 @@ Live AIS data collected via AISstream.io, AISHub, or Global Fishing Watch
 data and want to share it within your team:
 
 1. Push your regional DuckDB (which contains the live positions) to a
-   **private** bucket prefix, separate from `public/arktrace/`.
+   **private** R2 bucket, separate from `arktrace-public`.
 2. Share credentials only with authorised team members.
-3. Do not push to `public/arktrace/` — that prefix is reserved for OSS
+3. Do not push to `arktrace-public` — that bucket is reserved for OSS
    artifacts that can be freely distributed.

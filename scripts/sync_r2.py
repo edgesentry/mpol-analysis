@@ -2,20 +2,18 @@
 
 Storage layout in R2
 --------------------
-  <bucket>/
-    public/
-      arktrace/
-        latest                  ← plain-text file: "20260412T120000Z"
-        20260412T120000Z.zip     ← single generation zip (1 kept by default)
-        gdelt.lance.zip          ← shared; push separately with `push-gdelt`
+  arktrace-public/                ← dedicated public bucket (no sub-prefix needed)
+    latest                        ← plain-text file: "20260412T120000Z"
+    20260412T120000Z.zip           ← single generation zip (1 kept by default)
+    gdelt.lance.zip                ← shared; push separately with `push-gdelt`
 
 Each generation is a single .zip file, so push/pull is always 1 object.
 Only 1 generation is kept by default (--keep 1) to stay within a ~10 GB
 bucket budget.  Pass --keep N to retain more generations.
 
-The public/ prefix is readable by anyone when the R2 bucket has public access
-enabled (Cloudflare R2 → Settings → Public Access).  Users can pull without
-any credentials — just set S3_BUCKET and S3_ENDPOINT in .env.
+The bucket is fully public (Cloudflare R2 → Settings → Public Access).
+Users can pull without any credentials — just set S3_BUCKET and S3_ENDPOINT
+in .env.
 
 Why gdelt.lance is separate
 ---------------------------
@@ -58,7 +56,7 @@ Commands
 
 Required env vars (loaded from .env automatically)
 --------------------------------------------------
-  S3_BUCKET               R2 bucket name  (e.g. arktrace-data)
+  S3_BUCKET               R2 bucket name  (arktrace-public)
   S3_ENDPOINT             https://<account_id>.r2.cloudflarestorage.com
   AWS_ACCESS_KEY_ID       R2 access key ID
   AWS_SECRET_ACCESS_KEY   R2 secret access key
@@ -93,13 +91,10 @@ from pathlib import Path
 _DEFAULT_DATA_DIR = "data/processed"
 _DEFAULT_REGION = "singapore"
 _DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
-_PROJECT = "arktrace"
-
-# All pipeline data lives under public/ — readable by anyone when the R2 bucket
-# has public access enabled (Cloudflare R2 → Settings → Public Access).
-_PUBLIC_BASE = f"public/{_PROJECT}"                # public/arktrace
-_LATEST_KEY  = f"{_PUBLIC_BASE}/latest"            # plain-text pointer to newest timestamp
-_GDELT_R2_KEY = f"{_PUBLIC_BASE}/gdelt.lance.zip"  # single zip for gdelt
+# The dedicated arktrace-public bucket contains only public OSS artifacts,
+# so no sub-prefix is needed — all objects live at the bucket root.
+_LATEST_KEY   = "latest"            # plain-text pointer to newest timestamp
+_GDELT_R2_KEY = "gdelt.lance.zip"   # single zip for gdelt
 
 # Maps user-facing region name → file prefix used in data/processed/
 # e.g. "japan" → files are japansea.duckdb, japansea_graph/, japansea_watchlist.parquet
@@ -246,7 +241,7 @@ def _list_local(data_dir: Path, exclude_fn=None) -> dict[str, int]:
 
 
 def _r2_zip_path(bucket: str, timestamp: str) -> str:
-    return f"{bucket}/{_PUBLIC_BASE}/{timestamp}.zip"
+    return f"{bucket}/{timestamp}.zip"
 
 
 def _read_latest(fs, bucket: str) -> str | None:
@@ -266,7 +261,7 @@ def _list_timestamps(fs, bucket: str) -> list[str]:
     """Return timestamp names (without .zip) sorted oldest-first."""
     import pyarrow.fs as pafs
 
-    selector = pafs.FileSelector(f"{bucket}/{_PUBLIC_BASE}", recursive=False)
+    selector = pafs.FileSelector(f"{bucket}", recursive=False)
     try:
         infos = fs.get_file_info(selector)
     except Exception:
