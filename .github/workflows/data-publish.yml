@@ -69,8 +69,6 @@ jobs:
       - name: Push artifacts to R2
         id: push
         env:
-          S3_BUCKET: ${{ secrets.R2_BUCKET }}
-          S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
@@ -82,7 +80,7 @@ jobs:
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
       - name: Send metrics email (#210)
-        if: always() && secrets.NOTIFY_EMAIL != ''
+        if: always() && secrets.NOTIFY_EMAIL
         env:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
