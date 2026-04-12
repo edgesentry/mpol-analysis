@@ -8,9 +8,12 @@ Environment variables
 ---------------------
 DB_PATH                 Path to the region DuckDB (used to detect which region
                         to pull and whether the cache is present).
-S3_BUCKET / S3_ENDPOINT / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-                        R2 credentials — same vars used by sync_r2.py.
-                        When absent the bootstrap step is silently skipped.
+                        Default: data/processed/singapore.duckdb
+S3_BUCKET               R2 bucket name. Default: arktrace-public
+S3_ENDPOINT             R2 endpoint URL. Default: arktrace-public R2 endpoint
+AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+                        R2 credentials. When absent the public bucket is pulled
+                        anonymously (no credentials needed for reads).
 AUTO_PULL               Set to "0" or "false" to disable auto-pull entirely.
 """
 
@@ -39,7 +42,7 @@ _WATCHLIST_PATH = "data/processed/candidate_watchlist.parquet"
 def _r2_configured() -> bool:
     return all(
         os.getenv(v)
-        for v in ("S3_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
+        for v in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
     )
 
 
@@ -114,13 +117,13 @@ def _pull(region: str, db_path: str) -> None:
         sys.path.insert(0, scripts_dir)
 
     from sync_r2 import (  # type: ignore[import]
-        _PUBLIC_BASE,
+        _DEFAULT_BUCKET,
         _build_r2_fs,
         _pull_zip,
         _read_latest,
     )
 
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     data_dir = _Path(os.getenv("DATA_DIR", "data/processed"))
 
     # Anonymous pull if no write credentials (public bucket)
@@ -130,7 +133,7 @@ def _pull(region: str, db_path: str) -> None:
     timestamp = _read_latest(fs, bucket)
     if not timestamp:
         raise RuntimeError(
-            f"No 'latest' pointer found at {bucket}/{_PUBLIC_BASE}/latest. "
+            f"No 'latest' pointer found at {bucket}/latest. "
             "Run: uv run python scripts/sync_r2.py push"
         )
 

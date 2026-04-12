@@ -42,8 +42,13 @@ def is_s3() -> bool:
     return val in ("1", "true", "yes")
 
 
+_DEFAULT_BUCKET = "arktrace-public"
+_DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
+_DEFAULT_REGION = "auto"
+
+
 def _bucket() -> str:
-    return os.environ["S3_BUCKET"]
+    return os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
 
 
 # ---------------------------------------------------------------------------
@@ -58,9 +63,9 @@ def polars_storage_options() -> dict[str, str] | None:
     opts: dict[str, str] = {
         "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
-    endpoint = os.getenv("S3_ENDPOINT")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if endpoint:
         opts["aws_endpoint_url"] = endpoint
         opts["aws_allow_http"] = "true"
@@ -74,9 +79,9 @@ def lance_storage_options() -> dict[str, str] | None:
     opts: dict[str, str] = {
         "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
-    endpoint = os.getenv("S3_ENDPOINT")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if endpoint:
         opts["aws_endpoint"] = endpoint
         opts["aws_allow_http"] = "true"
@@ -175,11 +180,11 @@ def _write_parquet_s3(df: pl.DataFrame, uri: str) -> None:
     without_scheme = uri[len("s3://") :]
     bucket, _, key = without_scheme.partition("/")
 
-    endpoint = os.getenv("S3_ENDPOINT", "")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     fs_kwargs: dict[str, str] = {
         "access_key": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "region": os.getenv("AWS_REGION", "us-east-1"),
+        "region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
     if endpoint:
         fs_kwargs["endpoint_override"] = endpoint.split("://", 1)[-1]

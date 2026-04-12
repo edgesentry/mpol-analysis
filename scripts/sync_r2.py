@@ -54,13 +54,13 @@ Commands
   pull-gdelt    download + extract gdelt.lance.zip → data/processed/gdelt.lance
   list          show all snapshot zips in R2
 
-Required env vars (loaded from .env automatically)
---------------------------------------------------
-  S3_BUCKET               R2 bucket name  (arktrace-public)
-  S3_ENDPOINT             https://<account_id>.r2.cloudflarestorage.com
-  AWS_ACCESS_KEY_ID       R2 access key ID
-  AWS_SECRET_ACCESS_KEY   R2 secret access key
-  AWS_REGION              optional, defaults to "auto" (correct for R2)
+Env vars (loaded from .env automatically)
+------------------------------------------
+  S3_BUCKET               R2 bucket name. Default: arktrace-public
+  S3_ENDPOINT             R2 endpoint URL. Default: arktrace-public R2 endpoint
+  AWS_REGION              Default: "auto" (correct for R2)
+  AWS_ACCESS_KEY_ID       R2 access key ID (required for push commands only)
+  AWS_SECRET_ACCESS_KEY   R2 secret access key (required for push commands only)
 
 Examples
 --------
@@ -91,6 +91,8 @@ from pathlib import Path
 _DEFAULT_DATA_DIR = "data/processed"
 _DEFAULT_REGION = "singapore"
 _DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
+_DEFAULT_BUCKET = "arktrace-public"
+_DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
 # The dedicated arktrace-public bucket contains only public OSS artifacts,
 # so no sub-prefix is needed — all objects live at the bucket root.
 _LATEST_KEY   = "latest"            # plain-text pointer to newest timestamp
@@ -205,7 +207,7 @@ def _build_r2_fs(anonymous: bool = False):  # -> pyarrow.fs.S3FileSystem
     """
     import pyarrow.fs as pafs
 
-    endpoint = os.environ.get("S3_ENDPOINT", "")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if not endpoint:
         # Plain AWS S3
         kwargs: dict = {"region": os.getenv("AWS_REGION", "us-east-1")}
@@ -374,7 +376,7 @@ def _pull_zip(
 
 
 def cmd_push(args: argparse.Namespace) -> int:
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     data_dir = Path(args.data_dir)
     keep = args.keep
 
@@ -432,7 +434,7 @@ def cmd_push(args: argparse.Namespace) -> int:
 
 
 def cmd_pull(args: argparse.Namespace) -> int:
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     data_dir = Path(args.data_dir)
 
     # Use anonymous access when credentials are absent (public bucket)
@@ -487,7 +489,7 @@ def cmd_pull(args: argparse.Namespace) -> int:
 
 
 def cmd_push_gdelt(args: argparse.Namespace) -> int:
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     data_dir = Path(args.data_dir)
     gdelt_dir = data_dir / _GDELT_LOCAL_DIR
 
@@ -542,7 +544,7 @@ def cmd_push_gdelt(args: argparse.Namespace) -> int:
 
 
 def cmd_pull_gdelt(args: argparse.Namespace) -> int:
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     data_dir = Path(args.data_dir)
     gdelt_dir = data_dir / _GDELT_LOCAL_DIR
 
@@ -583,7 +585,7 @@ def cmd_pull_gdelt(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    bucket = os.environ["S3_BUCKET"]
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
     fs = _build_r2_fs(anonymous=anon)
 
@@ -628,9 +630,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def _check_env(require_credentials: bool = True) -> bool:
-    required = ["S3_BUCKET"]
-    if require_credentials:
-        required += ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+    required = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] if require_credentials else []
     missing = [v for v in required if not os.getenv(v)]
     if missing:
         print(f"Error: missing env vars: {', '.join(missing)}", file=sys.stderr)
