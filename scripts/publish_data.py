@@ -103,12 +103,17 @@ def _run_pipeline(regions: list[str], gdelt_days: int) -> None:
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "run_public_backtest_batch.py"),
-        "--regions", ",".join(regions),
-        "--gdelt-days", str(gdelt_days),
-        "--stream-duration", "0",
+        "--regions",
+        ",".join(regions),
+        "--gdelt-days",
+        str(gdelt_days),
+        "--stream-duration",
+        "0",
         "--seed-dummy",
-        "--max-known-cases", "200",
-        "--min-known-cases", "30",
+        "--max-known-cases",
+        "200",
+        "--min-known-cases",
+        "30",
         "--strict-known-cases",
     ]
     print(f"\n▶ Running pipeline for: {', '.join(regions)}")

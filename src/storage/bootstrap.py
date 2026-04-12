@@ -40,10 +40,7 @@ _WATCHLIST_PATH = "data/processed/candidate_watchlist.parquet"
 
 
 def _r2_configured() -> bool:
-    return all(
-        os.getenv(v)
-        for v in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
-    )
+    return all(os.getenv(v) for v in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"))
 
 
 def _auto_pull_enabled() -> bool:

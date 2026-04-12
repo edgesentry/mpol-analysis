@@ -95,8 +95,8 @@ _DEFAULT_BUCKET = "arktrace-public"
 _DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
 # The dedicated arktrace-public bucket contains only public OSS artifacts,
 # so no sub-prefix is needed — all objects live at the bucket root.
-_LATEST_KEY   = "latest"            # plain-text pointer to newest timestamp
-_GDELT_R2_KEY = "gdelt.lance.zip"   # single zip for gdelt
+_LATEST_KEY = "latest"  # plain-text pointer to newest timestamp
+_GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
 
 # Maps user-facing region name → file prefix used in data/processed/
 # e.g. "japan" → files are japansea.duckdb, japansea_graph/, japansea_watchlist.parquet
@@ -125,7 +125,7 @@ _SNAPSHOT_EXCLUDE: list[str] = [
     "anomaly_scores.parquet",
     "composite_scores.parquet",
     "mpol_baseline.parquet",
-    "mpol_graph/*",             # Lance graph used during feature engineering only
+    "mpol_graph/*",  # Lance graph used during feature engineering only
     # Evaluation / backtest artefacts
     "backtest_demo.duckdb",
     "public_eval.duckdb",
@@ -276,9 +276,7 @@ def _list_timestamps(fs, bucket: str) -> list[str]:
     pat = re.compile(r"^\d{8}T\d{6}Z\.zip$")
     # Keep only root-level files: path == bucket/filename (no extra slash)
     names = [
-        Path(i.path).name
-        for i in infos
-        if i.type == pafs.FileType.File and i.path.count("/") == 1
+        Path(i.path).name for i in infos if i.type == pafs.FileType.File and i.path.count("/") == 1
     ]
     return sorted(n.removesuffix(".zip") for n in names if pat.match(n))
 
@@ -447,8 +445,7 @@ def cmd_pull(args: argparse.Namespace) -> int:
         timestamp = _read_latest(fs, bucket)
         if not timestamp:
             print(
-                "No 'latest' pointer found in R2. "
-                "Run a push first or pass --timestamp explicitly.",
+                "No 'latest' pointer found in R2. Run a push first or pass --timestamp explicitly.",
                 file=sys.stderr,
             )
             return 1
@@ -503,6 +500,7 @@ def cmd_push_gdelt(args: argparse.Namespace) -> int:
 
     if not args.force:
         import pyarrow.fs as pafs
+
         try:
             infos = fs.get_file_info([r2_path])
             if infos[0].type == pafs.FileType.File:
@@ -553,6 +551,7 @@ def cmd_pull_gdelt(args: argparse.Namespace) -> int:
     r2_path = f"{bucket}/{_GDELT_R2_KEY}"
 
     import pyarrow.fs as pafs
+
     try:
         infos = fs.get_file_info([r2_path])
         if infos[0].type == pafs.FileType.NotFound:
@@ -649,14 +648,21 @@ def main() -> int:
     push_p = sub.add_parser("push", help="Push new generation zip to R2, prune old zips")
     push_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
     push_p.add_argument(
-        "--keep", type=int, default=_DEFAULT_KEEP, metavar="N",
+        "--keep",
+        type=int,
+        default=_DEFAULT_KEEP,
+        metavar="N",
         help=f"Number of generations to keep in R2 (default: {_DEFAULT_KEEP})",
     )
 
-    pull_p = sub.add_parser("pull", help="Download + extract latest (or named) generation zip → data/processed/")
+    pull_p = sub.add_parser(
+        "pull", help="Download + extract latest (or named) generation zip → data/processed/"
+    )
     pull_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
     pull_p.add_argument(
-        "--timestamp", default=None, metavar="YYYYMMDDTHHMMSSZ",
+        "--timestamp",
+        default=None,
+        metavar="YYYYMMDDTHHMMSSZ",
         help="Specific generation to pull (default: latest)",
     )
     pull_p.add_argument(
@@ -669,12 +675,19 @@ def main() -> int:
         ),
     )
 
-    push_gdelt_p = sub.add_parser("push-gdelt", help="Upload gdelt.lance as gdelt.lance.zip (run after re-ingesting GDELT)")
+    push_gdelt_p = sub.add_parser(
+        "push-gdelt", help="Upload gdelt.lance as gdelt.lance.zip (run after re-ingesting GDELT)"
+    )
     push_gdelt_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
-    push_gdelt_p.add_argument("--force", action="store_true",
-                              help="Re-upload even if gdelt.lance.zip already exists in R2")
+    push_gdelt_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-upload even if gdelt.lance.zip already exists in R2",
+    )
 
-    pull_gdelt_p = sub.add_parser("pull-gdelt", help="Download + extract gdelt.lance.zip → data/processed/gdelt.lance")
+    pull_gdelt_p = sub.add_parser(
+        "pull-gdelt", help="Download + extract gdelt.lance.zip → data/processed/gdelt.lance"
+    )
     pull_gdelt_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
     sub.add_parser("list", help="List snapshot zips and gdelt.lance.zip status in R2")
@@ -682,6 +695,7 @@ def main() -> int:
     args = parser.parse_args()
 
     from dotenv import load_dotenv
+
     load_dotenv()
 
     read_only = args.command in ("pull", "pull-gdelt", "list")
