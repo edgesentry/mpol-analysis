@@ -111,8 +111,8 @@ def _flush_batch(batch: list[dict], db_path: str) -> int:
     return after - before
 
 
-BACKOFF_INITIAL = 5    # seconds before first retry
-BACKOFF_MAX     = 300  # cap at 5 minutes
+BACKOFF_INITIAL = 5  # seconds before first retry
+BACKOFF_MAX = 300  # cap at 5 minutes
 
 
 async def stream(
@@ -208,7 +208,9 @@ async def stream(
                         n = _flush_batch(batch, db_path)
                         total_inserted += n
                         session_inserted += n
-                        print(f"  Flushed {len(batch)} records → {n} inserted (total {total_inserted})")
+                        print(
+                            f"  Flushed {len(batch)} records → {n} inserted (total {total_inserted})"
+                        )
                         batch.clear()
                         last_flush = now
 
