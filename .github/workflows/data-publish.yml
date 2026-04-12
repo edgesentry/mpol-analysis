@@ -7,10 +7,13 @@ name: Publish data to R2
 #   uv run python scripts/sync_r2.py pull
 #
 # Triggers:
+#   - Weekly schedule (every Monday 02:00 UTC) — keeps data fresh (#209)
 #   - Manual dispatch (workflow_dispatch) — run on demand after a data update
 #   - Automatically after public-backtest-integration completes on main
 
 on:
+  schedule:
+    - cron: '0 2 * * 1'   # every Monday 02:00 UTC
   workflow_dispatch:
   workflow_run:
     workflows: ["Public Backtest Integration"]
@@ -29,6 +32,7 @@ jobs:
     # Skip automatic runs if the upstream workflow failed
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -63,13 +67,33 @@ jobs:
             --strict-known-cases
 
       - name: Push artifacts to R2
+        id: push
         env:
           S3_BUCKET: ${{ secrets.R2_BUCKET }}
           S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
-        run: uv run python scripts/sync_r2.py push
+        run: |
+          uv run python scripts/sync_r2.py push 2>&1 | tee /tmp/push.log
+          snapshot_id=$(grep -oP '\d{8}T\d{6}Z(?=\.zip pushed)' /tmp/push.log || echo "")
+          snapshot_mb=$(grep -oP '[\d.]+(?= MB\.$)' /tmp/push.log | tail -1 || echo "")
+          echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
+          echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
+
+      - name: Send metrics email (#210)
+        if: always() && vars.NOTIFY_EMAIL != ''
+        env:
+          NOTIFY_EMAIL: ${{ vars.NOTIFY_EMAIL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SNAPSHOT_ID: ${{ steps.push.outputs.snapshot_id }}
+          SNAPSHOT_SIZE_MB: ${{ steps.push.outputs.snapshot_mb }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: uv run python scripts/notify_metrics.py
 
       - name: Upload artifacts (fallback — available even if R2 push fails)
         if: always()
