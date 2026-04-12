@@ -258,16 +258,26 @@ def _write_latest(fs, bucket: str, timestamp: str) -> None:
 
 
 def _list_timestamps(fs, bucket: str) -> list[str]:
-    """Return timestamp names (without .zip) sorted oldest-first."""
+    """Return timestamp names (without .zip) sorted oldest-first.
+
+    Uses recursive=True and filters to root-level files only because
+    pyarrow S3FileSystem does not enumerate flat (no-slash) keys when
+    recursive=False is set on a bucket-root FileSelector.
+    """
     import pyarrow.fs as pafs
 
-    selector = pafs.FileSelector(f"{bucket}", recursive=False)
+    selector = pafs.FileSelector(f"{bucket}/", recursive=True)
     try:
         infos = fs.get_file_info(selector)
     except Exception:
         return []
     pat = re.compile(r"^\d{8}T\d{6}Z\.zip$")
-    names = [Path(i.path).name for i in infos if i.type == pafs.FileType.File]
+    # Keep only root-level files: path == bucket/filename (no extra slash)
+    names = [
+        Path(i.path).name
+        for i in infos
+        if i.type == pafs.FileType.File and i.path.count("/") == 1
+    ]
     return sorted(n.removesuffix(".zip") for n in names if pat.match(n))
 
 
