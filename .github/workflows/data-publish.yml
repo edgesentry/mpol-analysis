@@ -80,7 +80,7 @@ jobs:
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
       - name: Send metrics email (#210)
-        if: always() && secrets.NOTIFY_EMAIL
+        if: always()
         env:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
