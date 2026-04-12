@@ -111,6 +111,10 @@ def _flush_batch(batch: list[dict], db_path: str) -> int:
     return after - before
 
 
+BACKOFF_INITIAL = 5  # seconds before first retry
+BACKOFF_MAX = 300  # cap at 5 minutes
+
+
 async def stream(
     api_key: str,
     db_path: str = DEFAULT_DB_PATH,
@@ -120,6 +124,10 @@ async def stream(
     duration: float = 0,
 ) -> None:
     """Connect to aisstream.io and ingest position reports until interrupted.
+
+    Reconnects automatically with exponential backoff when the server closes
+    the connection (e.g. rate limit, idle timeout). Backoff starts at
+    BACKOFF_INITIAL seconds and doubles up to BACKOFF_MAX.
 
     Args:
         duration: Stop automatically after this many seconds (0 = run until Ctrl-C).
@@ -132,8 +140,8 @@ async def stream(
         "FilterMessageTypes": ["PositionReport"],
     }
 
-    batch: list[dict] = []
     total_inserted = 0
+    backoff = BACKOFF_INITIAL
 
     stop_event = asyncio.Event()
 
@@ -147,50 +155,85 @@ async def stream(
 
     deadline: float | None = (loop.time() + duration) if duration > 0 else None
 
-    print(f"Connecting to {WEBSOCKET_URL} …")
-    async with websockets.connect(WEBSOCKET_URL) as ws:
-        await ws.send(json.dumps(subscription))
-        print(
-            f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s"
-        )
-        last_flush = loop.time()
+    while not stop_event.is_set():
+        if deadline is not None and loop.time() >= deadline:
+            break
 
-        while not stop_event.is_set():
-            if deadline is not None and loop.time() >= deadline:
-                break
+        batch: list[dict] = []
 
-            recv_timeout = min(1.0, deadline - loop.time()) if deadline is not None else 1.0
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=max(recv_timeout, 0.1))
-            except TimeoutError:
-                continue
-            except websockets.ConnectionClosed:
-                break
+        try:
+            print(f"Connecting to {WEBSOCKET_URL} …")
+            async with websockets.connect(WEBSOCKET_URL) as ws:
+                await ws.send(json.dumps(subscription))
+                print(
+                    f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s"
+                )
+                last_flush = loop.time()
+                session_inserted = 0
+                messages_received = 0
 
-            try:
-                msg = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
+                while not stop_event.is_set():
+                    if deadline is not None and loop.time() >= deadline:
+                        break
 
-            record = _parse_position_report(msg)
-            if record is None:
-                continue
+                    recv_timeout = min(1.0, deadline - loop.time()) if deadline is not None else 1.0
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=max(recv_timeout, 0.1))
+                    except TimeoutError:
+                        continue
+                    except websockets.ConnectionClosedOK:
+                        print("Connection closed cleanly by server.")
+                        break
+                    except websockets.ConnectionClosedError as e:
+                        print(f"Connection closed by server: code={e.code} reason={e.reason!r}")
+                        break
 
-            batch.append(record)
-            now = loop.time()
+                    try:
+                        msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
 
-            if len(batch) >= batch_size or (now - last_flush) >= flush_interval:
-                n = _flush_batch(batch, db_path)
-                total_inserted += n
-                print(f"  Flushed {len(batch)} records → {n} inserted (total {total_inserted})")
-                batch.clear()
-                last_flush = now
+                    record = _parse_position_report(msg)
+                    if record is None:
+                        continue
 
-    # Flush remainder
-    if batch:
-        n = _flush_batch(batch, db_path)
-        total_inserted += n
-        print(f"  Final flush: {len(batch)} records → {n} inserted (total {total_inserted})")
+                    messages_received += 1
+                    if messages_received == 1:
+                        backoff = BACKOFF_INITIAL  # reset only after first real message
+
+                    batch.append(record)
+                    now = loop.time()
+
+                    if len(batch) >= batch_size or (now - last_flush) >= flush_interval:
+                        n = _flush_batch(batch, db_path)
+                        total_inserted += n
+                        session_inserted += n
+                        print(
+                            f"  Flushed {len(batch)} records → {n} inserted (total {total_inserted})"
+                        )
+                        batch.clear()
+                        last_flush = now
+
+        except OSError as e:
+            # DNS / network failure — treat like a server close
+            print(f"Network error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {type(e).__name__}: {e}")
+
+        # Flush whatever accumulated before the disconnect
+        if batch:
+            n = _flush_batch(batch, db_path)
+            total_inserted += n
+            print(f"  Final flush: {len(batch)} records → {n} inserted (total {total_inserted})")
+
+        if stop_event.is_set():
+            break
+        if deadline is not None and loop.time() >= deadline:
+            break
+
+        print(f"Reconnecting in {backoff}s …")
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, BACKOFF_MAX)
 
     print(f"Ingestion complete. Total inserted: {total_inserted}")
 
