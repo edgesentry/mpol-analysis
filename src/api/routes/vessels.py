@@ -12,7 +12,8 @@ from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from src.analysis.causal import score_unknown_unknowns
-from src.storage.config import output_uri, read_parquet as read_parquet_uri, watchlist_uri
+from src.storage.config import output_uri, watchlist_uri
+from src.storage.config import read_parquet as read_parquet_uri
 
 DEFAULT_VALIDATION_PATH = os.getenv(
     "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
