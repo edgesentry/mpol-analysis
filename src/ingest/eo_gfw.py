@@ -57,7 +57,7 @@ GFW_API_TOKEN = os.getenv("GFW_API_TOKEN", "")
 DEFAULT_BBOX = (95.0, 1.0, 110.0, 6.0)
 
 # GFW Events API dataset for AIS gap (dark-vessel) events.
-_GFW_GAP_DATASET = "public-global-fishing-events-v2:latest"
+_GFW_GAP_DATASET = "public-global-fishing-events:latest"
 _GFW_EVENTS_PAGE_SIZE = 99999  # request the maximum to minimise pagination
 
 
