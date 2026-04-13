@@ -202,9 +202,23 @@ Report output:
 We provide an opt-in integration test that actually downloads public sanctions data,
 loads DuckDB, and evaluates found-vs-missed outcomes against practical positive-label sources.
 
-### Prepare once and reuse DB (recommended)
+The integration test requires **two** local files:
 
-Because OpenSanctions ingestion can take time, prepare a persistent DB once and reuse it in later tests.
+| File | How to get it |
+|---|---|
+| `data/processed/candidate_watchlist.parquet` | `sync_r2.py pull` (included in the generation zip) |
+| `data/processed/public_eval.duckdb` | `sync_r2.py pull-sanctions-db` **or** generate locally (see below) |
+
+`public_eval.duckdb` is distributed as a standalone R2 object (refreshed on every data-publish CI run) and is **not** inside the rotation zip.
+
+### Option A — Pull pre-built DB from R2 (fastest)
+
+```bash
+uv run python scripts/sync_r2.py pull               # pulls candidate_watchlist.parquet
+uv run python scripts/sync_r2.py pull-sanctions-db  # pulls public_eval.duckdb (~50 MB)
+```
+
+### Option B — Generate locally (required to get the freshest data)
 
 ```bash
 uv run python scripts/prepare_public_sanctions_db.py \
@@ -217,7 +231,7 @@ This writes:
 2. Cached raw file: `data/raw/sanctions/opensanctions_entities.jsonl`
 3. Metadata snapshot: `data/processed/public_eval_metadata.json`
 
-To refresh data:
+To refresh an existing DB:
 
 ```bash
 uv run python scripts/prepare_public_sanctions_db.py \
@@ -226,7 +240,7 @@ uv run python scripts/prepare_public_sanctions_db.py \
   --force-reload
 ```
 
-Run manually:
+### Run the test
 
 ```bash
 RUN_PUBLIC_DATA_TESTS=1 \
