@@ -16,7 +16,10 @@ from dotenv import load_dotenv
 from src.features.ais_behavior import DEFAULT_DB_PATH, compute_ais_features
 from src.features.eo_fusion import compute_eo_features
 from src.features.identity import compute_identity_features
-from src.features.ownership_graph import compute_ownership_graph_features
+from src.features.ownership_graph import (
+    _apply_direct_sanctions_fallback,
+    compute_ownership_graph_features,
+)
 from src.features.sar_detections import compute_unmatched_sar_detections
 from src.features.trade_mismatch import compute_trade_features
 
@@ -162,7 +165,17 @@ def build_feature_matrix(
         identity_df = compute_identity_features(db_path=db_path)
         ownership_df = compute_ownership_graph_features(db_path=db_path)
 
-    return _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df, sar_df, eo_df)
+    matrix = _merge_feature_frames(ais_df, identity_df, ownership_df, trade_df, sar_df, eo_df)
+
+    if not skip_graph:
+        # Apply DuckDB fallback after the full-vessel merge so that vessels present
+        # in ais_positions but absent from vessel_meta (and thus absent from the
+        # Lance Graph Vessel table) still get sanctions_distance=0 when their MMSI
+        # appears directly in sanctions_entities. The Lance Graph only covers vessels
+        # that were in vessel_meta at graph-build time; this corrects the gap.
+        matrix = _apply_direct_sanctions_fallback(matrix, db_path)
+
+    return matrix
 
 
 def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:

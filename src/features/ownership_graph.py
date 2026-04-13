@@ -304,7 +304,6 @@ def compute_ownership_graph_features(db_path: str) -> pl.DataFrame:
     tables = load_tables(db_path)
 
     sd_df = _compute_sanctions_distance(tables)
-    sd_df = _apply_direct_sanctions_fallback(sd_df, db_path)
 
     if sd_df.is_empty():
         return pl.DataFrame(

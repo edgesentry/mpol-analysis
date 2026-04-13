@@ -251,9 +251,10 @@ def test_non_vessel_type_with_mmsi_gets_sanctioned_by_edge(tmp_db):
     assert "620999538" in sb_src
 
 
-def test_sanctioned_mmsi_not_in_vessel_meta_gets_stub_node(tmp_db):
-    """A sanctioned vessel whose MMSI never appeared in AIS must still get a stub
-    Vessel node so that sanctions_distance can be computed for it."""
+def test_sanctioned_mmsi_not_in_vessel_meta_has_no_vessel_node(tmp_db):
+    """A sanctioned vessel whose MMSI never appeared in AIS must NOT get a Vessel
+    node — adding stub nodes would inflate watchlists with zero-AIS vessels.
+    The DuckDB fallback in ownership_graph.py handles distance correction instead."""
     # No vessel_meta row for this MMSI
     _seed_sanctions(
         tmp_db,
@@ -261,6 +262,7 @@ def test_sanctioned_mmsi_not_in_vessel_meta_gets_stub_node(tmp_db):
     )
     tables = build_graph_tables(tmp_db)
     vessel_mmsis = set(tables["Vessel"]["mmsi"].to_pylist())
-    assert "256869000" in vessel_mmsis
+    assert "256869000" not in vessel_mmsis
+    # SANCTIONED_BY edge still exists for use by other graph lookups
     sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
     assert "256869000" in sb_src

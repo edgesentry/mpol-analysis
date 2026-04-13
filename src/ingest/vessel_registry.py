@@ -93,15 +93,6 @@ def build_graph_tables(
     for r in vessel_rows:
         vessels[r[0]] = {"mmsi": r[0], "imo": r[1], "name": r[2]}
 
-    # Upsert stub nodes for sanctioned vessels not seeded by vessel_meta.
-    # Covers MMSI-only SDN entries (no IMO) and entities stored under a non-'Vessel'
-    # FtM schema type that carry a valid MMSI field (e.g. some OFAC/UN entries).
-    # Without this, SANCTIONED_BY edges exist in the graph but the Vessel node is
-    # absent, so _compute_sanctions_distance skips them and returns distance=99.
-    for _, mmsi, imo, _ in sanctioned_vessel_rows:
-        if mmsi and mmsi not in vessels:
-            vessels[mmsi] = {"mmsi": mmsi, "imo": imo or "", "name": ""}
-
     companies: dict[str, dict] = {}
     for entity_id, name, flag, _ in company_rows:
         companies[entity_id] = {"id": entity_id, "name": name, "country": flag}
