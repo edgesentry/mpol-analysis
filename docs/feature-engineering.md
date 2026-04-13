@@ -170,23 +170,38 @@ Difference (USD) between the declared cargo value from AIS voyage data and the U
 
 ## EO Fusion features
 
-Source: `eo_detections` DuckDB table, populated from the [Global Fishing Watch Vessel Presence API](https://globalfishingwatch.org/our-apis/) or a local CSV fallback. Computed over a 30-day rolling window by `src/features/eo_fusion.py`.
+Source: `eo_detections` DuckDB table, populated from the [Global Fishing Watch Events API](https://globalfishingwatch.org/our-apis/) or a local CSV fallback. Computed over a 30-day rolling window by `src/features/eo_fusion.py`.
 
 **Requires:** `GFW_API_TOKEN` in `.env` for live ingestion, or a local CSV via `--csv`. Pass `--skip-eo` to `build_matrix.py` to skip this family entirely (features default to 0).
 
+### GFW API tier and event types
+
+| GFW token tier | Available event types | `source` label | Signal meaning |
+|---|---|---|---|
+| **Free** (default) | `FISHING` | `gfw-fishing` | Fishing vessel activity density near the track |
+| **Research / Premium** | `GAP`, `GAP_START` | `gfw-gap` | AIS gap events — vessel disabled transponder (dark-vessel) |
+
+The free-tier token returns `FISHING` events (vessels detected fishing via AIS + ML classification). These are a maritime activity density signal, not a dark-vessel signal. To enable AIS gap detection, request a research access token at [globalfishingwatch.org/data-access](https://globalfishingwatch.org/data-access/) and update `_GFW_EVENT_TYPES` and `_GFW_SOURCE_LABEL` in `src/ingest/eo_gfw.py`.
+
+**GFW data lag:** The GFW Events pipeline typically lags real-time by 2–6 months. The default lookback window is 365 days to ensure historical detections are captured.
+
 ### `eo_dark_count_30d`
 
-Count of EO (Electro-Optical satellite imagery) vessel detections in the last 30 days that were **not** matched to an AIS broadcast within 0.1° / 120 min and were attributed to this vessel via AIS gap + 0.5° proximity.
+Count of EO vessel detections in the last 30 days attributed to this vessel via position proximity.
 
-**Shadow fleet signal:** A vessel detected by satellite imagery that is simultaneously dark on AIS is operating without a transponder — the clearest observable indicator of intentional AIS manipulation. Each such unmatched detection during an AIS gap is a direct observation of dark-vessel behaviour.
+**With research token (GAP events):** Counts vessels that disabled their AIS transponder — the clearest observable indicator of intentional AIS manipulation. Unmatched detections within 0.5° of a vessel's last known position during an AIS gap are attributed to that vessel.
 
-**Implementation:** GFW detections are matched to AIS broadcasts by position (≤ 0.1°) and time (≤ 120 min). Unmatched detections within 0.5° of a vessel's last known position during an AIS gap are attributed to that vessel. The 30-day count is written to `vessel_features`.
+**With free token (FISHING events):** Counts fishing events near the vessel's track. `confidence=0.8` for events flagged `potentialRisk=True` by GFW, `confidence=0.5` otherwise.
+
+**Implementation:** GFW detections are matched to AIS broadcasts by position (≤ 0.1°) and time (≤ 120 min). The 30-day count is written to `vessel_features`.
 
 ### `eo_ais_mismatch_ratio`
 
 Fraction of all EO detections attributed to this vessel (matched + unmatched) that were unmatched (dark): `eo_dark_count_30d / total_attributed_detections`.
 
-**Shadow fleet signal:** A vessel that appears in satellite imagery only when it is also broadcasting on AIS has a ratio near 0 — consistent with compliant behaviour. A vessel with a ratio above 0.5 is dark during more than half its satellite observations, indicating a systematic pattern of AIS suppression rather than occasional equipment failure.
+**With research token:** A ratio above 0.5 indicates a systematic pattern of AIS suppression rather than occasional equipment failure.
+
+**With free token:** Reflects the fraction of nearby fishing events that could not be matched to a known AIS broadcast — useful as an activity density proxy but not a reliable dark-vessel indicator without GAP event access.
 
 ---
 

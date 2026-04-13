@@ -34,6 +34,7 @@ Available menu jobs:
 - Ingest EO Detections from CSV (job 13) — load a local EO CSV into `eo_detections` without a GFW API token, then optionally run feature matrix + scoring to verify in the dashboard
 - Ingest AIS CSV / NMEA file (job 14) — load a provider CSV or NMEA 0183 file into `ais_positions`
 - Ingest custom feed drop-ins (job 15) — run all CSV files in `_inputs/custom_feeds/` through the auto-detector
+- GFW EO API Ingest (job 21) — fetch GFW Events API detections for a bbox/window and populate `eo_detections`; see [GFW API tier note](#gfw-api-tier-note) below
 
 ### Delayed-label intelligence loop (backtracking)
 
@@ -242,6 +243,31 @@ uv run python -m src.score.composite \
 # Watchlist output
 uv run python -m src.score.watchlist --db data/processed/singapore.duckdb
 ```
+
+---
+
+## GFW API tier note
+
+The GFW Events API (`src/ingest/eo_gfw.py`, operations shell job 21) behaviour depends on token tier:
+
+| Token tier | Event types accessible | `eo_detections` source | Signal |
+|---|---|---|---|
+| **Free** (default) | `FISHING` only | `gfw-fishing` | Fishing vessel activity density |
+| **Research / Premium** | `GAP`, `GAP_START`, all others | `gfw-gap` | AIS gap = dark-vessel detection |
+
+With the **free-tier token**, job 21 ingests fishing vessel detections for the bbox — a useful maritime activity density context feature, but not a direct dark-vessel indicator.  `eo_dark_count_30d` and `eo_ais_mismatch_ratio` are still populated but reflect fishing activity density rather than AIS-gap events.
+
+To enable dark-vessel (AIS gap) detection:
+
+1. Request research access at [globalfishingwatch.org/data-access](https://globalfishingwatch.org/data-access/)
+2. Set the new token in `.env`: `GFW_API_TOKEN=<research-token>`
+3. In `src/ingest/eo_gfw.py`, change:
+   ```python
+   _GFW_EVENT_TYPES = ["GAP", "GAP_START"]
+   _GFW_SOURCE_LABEL = "gfw-gap"
+   ```
+
+**Data lag:** GFW processes AIS events with a 2–6 month lag. The default lookback is 365 days to ensure historical detections are captured even for recent ingestion runs.
 
 ---
 
