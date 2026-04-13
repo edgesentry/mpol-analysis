@@ -95,7 +95,7 @@ def fetch_gfw_detections(
 
     params = {
         "datasets[0]": _GFW_GAP_DATASET,
-        "types[0]": "gap",
+        "types[0]": "GAP",
         "start-date": start_dt.strftime("%Y-%m-%d"),
         "end-date": end_dt.strftime("%Y-%m-%d"),
         "limit": _GFW_EVENTS_PAGE_SIZE,
