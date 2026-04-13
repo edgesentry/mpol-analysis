@@ -36,8 +36,9 @@ Files included in snapshots
     anomaly_scores.parquet, composite_scores.parquet, mpol_baseline.parquet
     mpol_graph/              (used during feature engineering, not serving)
 
-  EXCLUDED  — evaluation / backtest artefacts (not read by the API):
-    backtest_demo.duckdb, public_eval.duckdb
+  EXCLUDED from rotation zip — distributed separately or not at all:
+    public_eval.duckdb       distributed as a standalone R2 object (push/pull-sanctions-db)
+    backtest_demo.duckdb     local test fixture only
     backtest_*.json, evaluation_manifest_*.json, backtracking_report.*
     eval_labels_public_*.csv, prelabel_evaluation.json, public_eval_metadata.json
     *.bak
@@ -48,11 +49,13 @@ Files included in snapshots
 
 Commands
 --------
-  push          upload snapshot as a single zip to R2, prune old zips
-  pull          download + extract latest (or named) snapshot zip → data/processed/
-  push-gdelt    upload gdelt.lance as gdelt.lance.zip (run after re-ingesting GDELT data)
-  pull-gdelt    download + extract gdelt.lance.zip → data/processed/gdelt.lance
-  list          show all snapshot zips in R2
+  push                upload snapshot as a single zip to R2, prune old zips
+  pull                download + extract latest (or named) snapshot zip → data/processed/
+  push-gdelt          upload gdelt.lance as gdelt.lance.zip (run after re-ingesting GDELT data)
+  pull-gdelt          download + extract gdelt.lance.zip → data/processed/gdelt.lance
+  push-sanctions-db   upload public_eval.duckdb (OpenSanctions DB) to R2
+  pull-sanctions-db   download public_eval.duckdb from R2 — needed for integration tests
+  list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
 ------------------------------------------
@@ -64,12 +67,14 @@ Env vars (loaded from .env automatically)
 
 Examples
 --------
-  uv run python scripts/sync_r2.py push                     # push new zip, prune old
-  uv run python scripts/sync_r2.py push-gdelt               # upload/update gdelt.lance.zip
-  uv run python scripts/sync_r2.py pull                     # pull latest (no credentials needed)
+  uv run python scripts/sync_r2.py push                      # push new zip, prune old
+  uv run python scripts/sync_r2.py push-gdelt                # upload/update gdelt.lance.zip
+  uv run python scripts/sync_r2.py push-sanctions-db         # upload/update public_eval.duckdb
+  uv run python scripts/sync_r2.py pull                      # pull latest (no credentials needed)
   uv run python scripts/sync_r2.py pull --timestamp 20260411T080000Z
-  uv run python scripts/sync_r2.py pull-gdelt               # pull gdelt.lance.zip
-  uv run python scripts/sync_r2.py list                     # show all generations in R2
+  uv run python scripts/sync_r2.py pull-gdelt                # pull gdelt.lance.zip
+  uv run python scripts/sync_r2.py pull-sanctions-db         # pull public_eval.duckdb for tests
+  uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
 from __future__ import annotations
@@ -97,6 +102,7 @@ _DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestora
 # so no sub-prefix is needed — all objects live at the bucket root.
 _LATEST_KEY = "latest"  # plain-text pointer to newest timestamp
 _GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
+_SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from rotation zip
 
 # Maps user-facing region name → file prefix used in data/processed/
 # e.g. "japan" → files are japansea.duckdb, japansea_graph/, japansea_watchlist.parquet
@@ -128,7 +134,7 @@ _SNAPSHOT_EXCLUDE: list[str] = [
     "mpol_graph/*",  # Lance graph used during feature engineering only
     # Evaluation / backtest artefacts
     "backtest_demo.duckdb",
-    "public_eval.duckdb",
+    "public_eval.duckdb",  # distributed separately — see push-sanctions-db / pull-sanctions-db
     "backtest_*.json",
     "backtracking_report.*",
     "evaluation_manifest_*.json",
@@ -477,8 +483,13 @@ def cmd_pull(args: argparse.Namespace) -> int:
 
     print(f"\nDone. {downloaded / 1_048_576:.1f} MB downloaded, extracted to {data_dir}/")
     print(f"Region(s): {', '.join(regions)}")
-    print("\nTo also download GDELT news data (analyst briefs and chat):")
-    print("  uv run python scripts/sync_r2.py pull-gdelt")
+    print("\nOptional extras:")
+    print(
+        "  uv run python scripts/sync_r2.py pull-sanctions-db  # OpenSanctions DB for integration tests"
+    )
+    print(
+        "  uv run python scripts/sync_r2.py pull-gdelt         # GDELT news data (analyst briefs)"
+    )
     print("\nStart the app:")
     print(f"  DB_PATH={db_path} uv run uvicorn src.api.main:app --reload")
     print("  open http://localhost:8000")
@@ -583,6 +594,73 @@ def cmd_pull_gdelt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_sanctions_db(args: argparse.Namespace) -> int:
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    local_path = Path(args.data_dir) / "public_eval.duckdb"
+
+    if not local_path.exists():
+        print(
+            f"Error: {local_path} does not exist. Generate it first:\n"
+            "  uv run python scripts/prepare_public_sanctions_db.py",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+    r2_path = f"{bucket}/{_SANCTIONS_DB_R2_KEY}"
+
+    if not args.force:
+        import pyarrow.fs as pafs
+
+        try:
+            infos = fs.get_file_info([r2_path])
+            if infos[0].type == pafs.FileType.File:
+                print(
+                    f"public_eval.duckdb already exists in R2 ({infos[0].size / 1_048_576:.1f} MB). "
+                    "Use --force to re-upload."
+                )
+                return 0
+        except Exception:
+            pass
+
+    size_mb = local_path.stat().st_size / 1_048_576
+    print(f"Uploading public_eval.duckdb ({size_mb:.1f} MB) → R2 {r2_path} ...")
+    uploaded = _upload_file(fs, local_path, r2_path)
+    print(f"Done. {uploaded / 1_048_576:.1f} MB uploaded.")
+    return 0
+
+
+def cmd_pull_sanctions_db(args: argparse.Namespace) -> int:
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    local_path = Path(args.data_dir) / "public_eval.duckdb"
+
+    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    fs = _build_r2_fs(anonymous=anon)
+    r2_path = f"{bucket}/{_SANCTIONS_DB_R2_KEY}"
+
+    import pyarrow.fs as pafs
+
+    try:
+        infos = fs.get_file_info([r2_path])
+        if infos[0].type == pafs.FileType.NotFound:
+            raise FileNotFoundError
+        size_mb = infos[0].size / 1_048_576
+    except Exception:
+        print(
+            "No public_eval.duckdb found in R2. Push it first with:\n"
+            "  uv run python scripts/sync_r2.py push-sanctions-db",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Downloading public_eval.duckdb ({size_mb:.1f} MB) ...")
+    downloaded = _download_file(fs, r2_path, local_path)
+    print(f"Done. {downloaded / 1_048_576:.1f} MB downloaded to {local_path}")
+    print("\nYou can now run the public-data integration test:")
+    print("  RUN_PUBLIC_DATA_TESTS=1 uv run pytest tests/test_public_data_backtest_integration.py")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -609,17 +687,21 @@ def cmd_list(args: argparse.Namespace) -> int:
         note = "<- latest" if ts == latest else ""
         print(f"{ts:<22}  {mb:>8.1f} MB  {note}")
 
-    gdelt_r2_path = f"{bucket}/{_GDELT_R2_KEY}"
     print()
-    try:
-        infos = fs.get_file_info([gdelt_r2_path])
-        if infos[0].type == pafs.FileType.File:
-            gdelt_mb = infos[0].size / 1_048_576
-            print(f"gdelt.lance.zip  {gdelt_mb:.1f} MB  (shared, outside rotation)")
-        else:
-            print("gdelt.lance.zip  (not yet uploaded — run push-gdelt)")
-    except Exception:
-        print("gdelt.lance.zip  (not yet uploaded — run push-gdelt)")
+    for r2_key, label, push_cmd in [
+        (_GDELT_R2_KEY, "gdelt.lance.zip", "push-gdelt"),
+        (_SANCTIONS_DB_R2_KEY, "public_eval.duckdb", "push-sanctions-db"),
+    ]:
+        r2_path = f"{bucket}/{r2_key}"
+        try:
+            infos = fs.get_file_info([r2_path])
+            if infos[0].type == pafs.FileType.File:
+                mb = infos[0].size / 1_048_576
+                print(f"{label:<28}  {mb:>6.1f} MB  (shared, outside rotation)")
+            else:
+                print(f"{label:<28}  (not yet uploaded — run {push_cmd})")
+        except Exception:
+            print(f"{label:<28}  (not yet uploaded — run {push_cmd})")
     return 0
 
 
@@ -690,7 +772,24 @@ def main() -> int:
     )
     pull_gdelt_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
-    sub.add_parser("list", help="List snapshot zips and gdelt.lance.zip status in R2")
+    push_sanctions_p = sub.add_parser(
+        "push-sanctions-db",
+        help="Upload public_eval.duckdb (OpenSanctions DB) to R2 — run after prepare_public_sanctions_db.py",
+    )
+    push_sanctions_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+    push_sanctions_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-upload even if public_eval.duckdb already exists in R2",
+    )
+
+    pull_sanctions_p = sub.add_parser(
+        "pull-sanctions-db",
+        help="Download public_eval.duckdb from R2 — required to run test_public_data_backtest_integration.py",
+    )
+    pull_sanctions_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
+    sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
 
@@ -698,7 +797,7 @@ def main() -> int:
 
     load_dotenv()
 
-    read_only = args.command in ("pull", "pull-gdelt", "list")
+    read_only = args.command in ("pull", "pull-gdelt", "pull-sanctions-db", "list")
     if not _check_env(require_credentials=not read_only):
         return 1
 
@@ -707,6 +806,8 @@ def main() -> int:
         "pull": cmd_pull,
         "push-gdelt": cmd_push_gdelt,
         "pull-gdelt": cmd_pull_gdelt,
+        "push-sanctions-db": cmd_push_sanctions_db,
+        "pull-sanctions-db": cmd_pull_sanctions_db,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

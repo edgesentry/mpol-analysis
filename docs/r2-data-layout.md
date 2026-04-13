@@ -19,6 +19,8 @@ arktrace-public/                   ← dedicated public bucket (Cloudflare R2)
   gdelt.lance.zip                   ← shared GDELT Lance store (~1.2 GB)
                                       pushed separately; only updated when
                                       GDELT is re-ingested
+  public_eval.duckdb                ← OpenSanctions DB for integration tests (~50 MB)
+                                      pushed separately on every data-publish run
   validation_metrics.json           ← scoring validation metrics (tiny)
 ```
 
@@ -49,6 +51,7 @@ extract only the region(s) they need (controlled by `--region` on pull):
 | `candidate_watchlist.parquet` | **CI** | All region watchlists concatenated by `run_public_backtest_batch.py` |
 | `validation_metrics.json` | **CI** | Computed from labeled watchlist; no external data required |
 | `gdelt.lance` | **CI** | Built from GDELT public HTTP feed (no API key) |
+| `public_eval.duckdb` | **CI** | OpenSanctions DB; pushed via `push-sanctions-db` after every data-publish run |
 | Live AIS data in DuckDB | **Local + upload** | Requires `AISSTREAM_API_KEY`; CI uses synthetic seed instead |
 
 ### By scope
@@ -56,6 +59,7 @@ extract only the region(s) they need (controlled by `--region` on pull):
 | Artifact | Scope | Notes |
 |---|---|---|
 | `gdelt.lance` | **Common** | Single GDELT corpus queried by all regions |
+| `public_eval.duckdb` | **Common** | OpenSanctions DB; standalone R2 object, not in rotation zip |
 | `candidate_watchlist.parquet` | **Common** | Cross-region concat; required for `test_public_data_backtest_integration.py` |
 | `validation_metrics.json` | **Common** | Aggregate metrics across all regions |
 | `{region}.duckdb` | **Regional** | Separate per region |
@@ -104,7 +108,9 @@ full multi-region pipeline on public data and publishes the results.
    (`--stream-duration 0 --seed-dummy`).
 2. `sync_r2.py push --keep 1` — zips all region artifacts into one file,
    uploads to R2, and deletes any previous generation.
-3. `sync_r2.py push-gdelt` — uploads `gdelt.lance.zip` only if it does not
+3. `sync_r2.py push-sanctions-db --force` — uploads `public_eval.duckdb`
+   (refreshed by step 1) as a standalone R2 object.
+4. `sync_r2.py push-gdelt` — uploads `gdelt.lance.zip` only if it does not
    already exist (skipped on most runs; re-run with `--force` after GDELT
    re-ingestion).
 
@@ -126,6 +132,9 @@ uv run python scripts/sync_r2.py pull --region japan
 
 # Pull multiple regions at once
 uv run python scripts/sync_r2.py pull --region singapore,japan
+
+# Pull OpenSanctions DB (~50 MB) — required for the public-data integration test
+uv run python scripts/sync_r2.py pull-sanctions-db
 
 # Also pull the GDELT Lance store (~1.2 GB) for analyst brief / chat context
 uv run python scripts/sync_r2.py pull-gdelt

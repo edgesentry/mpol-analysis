@@ -79,6 +79,16 @@ jobs:
           echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
+      - name: Push OpenSanctions DB to R2 (push-sanctions-db)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: |
+          # --force ensures the DB is always refreshed after run_public_backtest_batch.py
+          # regenerates it (which happens on every data-publish run).
+          uv run python scripts/sync_r2.py push-sanctions-db --force
+
       - name: Send metrics email (#210)
         if: always()
         env:

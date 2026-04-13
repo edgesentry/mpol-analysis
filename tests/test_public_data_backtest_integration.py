@@ -38,8 +38,10 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
             load_jsonl_to_duckdb(raw_path, str(prepared_db))
         else:
             pytest.skip(
-                "Prepared public-data DB not found. Run `uv run python scripts/prepare_public_sanctions_db.py` "
-                "or set PREPARE_PUBLIC_DATA_IF_MISSING=1."
+                f"public_eval.duckdb not found at {prepared_db}. "
+                "Pull it from R2 with: uv run python scripts/sync_r2.py pull-sanctions-db  "
+                "— or regenerate locally with: uv run python scripts/prepare_public_sanctions_db.py  "
+                "— or set PREPARE_PUBLIC_DATA_IF_MISSING=1 to download automatically."
             )
 
     watchlist = pl.read_parquet(watchlist_path).select(["mmsi", "imo", "confidence"])
