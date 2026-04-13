@@ -264,7 +264,12 @@ if __name__ == "__main__":
         help="GFW API bounding box: lon_min,lat_min,lon_max,lat_max (default: Singapore/Malacca)",
         metavar="LON_MIN,LAT_MIN,LON_MAX,LAT_MAX",
     )
-    parser.add_argument("--days", type=int, default=30, help="Lookback window in days")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=365,
+        help="Lookback window in days (default: 365; GFW data lags real-time by 2–6 months)",
+    )
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     args = parser.parse_args()
 

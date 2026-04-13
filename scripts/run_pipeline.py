@@ -504,7 +504,7 @@ def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
         return _ask_retry_skip("custom_feeds") == "skip"
 
 
-def step_eo_gfw(p: RegionPreset, non_interactive: bool, gfw_days: int = 30) -> bool:
+def step_eo_gfw(p: RegionPreset, non_interactive: bool, gfw_days: int = 365) -> bool:
     """Ingest GFW EO vessel detections for the region bbox.
 
     Skipped silently when GFW_API_TOKEN is not set — the two EO features
@@ -791,11 +791,12 @@ def main() -> None:
     parser.add_argument(
         "--gfw-days",
         type=int,
-        default=30,
+        default=365,
         metavar="DAYS",
         help=(
-            "Lookback window in days for GFW EO vessel detections (default: 30). "
-            "Requires GFW_API_TOKEN in .env — skipped silently if not set."
+            "Lookback window in days for GFW EO vessel detections (default: 365). "
+            "GFW gap data lags real-time by 2–6 months; 365 days ensures historical "
+            "detections are captured. Requires GFW_API_TOKEN in .env — skipped silently if not set."
         ),
     )
     parser.add_argument(

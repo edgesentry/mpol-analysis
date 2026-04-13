@@ -1400,7 +1400,10 @@ run_ingest_eo_gfw() {
   db_path="$(prompt "DuckDB path" "data/processed/singapore.duckdb")"
 
   local gfw_days
-  gfw_days="$(prompt "Lookback window (days)" "30")"
+  # GFW gap-event data typically lags real-time by 2–6 months; use 365 days
+  # as the default so historical detections are captured even when recent
+  # data has not yet been processed by GFW.
+  gfw_days="$(prompt "Lookback window (days)" "365")"
 
   # Default Singapore / Malacca bbox — lon_min,lat_min,lon_max,lat_max
   local bbox
