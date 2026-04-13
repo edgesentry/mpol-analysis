@@ -5,10 +5,8 @@ fallback introduced in issue #231.
 
 import duckdb
 import polars as pl
-import pytest
 
 from src.features.ownership_graph import MAX_HOPS, _apply_direct_sanctions_fallback
-
 
 # ---------------------------------------------------------------------------
 # Helpers
