@@ -135,9 +135,7 @@ def _build_labels_for_watchlist(
         flush=True,
     )
 
-    pos = pl.concat([pos_m, pos_i, pos_name], how="vertical_relaxed").unique(
-        subset=["mmsi", "imo"]
-    )
+    pos = pl.concat([pos_m, pos_i, pos_name], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
     pos = pos.sort("confidence", descending=True)
     if pos.height > max_known_cases:
         pos = pos.head(max_known_cases)

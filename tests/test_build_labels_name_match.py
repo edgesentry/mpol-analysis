@@ -78,8 +78,18 @@ class TestBuildLabelsNameMatch:
         )
         watchlist = _make_watchlist(
             [
-                {"mmsi": "123456789", "imo": "IMO1234567", "vessel_name": "SHADOW EAGLE", "confidence": 0.7},
-                {"mmsi": "999999999", "imo": "IMO9999999", "vessel_name": "CLEAN VESSEL", "confidence": 0.1},
+                {
+                    "mmsi": "123456789",
+                    "imo": "IMO1234567",
+                    "vessel_name": "SHADOW EAGLE",
+                    "confidence": 0.7,
+                },
+                {
+                    "mmsi": "999999999",
+                    "imo": "IMO9999999",
+                    "vessel_name": "CLEAN VESSEL",
+                    "confidence": 0.1,
+                },
             ]
         )
         labels = _build_labels_for_watchlist(watchlist, positives, max_known_cases=50)
@@ -94,7 +104,12 @@ class TestBuildLabelsNameMatch:
         )
         watchlist = _make_watchlist(
             [
-                {"mmsi": "111000111", "imo": "IMO1110001", "vessel_name": "MT SHADOW1", "confidence": 0.6},
+                {
+                    "mmsi": "111000111",
+                    "imo": "IMO1110001",
+                    "vessel_name": "MT SHADOW1",
+                    "confidence": 0.6,
+                },
             ]
         )
         labels = _build_labels_for_watchlist(watchlist, positives, max_known_cases=50)
@@ -114,7 +129,12 @@ class TestBuildLabelsNameMatch:
         )
         watchlist = _make_watchlist(
             [
-                {"mmsi": "123456789", "imo": "IMO1234567", "vessel_name": "DOUBLE MATCH", "confidence": 0.8},
+                {
+                    "mmsi": "123456789",
+                    "imo": "IMO1234567",
+                    "vessel_name": "DOUBLE MATCH",
+                    "confidence": 0.8,
+                },
             ]
         )
         labels = _build_labels_for_watchlist(watchlist, positives, max_known_cases=50)
@@ -129,7 +149,12 @@ class TestBuildLabelsNameMatch:
         )
         watchlist = _make_watchlist(
             [
-                {"mmsi": "888000888", "imo": "IMO8880008", "vessel_name": "SHADOW CORP", "confidence": 0.6},
+                {
+                    "mmsi": "888000888",
+                    "imo": "IMO8880008",
+                    "vessel_name": "SHADOW CORP",
+                    "confidence": 0.6,
+                },
             ]
         )
         labels = _build_labels_for_watchlist(watchlist, positives, max_known_cases=50)
@@ -137,9 +162,7 @@ class TestBuildLabelsNameMatch:
 
     def test_empty_vessel_name_not_matched(self):
         """Watchlist vessels with empty vessel_name are not matched by name."""
-        positives = _make_positives(
-            [{"mmsi": "", "imo": "", "name": "", "entity_type": "Vessel"}]
-        )
+        positives = _make_positives([{"mmsi": "", "imo": "", "name": "", "entity_type": "Vessel"}])
         watchlist = _make_watchlist(
             [{"mmsi": "777000777", "imo": "IMO7770007", "vessel_name": "", "confidence": 0.5}]
         )
