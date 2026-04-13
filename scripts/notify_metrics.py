@@ -29,7 +29,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
-_REPORT_PATH = Path("data/processed/backtest_report_public_integration.json")
+_REPORT_PATH = Path("data/processed/backtest_public_integration_summary.json")
 _REGRESSION_THRESHOLD = 0.02
 
 
