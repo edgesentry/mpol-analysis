@@ -167,6 +167,16 @@ def main() -> None:
         action="store_true",
         help="Fail the batch if total known positive cases are below --min-known-cases",
     )
+    parser.add_argument(
+        "--min-watchlist-size",
+        type=int,
+        default=100,
+        help=(
+            "Minimum number of vessels a regional watchlist must contain to be included in the "
+            "evaluation. Regions below this threshold are skipped with a warning — they likely "
+            "contain only seeded dummy data rather than a real pipeline run. Default: 100."
+        ),
+    )
     parser.add_argument("--refresh-public-data", action="store_true")
     args = parser.parse_args()
 
@@ -203,13 +213,26 @@ def main() -> None:
 
     positives = _load_public_positives(public_db)
 
+    skipped_regions: list[str] = []
     windows: list[dict[str, Any]] = []
     label_counts: dict[str, int] = {}
     for region in regions:
         watchlist_path = (project_root / WATCHLIST_BY_REGION[region]).resolve()
         if not watchlist_path.exists():
+            print(f"[skip] {region}: watchlist not found at {watchlist_path}", flush=True)
+            skipped_regions.append(region)
             continue
         watchlist = pl.read_parquet(watchlist_path)
+        if watchlist.height < args.min_watchlist_size:
+            print(
+                f"[skip] {region}: watchlist has only {watchlist.height} vessels "
+                f"(< --min-watchlist-size={args.min_watchlist_size}). "
+                "This region likely contains only seeded dummy data — run a real AIS pipeline "
+                "for this region before including it in the evaluation.",
+                flush=True,
+            )
+            skipped_regions.append(region)
+            continue
         labels = _build_labels_for_watchlist(watchlist, positives, args.max_known_cases)
         labels_path = (processed_dir / f"eval_labels_public_{region}_integration.csv").resolve()
         labels.write_csv(labels_path)
@@ -226,21 +249,30 @@ def main() -> None:
             }
         )
 
-    # Combine all region watchlists into candidate_watchlist.parquet so that
-    # test_public_data_backtest_integration.py can evaluate a multi-region view.
-    # Watchlists are concatenated without deduplication: the same vessel scored
-    # across multiple regions appears multiple times with its per-region confidence,
-    # which boosts ranked recall for vessels that surface in several regional models.
+    # Combine evaluated region watchlists into candidate_watchlist.parquet.
+    # Only regions that passed the --min-watchlist-size guard are included.
+    # Deduplicate on (mmsi, imo) keeping the highest-confidence row so that
+    # a vessel scored in multiple regions is represented once at its best score.
+    evaluated_regions = [r for r in regions if r not in skipped_regions]
     watchlist_parts = [
         pl.read_parquet((project_root / WATCHLIST_BY_REGION[r]).resolve())
-        for r in regions
+        for r in evaluated_regions
         if (project_root / WATCHLIST_BY_REGION[r]).exists()
     ]
     if watchlist_parts:
-        combined_watchlist = pl.concat(watchlist_parts, how="vertical_relaxed")
+        combined_raw = pl.concat(watchlist_parts, how="vertical_relaxed")
+        combined_watchlist = (
+            combined_raw.sort("confidence", descending=True)
+            .unique(subset=["mmsi", "imo"], keep="first")
+            .sort("confidence", descending=True)
+        )
         candidate_path = processed_dir / "candidate_watchlist.parquet"
         combined_watchlist.write_parquet(candidate_path)
-        print(f"Combined candidate watchlist: {combined_watchlist.height} rows → {candidate_path}")
+        print(
+            f"Combined candidate watchlist: {combined_raw.height} raw rows "
+            f"→ {combined_watchlist.height} unique vessels → {candidate_path}",
+            flush=True,
+        )
 
     manifest = {
         "schema_version": "1.0",
@@ -280,7 +312,14 @@ def main() -> None:
 
     summary = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
-        "regions": regions,
+        "regions": evaluated_regions,
+        "skipped_regions": skipped_regions,
+        "skipped_reason": (
+            f"watchlist below --min-watchlist-size={args.min_watchlist_size} "
+            "(likely seeded dummy data, not a real pipeline run)"
+            if skipped_regions
+            else None
+        ),
         "label_positive_counts": label_counts,
         "total_known_cases": total_known_cases,
         "min_known_cases_target": args.min_known_cases,

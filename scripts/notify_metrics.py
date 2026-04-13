@@ -51,6 +51,8 @@ def _format_body(
     p50_hi = metrics.get("precision_at_50", {}).get("ci95_high")
     recall = metrics.get("recall_at_200", {}).get("mean", 0.0)
     regions = report.get("regions", [])
+    skipped_regions = report.get("skipped_regions", [])
+    skipped_reason = report.get("skipped_reason", "")
     total_positives = report.get("total_known_cases", 0)
     generated_at = report.get("generated_at_utc", "")[:10]
 
@@ -73,6 +75,14 @@ def _format_body(
 
     ci_str = f" (CI 95%: {p50_lo:.4f}–{p50_hi:.4f})" if p50_lo and p50_hi else ""
 
+    skipped_note = ""
+    if skipped_regions:
+        skipped_note = (
+            f'<p style="color:#e67e22"><strong>⚠️ Skipped regions (not evaluated):</strong> '
+            f"{', '.join(skipped_regions)}<br>"
+            f"<em>{skipped_reason}</em></p>"
+        )
+
     region_rows = ""
     for rs in report.get("region_summary", []):
         region = rs.get("region", "")
@@ -87,8 +97,9 @@ def _format_body(
 <html><body style="font-family:sans-serif;max-width:600px">
 <h2>arktrace — Data Publish Summary</h2>
 {status_banner}
+{skipped_note}
 <p><strong>Date:</strong> {generated_at}<br>
-<strong>Regions:</strong> {", ".join(regions)}<br>
+<strong>Evaluated regions:</strong> {", ".join(regions) if regions else "none"}<br>
 <strong>Snapshot:</strong> {snapshot_info}</p>
 
 <h3>Overall Metrics</h3>
