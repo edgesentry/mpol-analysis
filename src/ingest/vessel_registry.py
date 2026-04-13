@@ -7,6 +7,8 @@ Builds the ownership graph as Lance datasets from two sources:
 2. **Company, ownership, and sanctions relationships** derived from DuckDB
    sanctions_entities (populated by src/ingest/sanctions.py).
 3. **Equasis-style ownership chains** from an optional CSV export.
+4. **STS_CONTACT edges** inferred from AIS co-location (vessels in the same
+   H3 resolution-8 cell within the same 30-minute bucket, at least twice).
 
 No external graph server required — data is stored as Lance files on disk.
 
@@ -22,6 +24,7 @@ import csv
 import os
 
 import duckdb
+import polars as pl
 import pyarrow as pa
 from dotenv import load_dotenv
 
@@ -43,6 +46,88 @@ def _rows_to_table(rows: list[dict], schema: pa.Schema) -> pa.Table:
         return schema.empty_table()
     arrays = {field.name: [r.get(field.name) for r in rows] for field in schema}
     return pa.table(arrays, schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# STS co-location inference
+# ---------------------------------------------------------------------------
+
+H3_RESOLUTION = 8  # ~0.74 km² cells — appropriate for STS proximity detection
+STS_MIN_CO_LOCATIONS = 2  # require ≥2 bucket overlaps to exclude transient proximity
+
+
+def _geo_to_h3(lat: float, lon: float, res: int = H3_RESOLUTION) -> str:
+    """H3 cell index — compatible with h3-py 3.x and 4.x (mirrors ais_behavior.py)."""
+    import h3
+
+    try:
+        return h3.latlng_to_cell(lat, lon, res)  # h3-py >= 4
+    except AttributeError:
+        return h3.geo_to_h3(lat, lon, res)  # h3-py < 4
+
+
+def build_sts_contacts_from_ais(db_path: str) -> list[dict]:
+    """Infer STS contact pairs from AIS H3 co-location.
+
+    Two vessels are co-located when they share the same H3 resolution-8 cell
+    within the same 30-minute time bucket.  Pairs must co-locate at least
+    STS_MIN_CO_LOCATIONS times to filter out transient proximity (port
+    approaches, traffic lane crossings).
+
+    H3 cells are computed with the Python h3 library (already a project
+    dependency via ais_behavior.py) rather than the DuckDB h3 community
+    extension, which requires a separate install step.
+
+    Returns a list of {"src_id": mmsi_a, "dst_id": mmsi_b} dicts ready to be
+    written to the STS_CONTACT Lance table.  Each pair appears once
+    (src_id < dst_id lexicographically).
+    """
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        # Use .pl() to avoid the pytz dependency that fetchall() requires for
+        # TIMESTAMP WITH TIME ZONE columns.
+        pos_df = con.execute(
+            "SELECT mmsi, timestamp, lat, lon FROM ais_positions "
+            "WHERE lat IS NOT NULL AND lon IS NOT NULL AND mmsi IS NOT NULL"
+        ).pl()
+    finally:
+        con.close()
+
+    if pos_df.is_empty():
+        return []
+
+    # Compute H3 cells and 30-minute floor buckets in Python
+    mmsis = pos_df["mmsi"].to_list()
+    lats = pos_df["lat"].to_list()
+    lons = pos_df["lon"].to_list()
+    # Cast to UTC-naive milliseconds for bucket arithmetic
+    ts_ms = pos_df["timestamp"].cast(pl.Datetime("ms")).to_list()
+
+    cells: list[str] = []
+    buckets: list[str] = []
+    for ts, lat, lon in zip(ts_ms, lats, lons):
+        cells.append(_geo_to_h3(lat, lon))
+        # Floor to the nearest 30-minute boundary
+        bucket = ts.replace(minute=(ts.minute // 30) * 30, second=0, microsecond=0)
+        buckets.append(bucket.isoformat())
+
+    bucketed_df = pl.DataFrame({"mmsi": mmsis, "cell": cells, "bucket": buckets})
+
+    mem = duckdb.connect()
+    mem.register("bucketed", bucketed_df)
+    result = mem.execute(f"""
+        SELECT a.mmsi AS src_id, b.mmsi AS dst_id
+        FROM bucketed a
+        JOIN bucketed b
+          ON a.cell = b.cell
+         AND a.bucket = b.bucket
+         AND a.mmsi < b.mmsi
+        GROUP BY a.mmsi, b.mmsi
+        HAVING COUNT(*) >= {STS_MIN_CO_LOCATIONS}
+    """).fetchall()
+    mem.close()
+
+    return [{"src_id": r[0], "dst_id": r[1]} for r in result]
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +345,10 @@ def build_graph_tables(
         "REGISTERED_AT": _rows_to_table(registered_at, REL_SCHEMAS["REGISTERED_AT"]),
         # CONTROLLED_BY is populated externally (e.g. company hierarchy data)
         "CONTROLLED_BY": REL_SCHEMAS["CONTROLLED_BY"].empty_table(),
-        # STS_CONTACT is populated by the AIS behavior pipeline
-        "STS_CONTACT": REL_SCHEMAS["STS_CONTACT"].empty_table(),
+        # STS_CONTACT: inferred from AIS co-location (H3 res-8, 30-min buckets)
+        "STS_CONTACT": _rows_to_table(
+            build_sts_contacts_from_ais(db_path), REL_SCHEMAS["STS_CONTACT"]
+        ),
     }
 
 

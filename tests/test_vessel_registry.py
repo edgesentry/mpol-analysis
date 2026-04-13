@@ -266,3 +266,122 @@ def test_sanctioned_mmsi_not_in_vessel_meta_has_no_vessel_node(tmp_db):
     # SANCTIONED_BY edge still exists for use by other graph lookups
     sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
     assert "256869000" in sb_src
+
+
+# ---------------------------------------------------------------------------
+# build_sts_contacts_from_ais
+# ---------------------------------------------------------------------------
+
+
+def _seed_ais_positions(db_path: str, rows: list[tuple]) -> None:
+    """Insert (mmsi, timestamp, lat, lon) rows into ais_positions."""
+    con = duckdb.connect(db_path)
+    for mmsi, ts, lat, lon in rows:
+        con.execute(
+            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon) VALUES (?, ?, ?, ?)",
+            [mmsi, ts, lat, lon],
+        )
+    con.close()
+
+
+def test_sts_contacts_empty_db(tmp_db):
+    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+
+    assert build_sts_contacts_from_ais(tmp_db) == []
+
+
+def test_sts_contacts_pair_detected(tmp_db):
+    """Two vessels in the same H3 cell at the same 30-min bucket ≥2 times → STS contact."""
+    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+
+    # Anchor point in Singapore Strait
+    lat, lon = 1.26, 103.85
+    _seed_ais_positions(
+        tmp_db,
+        [
+            # Bucket 1: both vessels at the same spot
+            ("111111111", "2026-01-01 02:05:00+00", lat, lon),
+            ("222222222", "2026-01-01 02:10:00+00", lat, lon),
+            # Bucket 2 (different 30-min window): both vessels again
+            ("111111111", "2026-01-01 02:35:00+00", lat, lon),
+            ("222222222", "2026-01-01 02:40:00+00", lat, lon),
+        ],
+    )
+    contacts = build_sts_contacts_from_ais(tmp_db)
+    pairs = {(r["src_id"], r["dst_id"]) for r in contacts}
+    assert ("111111111", "222222222") in pairs
+
+
+def test_sts_contacts_single_overlap_excluded(tmp_db):
+    """Only 1 bucket overlap → below STS_MIN_CO_LOCATIONS → not a contact."""
+    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+
+    lat, lon = 1.26, 103.85
+    _seed_ais_positions(
+        tmp_db,
+        [
+            ("111111111", "2026-01-01 02:05:00+00", lat, lon),
+            ("222222222", "2026-01-01 02:10:00+00", lat, lon),
+            # Second position: each vessel departs to a completely different area
+            ("111111111", "2026-01-01 03:05:00+00", 5.0, 110.0),  # South China Sea
+            ("222222222", "2026-01-01 03:10:00+00", 35.0, 139.0),  # Tokyo Bay
+        ],
+    )
+    contacts = build_sts_contacts_from_ais(tmp_db)
+    assert contacts == []
+
+
+def test_sts_contacts_pair_ordering(tmp_db):
+    """src_id < dst_id lexicographically — each pair appears exactly once."""
+    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+
+    lat, lon = 1.26, 103.85
+    _seed_ais_positions(
+        tmp_db,
+        [
+            ("333333333", "2026-01-01 02:05:00+00", lat, lon),
+            ("111111111", "2026-01-01 02:08:00+00", lat, lon),
+            ("333333333", "2026-01-01 02:35:00+00", lat, lon),
+            ("111111111", "2026-01-01 02:38:00+00", lat, lon),
+        ],
+    )
+    contacts = build_sts_contacts_from_ais(tmp_db)
+    assert len(contacts) == 1
+    assert contacts[0]["src_id"] < contacts[0]["dst_id"]
+
+
+def test_sts_contacts_different_cells_not_paired(tmp_db):
+    """Vessels in different H3 cells must not be paired even in the same time bucket."""
+    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+
+    _seed_ais_positions(
+        tmp_db,
+        [
+            # Far apart — clearly different H3 cells
+            ("111111111", "2026-01-01 02:05:00+00", 1.26, 103.85),
+            ("222222222", "2026-01-01 02:07:00+00", 35.0, 139.0),
+            ("111111111", "2026-01-01 02:35:00+00", 1.26, 103.85),
+            ("222222222", "2026-01-01 02:37:00+00", 35.0, 139.0),
+        ],
+    )
+    assert build_sts_contacts_from_ais(tmp_db) == []
+
+
+def test_build_graph_tables_includes_sts_contacts(tmp_db):
+    """build_graph_tables() populates STS_CONTACT from AIS data."""
+    lat, lon = 1.26, 103.85
+    _seed_ais_positions(
+        tmp_db,
+        [
+            ("111111111", "2026-01-01 02:05:00+00", lat, lon),
+            ("222222222", "2026-01-01 02:10:00+00", lat, lon),
+            ("111111111", "2026-01-01 02:35:00+00", lat, lon),
+            ("222222222", "2026-01-01 02:40:00+00", lat, lon),
+        ],
+    )
+    tables = build_graph_tables(tmp_db)
+    sts = tables["STS_CONTACT"]
+    assert len(sts) >= 1
+    src_ids = sts["src_id"].to_pylist()
+    dst_ids = sts["dst_id"].to_pylist()
+    assert "111111111" in src_ids or "111111111" in dst_ids
