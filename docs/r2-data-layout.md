@@ -28,9 +28,10 @@ extract only the region(s) they need (controlled by `--region` on pull):
 | File in zip | Description |
 |---|---|
 | `{region}.duckdb` | AIS positions, vessel features, scoring results |
-| `{region}_watchlist.parquet` | Ranked candidate watchlist |
+| `{region}_watchlist.parquet` | Ranked candidate watchlist (per region) |
 | `{region}_causal_effects.parquet` | C3 causal sanction-response model output |
 | `{region}_graph/` | Lance Graph ownership chains (nodes + edges) |
+| `candidate_watchlist.parquet` | All 5 region watchlists concatenated without deduplication — used by `test_public_data_backtest_integration.py` |
 | `validation_metrics.json` | Aggregate precision/recall metrics |
 
 ---
@@ -45,6 +46,7 @@ extract only the region(s) they need (controlled by `--region` on pull):
 | `{region}_watchlist.parquet` | **CI** | Scoring pipeline output over the DuckDB above |
 | `{region}_causal_effects.parquet` | **CI** | Causal model output over the DuckDB above |
 | `{region}_graph/` | **CI** | Ownership graph built from vessel registry seeded from DuckDB |
+| `candidate_watchlist.parquet` | **CI** | All region watchlists concatenated by `run_public_backtest_batch.py` |
 | `validation_metrics.json` | **CI** | Computed from labeled watchlist; no external data required |
 | `gdelt.lance` | **CI** | Built from GDELT public HTTP feed (no API key) |
 | Live AIS data in DuckDB | **Local + upload** | Requires `AISSTREAM_API_KEY`; CI uses synthetic seed instead |
@@ -54,6 +56,7 @@ extract only the region(s) they need (controlled by `--region` on pull):
 | Artifact | Scope | Notes |
 |---|---|---|
 | `gdelt.lance` | **Common** | Single GDELT corpus queried by all regions |
+| `candidate_watchlist.parquet` | **Common** | Cross-region concat; required for `test_public_data_backtest_integration.py` |
 | `validation_metrics.json` | **Common** | Aggregate metrics across all regions |
 | `{region}.duckdb` | **Regional** | Separate per region |
 | `{region}_watchlist.parquet` | **Regional** | |

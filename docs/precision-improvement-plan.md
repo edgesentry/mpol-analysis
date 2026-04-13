@@ -89,6 +89,8 @@ Run these steps in order before the demo. Allow ~20 minutes.
 
 ## Known Gaps to Close Before Demo
 
-| Gap | Tracked in |
-|---|---|
-| Integration test has no `precision_at_50 >= 0.68` assertion | #186 |
+All pre-demo gaps are resolved as of 2026-04-13.
+
+| Gap | Status | Tracked in |
+|---|---|---|
+| Integration test has no `precision_at_50 >= 0.68` assertion | ✅ Fixed — P@50 gate added + multi-region watchlist (PR #219) | #186, #218 |
