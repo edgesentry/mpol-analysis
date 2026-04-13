@@ -41,6 +41,7 @@
 - Ownership graph features (Lance Graph + Polars joins): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
 - **[TODO]** GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic.
+- **[TODO — requires GFW research token]** EO dark-vessel signal via GFW GAP events (`src/ingest/eo_gfw.py`): the `eo_dark_count_30d` and `eo_ais_mismatch_ratio` features are fully implemented and wired into the Isolation Forest, but produce zero signal today because the free-tier GFW token only returns `FISHING` events, not `GAP`/`GAP_START` (AIS transponder disabling). With a research-tier token, these features would provide a direct, satellite-corroborated observation of AIS manipulation — the only feature family that can detect a vessel that is physically present but invisible on AIS. **Pre-requisite:** request GFW research access at https://globalfishingwatch.org/data-access/ for a maritime security / sanctions compliance use case. Once granted, change `_GFW_EVENT_TYPES = ["GAP", "GAP_START"]` and `_GFW_SOURCE_LABEL = "gfw-gap"` in `src/ingest/eo_gfw.py`. See #201 for full investigation notes.
 
 **Acceptance:** `vessel_features` table in DuckDB has one row per MMSI with no null values for core features; STS candidate count matches independently verified events from open-source maritime incident reports.
 
