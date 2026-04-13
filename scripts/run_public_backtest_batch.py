@@ -62,12 +62,15 @@ def _load_public_positives(db_path: Path) -> pl.DataFrame:
             SELECT DISTINCT
                 COALESCE(mmsi, '') AS mmsi,
                 COALESCE(imo, '') AS imo,
+                COALESCE(name, '') AS name,
+                COALESCE(type, '') AS entity_type,
                 COALESCE(list_source, 'unknown') AS evidence_source
             FROM sanctions_entities
             WHERE (lower(COALESCE(list_source, '')) LIKE '%ofac%'
                 OR lower(COALESCE(list_source, '')) LIKE '%un%'
                 OR lower(COALESCE(list_source, '')) LIKE '%eu%')
-              AND (COALESCE(mmsi, '') <> '' OR COALESCE(imo, '') <> '')
+              AND (COALESCE(mmsi, '') <> '' OR COALESCE(imo, '') <> ''
+                   OR (COALESCE(name, '') <> '' AND lower(COALESCE(type, '')) = 'vessel'))
             """
         ).fetchdf()
         return pl.from_pandas(pdf)
@@ -75,12 +78,23 @@ def _load_public_positives(db_path: Path) -> pl.DataFrame:
         con.close()
 
 
+def _normalize_vessel_name(col: pl.Expr) -> pl.Expr:
+    """Strip, uppercase, and remove punctuation for fuzzy vessel name matching."""
+    return (
+        col.str.strip_chars()
+        .str.to_uppercase()
+        .str.replace_all(r"[^A-Z0-9 ]", "")
+        .str.replace_all(r"\s+", " ")
+        .str.strip_chars()
+    )
+
+
 def _build_labels_for_watchlist(
     watchlist: pl.DataFrame,
     positives: pl.DataFrame,
     max_known_cases: int,
 ) -> pl.DataFrame:
-    watchlist = watchlist.select(["mmsi", "imo", "confidence"])
+    watchlist = watchlist.select(["mmsi", "imo", "vessel_name", "confidence"])
 
     pos_m = watchlist.join(
         positives.select(["mmsi", "evidence_source"]).filter(pl.col("mmsi") != ""),
@@ -92,7 +106,36 @@ def _build_labels_for_watchlist(
         on="imo",
         how="inner",
     )
-    pos = pl.concat([pos_m, pos_i], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
+
+    # Third lookup path: vessel name matching against Vessel-type sanctions entities.
+    # Catches vessels that changed MMSI/IMO but whose historical aliases are still on record.
+    vessel_names = (
+        positives.filter(
+            (pl.col("entity_type").str.to_lowercase() == "vessel") & (pl.col("name") != "")
+        )
+        .with_columns(_normalize_vessel_name(pl.col("name")).alias("name_norm"))
+        .select(["name_norm", "evidence_source"])
+    )
+    watchlist_named = watchlist.filter(pl.col("vessel_name") != "").with_columns(
+        _normalize_vessel_name(pl.col("vessel_name")).alias("vessel_name_norm")
+    )
+    pos_name = watchlist_named.join(
+        vessel_names,
+        left_on="vessel_name_norm",
+        right_on="name_norm",
+        how="inner",
+    ).drop("vessel_name_norm")
+
+    # Coverage audit: log how many unique Vessel-type sanctions names were matchable
+    n_vessel_sanctions = vessel_names.height
+    n_name_matches = pos_name.height
+    print(
+        f"[coverage] sanctions Vessel-type names available={n_vessel_sanctions}, "
+        f"watchlist name matches={n_name_matches}",
+        flush=True,
+    )
+
+    pos = pl.concat([pos_m, pos_i, pos_name], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
     pos = pos.sort("confidence", descending=True)
     if pos.height > max_known_cases:
         pos = pos.head(max_known_cases)

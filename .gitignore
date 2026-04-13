@@ -209,6 +209,8 @@ __marimo__/
 # Project-specific
 data/raw/           # downloaded AIS, sanctions, registry raw files — can be large
 data/processed/     # DuckDB files, Parquet outputs, Neo4j database
+# local runtime databases (singapore.duckdb, etc.)
+*.duckdb
 site/               # MkDocs build output
 .env                # API keys (aisstream.io, Equasis)
 _inputs/
