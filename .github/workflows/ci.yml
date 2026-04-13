@@ -144,7 +144,9 @@ jobs:
 
       - name: Assert score regression bounds
         id: regression_check
+        shell: bash
         run: |
+          set -o pipefail
           uv run python scripts/check_score_regression.py \
             --summary data/processed/backtest_public_integration_summary.json \
             --report  data/processed/backtest_report_public_integration.json \
