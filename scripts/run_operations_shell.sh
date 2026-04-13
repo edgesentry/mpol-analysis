@@ -1371,6 +1371,215 @@ run_aisstream_agent() {
   esac
 }
 
+run_predemo_checklist() {
+  echo
+  echo "[22] Pre-Submission Demo Checklist"
+  echo
+  echo "  Runs the full pre-demo sequence in order:"
+  echo "    Step 1 — Refresh public sanctions DB (OpenSanctions download + reload)"
+  echo "    Step 2 — Check AIS data freshness (≥48h from launchd agent recommended)"
+  echo "    Step 3 — Full screening pipeline (rebuild vessel_features + composite scores)"
+  echo "    Step 4 — Precision@50 verification (public OpenSanctions backtest)"
+  echo "    Step 5 — Remind to capture dashboard screenshot"
+  echo
+  echo "  Estimated time: 15–25 min (dominated by sanctions download ~5 min + pipeline ~10 min)"
+  echo
+
+  local region
+  region="$(prompt "Region (singapore/japan/middleeast/europe/gulf)" "singapore")"
+  region="$(tr '[:upper:]' '[:lower:]' <<< "$region")"
+
+  local eval_db
+  eval_db="$(prompt "Public eval DuckDB path" "data/processed/public_eval.duckdb")"
+
+  local screening_db
+  case "$region" in
+    singapore)  screening_db="data/processed/singapore.duckdb" ;;
+    japan)      screening_db="data/processed/japansea.duckdb" ;;
+    middleeast) screening_db="data/processed/middleeast.duckdb" ;;
+    europe)     screening_db="data/processed/europe.duckdb" ;;
+    gulf)       screening_db="data/processed/gulf.duckdb" ;;
+    *)          screening_db="data/processed/mpol.duckdb" ;;
+  esac
+
+  local overall_ok=true
+
+  # ── Step 1: Refresh sanctions DB ──────────────────────────────────────────
+  echo
+  echo "━━ Step 1/5 — Refresh public sanctions DB ────────────────────────────────────"
+  echo
+  if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py --db "$eval_db"; then
+    echo "  ❌ FAILED — sanctions refresh failed. Aborting checklist."
+    overall_ok=false
+  else
+    echo "  ✅ Sanctions DB refreshed: $eval_db"
+  fi
+
+  if [[ "$overall_ok" == "false" ]]; then return; fi
+
+  # ── Step 2: Check AIS data freshness ──────────────────────────────────────
+  echo
+  echo "━━ Step 2/5 — Check AIS data freshness ──────────────────────────────────────"
+  echo
+  (cd "$PROJECT_ROOT" && uv run python - <<PYEOF
+import duckdb, sys
+from datetime import datetime, timedelta, timezone
+
+db = "$screening_db"
+try:
+    con = duckdb.connect(db, read_only=True)
+    row = con.execute(
+        "SELECT COUNT(*), MIN(timestamp)::VARCHAR, MAX(timestamp)::VARCHAR FROM ais_positions"
+    ).fetchone()
+    con.close()
+    total, earliest, latest = row
+    if total == 0:
+        print("  ⚠️  ais_positions is EMPTY — no AIS data loaded.")
+        print("     Run job 20 to install the aisstream launchd agent, or job 19 to fetch live AIS.")
+        sys.exit(1)
+    latest_dt = datetime.fromisoformat(latest.replace(" ", "T")).replace(tzinfo=timezone.utc)
+    age_h = (datetime.now(timezone.utc) - latest_dt).total_seconds() / 3600
+    print(f"  Rows    : {total:,}")
+    print(f"  Earliest: {earliest}")
+    print(f"  Latest  : {latest}  ({age_h:.1f}h ago)")
+    if age_h > 48:
+        print(f"  ⚠️  Latest AIS position is {age_h:.0f}h old — consider restarting the launchd agent (job 20).")
+    else:
+        print("  ✅ AIS data is fresh.")
+except Exception as e:
+    print(f"  ⚠️  Could not read {db}: {e}")
+    sys.exit(1)
+PYEOF
+  )
+  local ais_rc=$?
+  if [[ $ais_rc -ne 0 ]]; then
+    echo
+    if ! prompt_yes_no "AIS data missing or stale — continue anyway?" "false"; then
+      echo "Aborting checklist."
+      return
+    fi
+  fi
+
+  # ── Step 3: Full screening pipeline ───────────────────────────────────────
+  echo
+  echo "━━ Step 3/5 — Full screening pipeline ───────────────────────────────────────"
+  echo "  (rebuilds vessel_features and composite scores from current DB state)"
+  echo
+  if ! run_cmd uv run python scripts/run_pipeline.py \
+      --region "$region" \
+      --non-interactive; then
+    echo "  ❌ FAILED — pipeline failed. Check output above."
+    overall_ok=false
+  else
+    echo "  ✅ Pipeline complete."
+    local watchlist_path
+    case "$region" in
+      singapore)  watchlist_path="$PROJECT_ROOT/data/processed/singapore_watchlist.parquet" ;;
+      japan)      watchlist_path="$PROJECT_ROOT/data/processed/japansea_watchlist.parquet" ;;
+      middleeast) watchlist_path="$PROJECT_ROOT/data/processed/middleeast_watchlist.parquet" ;;
+      europe)     watchlist_path="$PROJECT_ROOT/data/processed/europe_watchlist.parquet" ;;
+      gulf)       watchlist_path="$PROJECT_ROOT/data/processed/gulf_watchlist.parquet" ;;
+      *)          watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet" ;;
+    esac
+    print_watchlist_summary "$watchlist_path"
+  fi
+
+  if [[ "$overall_ok" == "false" ]]; then return; fi
+
+  # ── Step 4: Precision@50 verification ─────────────────────────────────────
+  echo
+  echo "━━ Step 4/5 — Precision@50 verification (public OpenSanctions backtest) ─────"
+  echo
+  if [[ ! -f "$PROJECT_ROOT/$eval_db" ]]; then
+    echo "  ⚠️  $eval_db not found — skipping P@50 check."
+    echo "     Re-run step 1 or pull from R2: uv run python scripts/sync_r2.py pull-sanctions-db"
+  else
+    local watchlist_path
+    case "$region" in
+      singapore)  watchlist_path="data/processed/singapore_watchlist.parquet" ;;
+      japan)      watchlist_path="data/processed/japansea_watchlist.parquet" ;;
+      middleeast) watchlist_path="data/processed/middleeast_watchlist.parquet" ;;
+      europe)     watchlist_path="data/processed/europe_watchlist.parquet" ;;
+      gulf)       watchlist_path="data/processed/gulf_watchlist.parquet" ;;
+      *)          watchlist_path="data/processed/candidate_watchlist.parquet" ;;
+    esac
+
+    (cd "$PROJECT_ROOT" && uv run python - <<PYEOF
+import duckdb, polars as pl, sys
+from pathlib import Path
+
+watchlist_path = "$watchlist_path"
+eval_db = "$eval_db"
+target = 0.68
+
+if not Path(watchlist_path).exists():
+    print(f"  ⚠️  Watchlist not found: {watchlist_path}")
+    sys.exit(1)
+
+watchlist = pl.read_parquet(watchlist_path)
+if "confidence" not in watchlist.columns:
+    print("  ⚠️  Watchlist missing 'confidence' column.")
+    sys.exit(1)
+
+top50 = watchlist.sort("confidence", descending=True).head(50)
+
+con = duckdb.connect(eval_db, read_only=True)
+positives = pl.from_pandas(con.execute("""
+    SELECT DISTINCT
+        REPLACE(COALESCE(mmsi,''),'IMO','') AS mmsi,
+        REPLACE(COALESCE(imo,''),'IMO','') AS imo
+    FROM sanctions_entities
+    WHERE (lower(COALESCE(list_source,'')) LIKE '%ofac%'
+        OR lower(COALESCE(list_source,'')) LIKE '%un%'
+        OR lower(COALESCE(list_source,'')) LIKE '%eu%')
+      AND (COALESCE(mmsi,'') <> '' OR COALESCE(imo,'') <> '')
+""").fetchdf())
+con.close()
+
+pos_mmsi = set(positives["mmsi"].to_list())
+pos_imo  = set(positives["imo"].to_list())
+
+hits = 0
+for row in top50.iter_rows(named=True):
+    if str(row.get("mmsi","")) in pos_mmsi or str(row.get("imo","")) in pos_imo:
+        hits += 1
+
+p50 = hits / 50
+status = "✅ PASS" if p50 >= target else "❌ BELOW TARGET"
+print(f"  Precision@50  : {p50:.3f}  ({hits}/50)  (target ≥ {target})  {status}")
+print(f"  Watchlist size: {len(watchlist):,} vessels")
+if p50 < target:
+    sys.exit(1)
+PYEOF
+    )
+    local p50_rc=$?
+    if [[ $p50_rc -ne 0 ]]; then
+      echo
+      echo "  P@50 is below target. Check scoring weights or refresh AIS + sanctions data."
+      overall_ok=false
+    fi
+  fi
+
+  # ── Step 5: Dashboard screenshot reminder ─────────────────────────────────
+  echo
+  echo "━━ Step 5/5 — Dashboard screenshot ──────────────────────────────────────────"
+  echo
+  if [[ "$overall_ok" == "true" ]]; then
+    echo "  ✅ All checks passed. Ready for submission demo."
+  else
+    echo "  ⚠️  One or more steps failed — review output above before demo."
+  fi
+  echo
+  echo "  To view the dashboard:"
+  echo "    uv run uvicorn src.api.main:app --reload"
+  echo "    open http://localhost:8000"
+  echo
+  echo "  Capture screenshot of:"
+  echo "    • Ranked watchlist table (top-50 vessels with confidence scores)"
+  echo "    • At least one vessel detail panel (SHAP signals + causal badge)"
+  echo "    • Geopolitical context panel if GDELT data is loaded"
+}
+
 main_menu() {
   while true; do
     echo
@@ -1503,6 +1712,17 @@ main_menu() {
     echo "     When: setting up persistent AIS data collection on a MacBook"
     echo "      Who: developer, data engineer"
     echo
+    echo "21) GFW EO API Ingest"
+    echo "     What: fetch GFW Events API detections for a bbox/window and populate eo_detections"
+    echo "     When: GFW_API_TOKEN is set in .env (free-tier: FISHING events; research: GAP events)"
+    echo "      Who: data engineer"
+    echo
+    echo "22) Pre-Submission Demo Checklist"
+    echo "     What: sequenced pre-demo run — refresh sanctions → check AIS freshness →"
+    echo "           full pipeline → Precision@50 verification → dashboard screenshot reminder"
+    echo "     When: before any submission demo or evaluation; run ~1h before the demo slot"
+    echo "      Who: ops, data engineer, product"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1531,6 +1751,8 @@ main_menu() {
       18) run_fetch_aishub ;;
       19) run_fetch_aisstream ;;
       20) run_aisstream_agent ;;
+      21) run_ingest_eo_gfw ;;
+      22) run_predemo_checklist ;;
       q|quit|exit)
         echo "Bye"
         return
