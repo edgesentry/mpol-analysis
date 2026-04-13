@@ -1371,6 +1371,110 @@ run_aisstream_agent() {
   esac
 }
 
+run_ingest_eo_gfw() {
+  echo
+  echo "[21] GFW EO API Ingest — Verify & Populate eo_detections"
+  echo
+
+  # Check token
+  local token="${GFW_API_TOKEN:-}"
+  if [[ -z "$token" ]]; then
+    echo "  GFW_API_TOKEN is not set."
+    echo "  Register for a free token at: https://globalfishingwatch.org/data-access/"
+    echo "  Then add GFW_API_TOKEN=<token> to your .env file and re-run this job."
+    return
+  fi
+  echo "  GFW_API_TOKEN: set (${#token} chars)"
+  echo
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/singapore.duckdb")"
+
+  local gfw_days
+  gfw_days="$(prompt "Lookback window (days)" "30")"
+
+  # Default Singapore / Malacca bbox — lon_min,lat_min,lon_max,lat_max
+  local bbox
+  bbox="$(prompt "Bounding box (lon_min,lat_min,lon_max,lat_max)" "95,1,110,6")"
+
+  echo
+  echo "── Fetching GFW EO detections ────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/ingest/eo_gfw.py \
+      --bbox "$bbox" \
+      --days "$gfw_days" \
+      --db "$db_path"; then
+    echo "Result: FAILED"
+    echo "  Check that GFW_API_TOKEN is valid and the GFW API is reachable."
+    return
+  fi
+
+  echo
+  echo "── eo_detections table ────────────────────────────────────────────────────────"
+  run_cmd uv run python - <<PYEOF
+import duckdb, sys
+con = duckdb.connect("$db_path", read_only=True)
+row = con.execute("SELECT COUNT(*), MIN(detected_at)::VARCHAR, MAX(detected_at)::VARCHAR FROM eo_detections").fetchone()
+total, earliest, latest = row
+if total == 0:
+    print("  0 rows — GFW returned no dark-vessel detections for this bbox/window.", file=sys.stderr)
+    sys.exit(1)
+print(f"  {total} detections  |  earliest: {earliest}  |  latest: {latest}")
+PYEOF
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "Result: 0 rows inserted — verify bbox and API response"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Rebuild features + scoring to activate EO signal" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Verify eo_dark_count_30d in vessel_features ────────────────────────────────"
+  run_cmd uv run python - <<PYEOF
+import duckdb
+con = duckdb.connect("$db_path", read_only=True)
+row = con.execute("""
+  SELECT COUNT(*) AS vessels_with_eo_signal, MAX(eo_dark_count_30d) AS max_dark_count
+  FROM vessel_features WHERE eo_dark_count_30d > 0
+""").fetchone()
+print(f"  Vessels with eo_dark_count_30d > 0: {row[0]}  |  max: {row[1]}")
+PYEOF
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  local geo_filter_arg=()
+  if [[ -f "$PROJECT_ROOT/config/geopolitical_events.json" ]]; then
+    geo_filter_arg=(--geopolitical-event-filter "$PROJECT_ROOT/config/geopolitical_events.json")
+  fi
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path" \
+      "${geo_filter_arg[@]}"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  uv run uvicorn src.api.main:app --reload"
+  echo "  2. Open: http://localhost:8000 → Review tab → click a vessel"
+  echo "     Look for: 'Eo Dark Count 30D' and 'Eo Ais Mismatch Ratio' > 0"
+  echo "  3. API:  curl http://localhost:8000/api/vessels/<mmsi>/signals"
+}
+
 main_menu() {
   while true; do
     echo
@@ -1503,6 +1607,13 @@ main_menu() {
     echo "     When: setting up persistent AIS data collection on a MacBook"
     echo "      Who: developer, data engineer"
     echo
+    echo "21) GFW EO API Ingest — Verify & Populate eo_detections"
+    echo "     What: fetch dark-vessel EO detections from Global Fishing Watch API for a"
+    echo "           region bbox; check GFW_API_TOKEN; show row count; rebuild features"
+    echo "           + scoring; confirm eo_dark_count_30d > 0 in vessel_features"
+    echo "     When: after setting GFW_API_TOKEN in .env (activates EO dark-vessel signal)"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1531,6 +1642,7 @@ main_menu() {
       18) run_fetch_aishub ;;
       19) run_fetch_aisstream ;;
       20) run_aisstream_agent ;;
+      21) run_ingest_eo_gfw ;;
       q|quit|exit)
         echo "Bye"
         return
