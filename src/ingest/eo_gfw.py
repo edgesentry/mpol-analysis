@@ -96,6 +96,7 @@ def fetch_gfw_detections(
     params = {
         "datasets[0]": _GFW_GAP_DATASET,
         "types[0]": "GAP",
+        "types[1]": "GAP_START",
         "start-date": start_dt.strftime("%Y-%m-%d"),
         "end-date": end_dt.strftime("%Y-%m-%d"),
         "limit": _GFW_EVENTS_PAGE_SIZE,
@@ -116,6 +117,11 @@ def fetch_gfw_detections(
             f"Body: {resp.text[:1000]}"
         )
     data = resp.json()
+
+    # Debug: show top-level keys and total count so caller can diagnose empty results.
+    top_keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+    total = data.get("total", "?") if isinstance(data, dict) else "?"
+    print(f"[gfw-debug] response keys={top_keys} total={total}", flush=True)
 
     detections = []
     for entry in data.get("entries", []):
