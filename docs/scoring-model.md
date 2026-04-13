@@ -205,7 +205,7 @@ The pipeline computes validation metrics against a holdout set of OFAC-listed ve
 
 | Metric | Target | Meaning |
 |---|---|---|
-| Precision@50 | ≥ 0.60 | ≥ 30 of the top-50 candidates are confirmed OFAC-listed |
+| Precision@50 | ≥ 0.25 (single-region floor) | ≥ 13 of top labeled rows are confirmed OFAC-listed; structural ceiling ≈ 0.333 with Singapore-only labels; multi-region target ≥ 0.68 |
 | Recall@200 | — | Fraction of all OFAC-listed vessels recovered in the top 200 |
 | AUROC | — | Area under the ROC curve across the full ranked list |
 

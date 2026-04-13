@@ -55,7 +55,7 @@ See [Backtracking Runbook](backtracking-runbook.md) for full options, output for
 
 | Region | Flag | DuckDB | Gap threshold | Feature window | Weights (A / G / I) |
 |---|---|---|---|---|---|
-| Singapore / Malacca | `singapore` | `singapore.duckdb` | 6 h | 30 d | 0.40 / 0.40 / 0.20 |
+| Singapore / Malacca | `singapore` | `singapore.duckdb` | 4 h | 30 d | 0.40 / 0.40 / 0.20 |
 | Japan Sea / DPRK | `japan` | `japansea.duckdb` | 12 h | 60 d | 0.40 / 0.40 / 0.20 |
 | Middle East | `middleeast` | `middleeast.duckdb` | 12 h | 60 d | 0.40 / 0.40 / 0.20 |
 | Europe / Baltic | `europe` | `europe.duckdb` | 6 h | 45 d | 0.35 / 0.35 / 0.30 |
@@ -215,9 +215,9 @@ Each module can be run standalone. Useful for re-running a single step after a f
 # Schema
 uv run python -m src.ingest.schema --db data/processed/singapore.duckdb
 
-# AIS feature engineering (30-day window, 6h gap threshold)
+# AIS feature engineering (30-day window, 4h gap threshold for Singapore)
 uv run python -m src.features.ais_behavior \
-  --db data/processed/singapore.duckdb --window 30 --gap-threshold-hours 6
+  --db data/processed/singapore.duckdb --window 30 --gap-threshold-hours 4
 
 # Build full feature matrix
 uv run python -m src.features.build_matrix --db data/processed/singapore.duckdb
