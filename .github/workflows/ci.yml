@@ -139,7 +139,8 @@ jobs:
           uv run python scripts/run_public_backtest_batch.py \
             --regions singapore \
             --seed-dummy \
-            --min-known-cases 5
+            --min-known-cases 5 \
+            --min-watchlist-size 10
 
       - name: Assert score regression bounds
         id: regression_check
