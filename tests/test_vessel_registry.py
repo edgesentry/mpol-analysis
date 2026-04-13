@@ -214,3 +214,55 @@ def test_build_graph_equasis_no_address_if_id_missing(tmp_db, tmp_path):
     )
     tables = build_graph_tables(tmp_db, equasis_csv=str(csv_path))
     assert len(tables["REGISTERED_AT"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# #231 — MMSI-only sanctioned vessels (no IMO, or non-'Vessel' FtM type)
+# ---------------------------------------------------------------------------
+
+
+def test_mmsi_only_sanctioned_vessel_gets_node_and_edge(tmp_db):
+    """A vessel on OFAC with MMSI but no IMO must appear in Vessel table and SANCTIONED_BY."""
+    # Vessel is in AIS (vessel_meta) but NOT yet linked to sanctions
+    _seed_vessel_meta(tmp_db, [("613490000", "", "")])
+    # Sanctioned entry has MMSI only (no IMO), and type='Vessel'
+    _seed_sanctions(
+        tmp_db,
+        [("v-mmsi-only", "SHADOW TANKER", "613490000", None, "IR", "Vessel", "us_ofac_sdn")],
+    )
+    tables = build_graph_tables(tmp_db)
+    vessel_mmsis = set(tables["Vessel"]["mmsi"].to_pylist())
+    assert "613490000" in vessel_mmsis
+    sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
+    assert "613490000" in sb_src
+
+
+def test_non_vessel_type_with_mmsi_gets_sanctioned_by_edge(tmp_db):
+    """An entity stored as non-'Vessel' FtM type but carrying an MMSI must still get
+    a SANCTIONED_BY edge (issue #231 — some OFAC SDN entries use LegalEntity type)."""
+    _seed_vessel_meta(tmp_db, [("620999538", "", "")])
+    # type='LegalEntity', not 'Vessel' — previously excluded by the query
+    _seed_sanctions(
+        tmp_db,
+        [("le-001", "MARITIME LLC", "620999538", None, "SY", "LegalEntity", "us_ofac_sdn")],
+    )
+    tables = build_graph_tables(tmp_db)
+    sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
+    assert "620999538" in sb_src
+
+
+def test_sanctioned_mmsi_not_in_vessel_meta_has_no_vessel_node(tmp_db):
+    """A sanctioned vessel whose MMSI never appeared in AIS must NOT get a Vessel
+    node — adding stub nodes would inflate watchlists with zero-AIS vessels.
+    The DuckDB fallback in ownership_graph.py handles distance correction instead."""
+    # No vessel_meta row for this MMSI
+    _seed_sanctions(
+        tmp_db,
+        [("v-ghost", "GHOST VESSEL", "256869000", None, "KP", "Vessel", "un_sc_sanctions")],
+    )
+    tables = build_graph_tables(tmp_db)
+    vessel_mmsis = set(tables["Vessel"]["mmsi"].to_pylist())
+    assert "256869000" not in vessel_mmsis
+    # SANCTIONED_BY edge still exists for use by other graph lookups
+    sb_src = tables["SANCTIONED_BY"]["src_id"].to_pylist()
+    assert "256869000" in sb_src

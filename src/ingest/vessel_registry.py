@@ -74,7 +74,8 @@ def build_graph_tables(
         sanctioned_vessel_rows = con.execute(
             "SELECT entity_id, COALESCE(mmsi,'') AS mmsi, COALESCE(imo,'') AS imo, "
             "list_source FROM sanctions_entities "
-            "WHERE type = 'Vessel' AND (mmsi IS NOT NULL OR imo IS NOT NULL)"
+            "WHERE (type = 'Vessel' OR (mmsi IS NOT NULL AND mmsi <> '')) "
+            "AND (mmsi IS NOT NULL OR imo IS NOT NULL)"
         ).fetchall()
 
         sanctioned_company_rows = con.execute(

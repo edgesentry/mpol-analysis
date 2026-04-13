@@ -116,6 +116,8 @@ Minimum BFS hop count from the vessel to any node in the ownership graph that ca
 | 2 | Parent company or beneficial owner is designated |
 | 99 | No graph connection to any sanctioned entity |
 
+**Computation:** Primary path is BFS over the Lance Graph (`src/features/ownership_graph.py`). The Lance Graph Vessel table is seeded from `vessel_meta`, which only covers vessels that have explicit AIS registry metadata. A DuckDB fallback in `src/features/build_matrix.py` (`_apply_direct_sanctions_fallback`) corrects any remaining `distance=99` rows: after the full feature matrix merge, any vessel whose MMSI appears directly in `sanctions_entities` receives `distance=0`. This ensures MMSI-only OFAC/UN/EU entries (vessels designated without an IMO number, or stored under a non-`Vessel` FtM schema type) are not penalised by a Lance Graph data-coverage gap.
+
 **Shadow fleet signal:** This is the strongest individual predictor in the model. A vessel 1–2 hops from an OFAC/EU/UN entity has a >60% empirical probability of appearing in open-source shadow fleet incident reports.
 
 ### `cluster_sanctions_ratio`
