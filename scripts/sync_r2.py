@@ -108,6 +108,7 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
+
 def _resolve_default_data_dir() -> str:
     """Return the default data directory.
 

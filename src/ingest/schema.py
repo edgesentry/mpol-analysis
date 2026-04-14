@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def _default_db_path() -> str:
     """Return the default DuckDB path.
 
@@ -38,9 +39,11 @@ def _default_db_path() -> str:
     }
     region = os.getenv("ARKTRACE_REGION", "singapore").lower().strip()
     stem = _REGION_TO_STEM.get(region, "singapore")
-    data_dir = Path(os.getenv("ARKTRACE_DATA_DIR", "")).expanduser() if os.getenv(
-        "ARKTRACE_DATA_DIR"
-    ) else Path.home() / ".arktrace" / "data"
+    data_dir = (
+        Path(os.getenv("ARKTRACE_DATA_DIR", "")).expanduser()
+        if os.getenv("ARKTRACE_DATA_DIR")
+        else Path.home() / ".arktrace" / "data"
+    )
     return str(data_dir / f"{stem}.duckdb")
 
 

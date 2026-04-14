@@ -205,23 +205,29 @@ def maybe_pull() -> None:
     if present:
         if not _is_stale(db_path, watchlist, fs, bucket):
             return  # files exist and are current — nothing to do
-        logger.info(
-            "Local data at %s is stale. Re-downloading from R2 …", data_dir
-        )
+        logger.info("Local data at %s is stale. Re-downloading from R2 …", data_dir)
     else:
-        logger.info(
-            "Local data cache not found at %s. Pulling from R2 …", data_dir
-        )
+        logger.info("Local data cache not found at %s. Pulling from R2 …", data_dir)
 
     region = _region_for_db(db_path)
     try:
         _pull(region, db_path, fs, bucket)
     except Exception as exc:
-        raise RuntimeError(
-            f"Auto-pull from R2 failed for region '{region}': {exc}\n"
-            "Check your R2 credentials in .env or pull manually:\n"
-            "  uv run python scripts/sync_r2.py pull"
-        ) from exc
+        # Only hard-fail when credentials are configured (intentional push
+        # environment).  In anonymous / CI / offline contexts, degrade
+        # gracefully so the app still starts with empty data.
+        if _r2_configured():
+            raise RuntimeError(
+                f"Auto-pull from R2 failed for region '{region}': {exc}\n"
+                "Check your R2 credentials in .env or pull manually:\n"
+                "  uv run python scripts/sync_r2.py pull"
+            ) from exc
+        logger.warning(
+            "Auto-pull from R2 skipped (%s). "
+            "The dashboard will show empty data. "
+            "Pull manually: uv run python scripts/sync_r2.py pull",
+            exc,
+        )
 
 
 def _pull(region: str, db_path: Path, fs, bucket: str) -> None:
