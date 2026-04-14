@@ -108,7 +108,27 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DATA_DIR = "data/processed"
+
+def _resolve_default_data_dir() -> str:
+    """Return the default data directory.
+
+    Resolution order:
+    1. ``ARKTRACE_DATA_DIR`` env var (explicit override)
+    2. ``data/processed`` if it exists under the current working directory
+       (repo-local dev / CI — keeps existing behaviour for contributors)
+    3. ``~/.arktrace/data`` (standard user-level install location)
+    """
+    import os as _os
+
+    if explicit := _os.getenv("ARKTRACE_DATA_DIR"):
+        return str(Path(explicit).expanduser())
+    repo_local = Path("data/processed")
+    if repo_local.exists():
+        return str(repo_local)
+    return str(Path.home() / ".arktrace" / "data")
+
+
+_DEFAULT_DATA_DIR = _resolve_default_data_dir()
 _DEFAULT_REGION = "singapore"
 _DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
 _DEFAULT_BUCKET = "arktrace-public"
