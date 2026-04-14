@@ -561,7 +561,12 @@ def compute_composite_scores(
                 if floor_val > 0:
                     etype = prop_evidence.get(m, "propagated")
                     entry = json.dumps(
-                        {"feature": "label_propagation", "evidence_type": etype, "value": round(floor_val, 3), "contribution": 1.0}
+                        {
+                            "feature": "label_propagation",
+                            "evidence_type": etype,
+                            "value": round(floor_val, 3),
+                            "contribution": 1.0,
+                        }
                     )
                     existing = json.loads(sig) if sig else []
                     new_sigs.append(json.dumps([json.loads(entry)] + existing))
@@ -569,7 +574,9 @@ def compute_composite_scores(
                     new_sigs.append(sig)
             scored = scored.with_columns(pl.Series("top_signals", new_sigs))
             n_lifted = sum(1 for m in mmsi_list if prop_floor.get(m, 0.0) > 0)
-            print(f"[label propagation] floor applied to {n_lifted} vessels from {propagation_path}")
+            print(
+                f"[label propagation] floor applied to {n_lifted} vessels from {propagation_path}"
+            )
 
     return scored.select(
         [
