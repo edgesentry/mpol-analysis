@@ -14,6 +14,26 @@ import polars as pl
 from scripts.prepare_public_sanctions_db import prepare_public_sanctions_db
 from src.score.backtest import run_backtest
 
+# MMSIs of vessels seeded by run_pipeline.py --seed-dummy.
+# These are real OFAC vessels injected artificially into the pipeline DB to
+# meet the CI known-case floor.  Excluding them from backtest labels avoids
+# inflating the positive count with fixtures that were by design on sanctions
+# lists, which would overstate how well the model detects unknowns.
+_DUMMY_MMSIS: frozenset[str] = frozenset(
+    {
+        "352001369",  # CELINE
+        "314856000",  # ELINE
+        "372979000",  # REX 1
+        "312171000",  # ANHONA
+        "352898820",  # AVENTUS I
+        "352002316",  # SATINA
+        "626152000",  # ASTRA
+        "352001298",  # CRYSTAL ROSE
+        "314925000",  # BENDIGO
+        "352001565",  # ARABIAN ENERGY
+    }
+)
+
 WATCHLIST_BY_REGION = {
     "singapore": "data/processed/singapore_watchlist.parquet",
     "japan": "data/processed/japansea_watchlist.parquet",
@@ -93,6 +113,7 @@ def _build_labels_for_watchlist(
     watchlist: pl.DataFrame,
     positives: pl.DataFrame,
     max_known_cases: int,
+    filter_dummy_mmsis: bool = True,
 ) -> pl.DataFrame:
     watchlist = watchlist.select(["mmsi", "imo", "vessel_name", "confidence"])
 
@@ -136,6 +157,21 @@ def _build_labels_for_watchlist(
     )
 
     pos = pl.concat([pos_m, pos_i, pos_name], how="vertical_relaxed").unique(subset=["mmsi", "imo"])
+
+    # Remove seeded dummy vessels so that known-case fixtures don't inflate
+    # the positive label count.  Dummy MMSIs are real OFAC vessels but were
+    # artificially injected into the pipeline DB via --seed-dummy; keeping them
+    # in the evaluation overstates detection capability for unknowns.
+    if filter_dummy_mmsis:
+        n_before = pos.height
+        pos = pos.filter(~pl.col("mmsi").is_in(_DUMMY_MMSIS))
+        n_filtered = n_before - pos.height
+        if n_filtered:
+            print(
+                f"[label-cleanup] filtered {n_filtered} seeded dummy vessel(s) from positives",
+                flush=True,
+            )
+
     pos = pos.sort("confidence", descending=True)
     if pos.height > max_known_cases:
         pos = pos.head(max_known_cases)
@@ -155,7 +191,9 @@ def _build_labels_for_watchlist(
     if not pos_labels.is_empty():
         tail = tail.filter(~pl.col("mmsi").is_in(pos_labels["mmsi"].to_list()))
 
-    neg_size = max(20, min(max(100, max_known_cases), max(pos_labels.height * 2, 20)))
+    # Ensure total labeled (pos + neg) >= 50 so P@50 uses the full denominator.
+    # At least (50 - n_pos) negatives, or 2× positives, whichever is larger.
+    neg_size = max(50 - pos_labels.height, pos_labels.height * 2, 20)
     neg_labels = (
         tail.head(neg_size)
         .with_columns(
@@ -222,6 +260,15 @@ def main() -> None:
     )
     parser.add_argument("--refresh-public-data", action="store_true")
     parser.add_argument(
+        "--no-filter-dummy-mmsis",
+        action="store_true",
+        help=(
+            "Disable filtering of seeded dummy vessel MMSIs from positive labels. "
+            "By default, vessels injected via --seed-dummy are excluded so they don't "
+            "artificially inflate the positive count."
+        ),
+    )
+    parser.add_argument(
         "--skip-pipeline",
         action="store_true",
         help=(
@@ -230,6 +277,10 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+
+    # When the pipeline was seeded with dummy vessels, those vessels ARE the
+    # intended positive cases for CI verification — don't filter them out.
+    filter_dummy_mmsis = not args.no_filter_dummy_mmsis and not args.seed_dummy
 
     project_root = Path(__file__).resolve().parents[1]
     scripts_dir = project_root / "scripts"
@@ -290,7 +341,12 @@ def main() -> None:
             )
             skipped_regions.append(region)
             continue
-        labels = _build_labels_for_watchlist(watchlist, positives, args.max_known_cases)
+        labels = _build_labels_for_watchlist(
+            watchlist,
+            positives,
+            args.max_known_cases,
+            filter_dummy_mmsis=filter_dummy_mmsis,
+        )
         labels_path = (processed_dir / f"eval_labels_public_{region}_integration.csv").resolve()
         labels.write_csv(labels_path)
         label_counts[region] = int(labels.filter(pl.col("label") == "positive").height)

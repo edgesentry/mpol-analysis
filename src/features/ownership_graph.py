@@ -312,6 +312,11 @@ def compute_ownership_graph_features(db_path: str) -> pl.DataFrame:
 
     sd_df = _compute_sanctions_distance(tables)
 
+    # DuckDB fallback: fix sanctions_distance=99 for vessels that appear in
+    # sanctions_entities but whose SANCTIONED_BY edge was never created (e.g.
+    # because their MMSI was absent from vessel_meta at graph-build time).
+    sd_df = _apply_direct_sanctions_fallback(sd_df, db_path)
+
     if sd_df.is_empty():
         return pl.DataFrame(
             schema={
