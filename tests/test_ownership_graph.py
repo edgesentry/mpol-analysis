@@ -1,12 +1,18 @@
 """
 Tests for ownership graph feature engineering — focusing on the DuckDB sanctions
-fallback introduced in issue #231.
+fallback introduced in issue #231 and the STS hub degree fixes in issue #233.
 """
 
 import duckdb
 import polars as pl
+import pyarrow as pa
 
-from src.features.ownership_graph import MAX_HOPS, _apply_direct_sanctions_fallback
+from src.features.ownership_graph import (
+    MAX_HOPS,
+    _apply_direct_sanctions_fallback,
+    _compute_sts_hub_degree,
+)
+from src.graph.store import NODE_SCHEMAS, REL_SCHEMAS
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,3 +119,69 @@ def test_fallback_corrects_vessel_not_in_lance_graph(tmp_db):
     assert result.filter(pl.col("mmsi") == "613490000")["sanctions_distance"][0] == 0
     assert result.filter(pl.col("mmsi") == "620999538")["sanctions_distance"][0] == 0
     assert result.filter(pl.col("mmsi") == "444000000")["sanctions_distance"][0] == MAX_HOPS
+
+
+# ---------------------------------------------------------------------------
+# _compute_sts_hub_degree
+# ---------------------------------------------------------------------------
+
+
+def _make_sts_tables(vessel_mmsis: list[str], pairs: list[tuple[str, str]]) -> dict:
+    """Build minimal tables dict for _compute_sts_hub_degree tests."""
+    vessel_table = pa.table(
+        {"mmsi": vessel_mmsis, "imo": [""] * len(vessel_mmsis), "name": [""] * len(vessel_mmsis)},
+        schema=NODE_SCHEMAS["Vessel"],
+    )
+    sts_table = pa.table(
+        {"src_id": [p[0] for p in pairs], "dst_id": [p[1] for p in pairs]},
+        schema=REL_SCHEMAS["STS_CONTACT"],
+    )
+    return {"Vessel": vessel_table, "STS_CONTACT": sts_table}
+
+
+def test_sts_hub_degree_empty_contacts():
+    """Vessels with no STS contacts get degree 0."""
+    tables = _make_sts_tables(["111111111", "222222222"], [])
+    result = _compute_sts_hub_degree(tables)
+    assert result.filter(pl.col("mmsi") == "111111111")["sts_hub_degree"][0] == 0
+    assert result.filter(pl.col("mmsi") == "222222222")["sts_hub_degree"][0] == 0
+
+
+def test_sts_hub_degree_src_side_counted():
+    """A vessel that appears as src_id gets degree = number of distinct dst partners."""
+    tables = _make_sts_tables(
+        ["111111111", "222222222"],
+        [("111111111", "222222222")],
+    )
+    result = _compute_sts_hub_degree(tables)
+    assert result.filter(pl.col("mmsi") == "111111111")["sts_hub_degree"][0] == 1
+
+
+def test_sts_hub_degree_dst_side_counted():
+    """A vessel that appears only as dst_id must also get a non-zero degree.
+
+    This is the bidirectionality fix: STS_CONTACT stores pairs with src < dst,
+    so without the union both_dirs trick, the dst vessel would always get 0.
+    """
+    # "222222222" > "111111111", so 111111111 is src and 222222222 is dst
+    tables = _make_sts_tables(
+        ["111111111", "222222222"],
+        [("111111111", "222222222")],
+    )
+    result = _compute_sts_hub_degree(tables)
+    # 222222222 appears only as dst_id — must still get degree 1
+    assert result.filter(pl.col("mmsi") == "222222222")["sts_hub_degree"][0] == 1
+
+
+def test_sts_hub_degree_hub_vessel():
+    """A vessel with three distinct STS partners gets degree 3."""
+    tables = _make_sts_tables(
+        ["111111111", "222222222", "333333333", "444444444"],
+        [
+            ("111111111", "222222222"),
+            ("111111111", "333333333"),
+            ("111111111", "444444444"),
+        ],
+    )
+    result = _compute_sts_hub_degree(tables)
+    assert result.filter(pl.col("mmsi") == "111111111")["sts_hub_degree"][0] == 3

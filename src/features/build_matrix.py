@@ -22,6 +22,7 @@ from src.features.ownership_graph import (
 )
 from src.features.sar_detections import compute_unmatched_sar_detections
 from src.features.trade_mismatch import compute_trade_features
+from src.graph.store import _dataset_path
 
 load_dotenv()
 
@@ -200,6 +201,56 @@ def _compute_sanctions_list_count(db_path: str, matrix: pl.DataFrame) -> pl.Data
     )
 
 
+def _compute_sts_hub_degree_from_lance(db_path: str, matrix: pl.DataFrame) -> pl.DataFrame:
+    """Fill sts_hub_degree from the Lance STS_CONTACT table for all matrix vessels.
+
+    The Lance graph only assigns sts_hub_degree to vessels present in vessel_meta
+    (the Vessel node table).  Most AIS-observed vessels are absent from vessel_meta,
+    so their graph-derived degree stays at the default 0.
+
+    This fallback reads STS_CONTACT directly (written by vessel_registry.py from AIS
+    co-location) and counts distinct partners for every vessel in the matrix,
+    overriding the graph 0s where contact data exists.  Both directions of each pair
+    are counted (src↔dst) because STS_CONTACT stores each pair once with src < dst.
+    """
+    import lance
+
+    sts_path = _dataset_path(db_path, "STS_CONTACT")
+    try:
+        if not os.path.exists(sts_path):
+            return matrix
+        sts_ds = lance.dataset(sts_path)
+        if sts_ds.count_rows() == 0:
+            return matrix
+        sts_df = pl.from_arrow(sts_ds.to_table())
+    except Exception:
+        return matrix  # Lance not built yet; leave defaults
+
+    both_dirs = pl.concat(
+        [
+            sts_df.select(pl.col("src_id").alias("mmsi"), pl.col("dst_id").alias("partner")),
+            sts_df.select(pl.col("dst_id").alias("mmsi"), pl.col("src_id").alias("partner")),
+        ]
+    )
+    hub_df = (
+        both_dirs.group_by("mmsi")
+        .agg(pl.col("partner").n_unique().alias("_hub_deg"))
+        .with_columns(pl.col("mmsi").cast(pl.Utf8))
+    )
+
+    return (
+        matrix.join(hub_df, on="mmsi", how="left")
+        .with_columns(
+            pl.when(pl.col("_hub_deg").is_not_null())
+            .then(pl.col("_hub_deg"))
+            .otherwise(pl.col("sts_hub_degree"))
+            .cast(pl.Int32)
+            .alias("sts_hub_degree")
+        )
+        .drop("_hub_deg")
+    )
+
+
 def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 60,
@@ -230,6 +281,11 @@ def build_feature_matrix(
         # Count distinct sanction programs per vessel to break score ties between
         # vessels that share the same sanctions_distance (e.g. all directly sanctioned).
         matrix = _compute_sanctions_list_count(db_path, matrix)
+        # Fill sts_hub_degree from the Lance STS_CONTACT table for AIS vessels not
+        # present in vessel_meta (the Lance Vessel node table).  The graph computation
+        # only assigns non-zero degrees to the ~14 vessel_meta entries; this extends
+        # coverage to all AIS-observed vessels using the same STS_CONTACT data.
+        matrix = _compute_sts_hub_degree_from_lance(db_path, matrix)
 
     return matrix
 
