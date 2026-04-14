@@ -228,18 +228,25 @@ def _compute_shared_address_centrality(tables: dict) -> pl.DataFrame:
 
 
 def _compute_sts_hub_degree(tables: dict) -> pl.DataFrame:
-    """Count of distinct vessels with STS contact."""
+    """Count of distinct vessels with STS contact.
+
+    STS_CONTACT stores each pair once (src_id < dst_id lexicographically).
+    Both sides participated in the STS event, so degree is counted from both
+    perspectives before grouping.
+    """
     vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
     sts = pl.from_arrow(tables["STS_CONTACT"])
 
     if len(sts) == 0:
         return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("sts_hub_degree"))
 
-    hub_df = (
-        sts.rename({"src_id": "mmsi"})
-        .group_by("mmsi")
-        .agg(pl.col("dst_id").n_unique().alias("sts_hub_degree"))
+    both_dirs = pl.concat(
+        [
+            sts.select(pl.col("src_id").alias("mmsi"), pl.col("dst_id").alias("partner")),
+            sts.select(pl.col("dst_id").alias("mmsi"), pl.col("src_id").alias("partner")),
+        ]
     )
+    hub_df = both_dirs.group_by("mmsi").agg(pl.col("partner").n_unique().alias("sts_hub_degree"))
 
     return vessels.join(hub_df, on="mmsi", how="left").with_columns(
         pl.col("sts_hub_degree").fill_null(0).cast(pl.Int32)

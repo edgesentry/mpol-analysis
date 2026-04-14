@@ -1,11 +1,15 @@
 import duckdb
+import polars as pl
+import pyarrow as pa
 
 from src.features.build_matrix import (
     CORE_COLUMNS,
+    _compute_sts_hub_degree_from_lance,
     build_feature_matrix,
     validate_core_columns_non_null,
     write_vessel_features,
 )
+from src.graph.store import REL_SCHEMAS, write_tables
 
 
 def _seed_minimal_data(db_path: str) -> None:
@@ -81,3 +85,70 @@ def test_write_vessel_features_and_validate_core_columns(tmp_db):
         assert all(v == 0 for v in nulls)
     finally:
         con.close()
+
+
+# ---------------------------------------------------------------------------
+# _compute_sts_hub_degree_from_lance
+# ---------------------------------------------------------------------------
+
+
+def _write_sts_contact_lance(db_path: str, pairs: list[tuple[str, str]]) -> None:
+    """Write STS_CONTACT Lance table with the given pairs."""
+    table = pa.table(
+        {"src_id": [p[0] for p in pairs], "dst_id": [p[1] for p in pairs]},
+        schema=REL_SCHEMAS["STS_CONTACT"],
+    )
+    write_tables(db_path, {"STS_CONTACT": table})
+
+
+def test_sts_hub_degree_fallback_populates_ais_only_vessels(tmp_db):
+    """Vessels not in vessel_meta (AIS-only) get sts_hub_degree from the Lance
+    STS_CONTACT table via the build_matrix fallback.
+
+    The Lance graph Vessel table only covers vessel_meta entries.  If STS contacts
+    exist between AIS-only vessels (the common case — vessel_meta is sparse) the
+    graph step leaves sts_hub_degree=0.  The fallback must fix this.
+    """
+    pairs = [("111111111", "222222222")]
+    _write_sts_contact_lance(tmp_db, pairs)
+
+    matrix = pl.DataFrame(
+        {
+            "mmsi": ["111111111", "222222222", "333333333"],
+            "sts_hub_degree": [0, 0, 0],
+        },
+        schema={"mmsi": pl.Utf8, "sts_hub_degree": pl.Int32},
+    )
+    result = _compute_sts_hub_degree_from_lance(tmp_db, matrix)
+
+    assert result.filter(pl.col("mmsi") == "111111111")["sts_hub_degree"][0] == 1
+    assert result.filter(pl.col("mmsi") == "222222222")["sts_hub_degree"][0] == 1
+    assert result.filter(pl.col("mmsi") == "333333333")["sts_hub_degree"][0] == 0
+
+
+def test_sts_hub_degree_fallback_no_lance_table(tmp_db):
+    """When STS_CONTACT.lance does not exist, the matrix is returned unchanged."""
+    matrix = pl.DataFrame(
+        {"mmsi": ["111111111"], "sts_hub_degree": [0]},
+        schema={"mmsi": pl.Utf8, "sts_hub_degree": pl.Int32},
+    )
+    result = _compute_sts_hub_degree_from_lance(tmp_db, matrix)
+    assert result["sts_hub_degree"][0] == 0
+
+
+def test_sts_hub_degree_fallback_hub_degree_counts_all_partners(tmp_db):
+    """A vessel with three distinct STS partners gets degree 3, even if it's
+    always the dst_id (bidirectionality from both_dirs union)."""
+    pairs = [
+        ("111111111", "444444444"),
+        ("222222222", "444444444"),
+        ("333333333", "444444444"),
+    ]
+    _write_sts_contact_lance(tmp_db, pairs)
+
+    matrix = pl.DataFrame(
+        {"mmsi": ["444444444"], "sts_hub_degree": [0]},
+        schema={"mmsi": pl.Utf8, "sts_hub_degree": pl.Int32},
+    )
+    result = _compute_sts_hub_degree_from_lance(tmp_db, matrix)
+    assert result["sts_hub_degree"][0] == 3
