@@ -168,9 +168,9 @@ def _retrospective(
         if last_seen_raw:
             try:
                 if isinstance(last_seen_raw, str):
-                    last_seen = datetime.fromisoformat(last_seen_raw.replace("Z", "+00:00")).replace(
-                        tzinfo=UTC
-                    )
+                    last_seen = datetime.fromisoformat(
+                        last_seen_raw.replace("Z", "+00:00")
+                    ).replace(tzinfo=UTC)
                 else:
                     # polars datetime
                     last_seen = datetime.fromtimestamp(last_seen_raw.timestamp(), tz=UTC)
@@ -313,12 +313,26 @@ def main() -> None:
 
     _print_table(
         pre_desig,
-        ["mmsi", "vessel_name", "confidence", "designation_date_proxy", "detection_window_start", "lead_days"],
+        [
+            "mmsi",
+            "vessel_name",
+            "confidence",
+            "designation_date_proxy",
+            "detection_window_start",
+            "lead_days",
+        ],
         "PRE-DESIGNATION DETECTIONS (model flagged before public OFAC listing)",
     )
     _print_table(
         post_desig[:10],
-        ["mmsi", "vessel_name", "confidence", "designation_date_proxy", "detection_window_start", "lead_days"],
+        [
+            "mmsi",
+            "vessel_name",
+            "confidence",
+            "designation_date_proxy",
+            "detection_window_start",
+            "lead_days",
+        ],
         "POST-DESIGNATION (model flagged after listing — confirms recall)",
     )
 
@@ -375,16 +389,18 @@ def main() -> None:
         out_path.write_text(json.dumps(report, indent=2))
         print(f"Report written to {out_path}")
 
-    print(json.dumps(
-        {
-            "matched": n_matched,
-            "pre_designation": n_pre,
-            "mean_lead_days": mean_lead,
-            "median_lead_days": median_lead,
-            "unknown_unknown_candidates": len(prosp),
-        },
-        indent=2,
-    ))
+    print(
+        json.dumps(
+            {
+                "matched": n_matched,
+                "pre_designation": n_pre,
+                "mean_lead_days": mean_lead,
+                "median_lead_days": median_lead,
+                "unknown_unknown_candidates": len(prosp),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
