@@ -16,10 +16,13 @@ import os
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 
 import duckdb
 
-_DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
+from src.storage.config import _canonical_data_dir
+
+_DEFAULT_DB_PATH = str(Path(_canonical_data_dir()) / "singapore.duckdb")
 
 logger = logging.getLogger(__name__)
 

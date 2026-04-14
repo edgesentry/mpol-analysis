@@ -12,11 +12,12 @@ from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from src.analysis.causal import score_unknown_unknowns
-from src.storage.config import output_uri, watchlist_uri
+from src.storage.config import _canonical_data_dir, output_uri, watchlist_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
 DEFAULT_VALIDATION_PATH = os.getenv(
-    "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
+    "VALIDATION_METRICS_PATH",
+    str(Path(_canonical_data_dir()) / "validation_metrics.json"),
 )
 DEFAULT_CAUSAL_EFFECTS_PATH = os.getenv("CAUSAL_EFFECTS_PATH") or output_uri(
     "causal_effects.parquet"
@@ -166,7 +167,7 @@ def causal_candidates() -> JSONResponse:
     Intended for the watchlist table to badge rows without per-row API calls.
     Response: { "candidates": [{ "mmsi": "...", "causal_score": 0.0 }, ...] }
     """
-    db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+    db_path = os.getenv("DB_PATH", str(Path(_canonical_data_dir()) / "singapore.duckdb"))
     try:
         candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
     except Exception:
@@ -186,7 +187,7 @@ def vessel_causal(mmsi: str) -> JSONResponse:
     Returns causal_score=0 and is_candidate=false if the vessel is in the sanctions
     graph or does not meet the minimum signal threshold.
     """
-    db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+    db_path = os.getenv("DB_PATH", str(Path(_canonical_data_dir()) / "singapore.duckdb"))
     try:
         candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
     except Exception:
@@ -352,7 +353,7 @@ def _ownership_chain(mmsi: str) -> list[dict]:
 
         from src.graph.store import load_tables
 
-        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+        db_path = os.getenv("DB_PATH", str(Path(_canonical_data_dir()) / "singapore.duckdb"))
         tables = load_tables(db_path)
 
         ob: pl.DataFrame = pl.from_arrow(tables["OWNED_BY"])  # type: ignore[assignment]

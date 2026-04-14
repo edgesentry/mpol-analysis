@@ -27,8 +27,8 @@ from pydantic import BaseModel
 from src.api.db import get_conn
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
+from src.storage.config import _canonical_data_dir, watchlist_uri
 from src.storage.config import read_parquet as read_parquet_uri
-from src.storage.config import watchlist_uri
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -197,7 +197,7 @@ def _query_graph_ownership(mmsi: str) -> str:
 
         from src.graph.store import load_tables
 
-        db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+        db_path = os.getenv("DB_PATH", str(Path(_canonical_data_dir()) / "singapore.duckdb"))
         tables = load_tables(db_path)
 
         ob = pl.from_arrow(tables["OWNED_BY"])

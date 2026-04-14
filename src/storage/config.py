@@ -1,14 +1,19 @@
 """Centralised storage configuration for local and S3-compatible backends.
 
-By default (and for the typical user who pulls data via sync_r2.py) the app
-reads from local disk under data/processed/.  S3 mode is only enabled when
-USE_S3=1 is explicitly set, allowing R2 credentials to live in .env for
-push/pull without accidentally routing all app reads to the remote bucket.
+App users keep all data under ``~/.arktrace/data/`` (pulled from R2 via
+sync_r2.py / bootstrap.py).  Pipeline and CI workflows write intermediate
+outputs to ``data/processed/`` on the operator's machine; those files are
+never shipped to app users directly.
+
+S3 mode is only enabled when USE_S3=1 is explicitly set, allowing R2
+credentials to live in .env for push/pull without accidentally routing all
+app reads to the remote bucket.
 
 Environment variables
 ---------------------
 USE_S3                Set to "1" or "true" to route all data reads/writes to S3.
                       Default: off (local disk).
+ARKTRACE_DATA_DIR     Override the user data directory (default: ~/.arktrace/data).
 S3_BUCKET             Bucket name (required when USE_S3=1)
 S3_ENDPOINT           Custom endpoint URL for R2 / MinIO
 AWS_ACCESS_KEY_ID
@@ -29,6 +34,17 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _canonical_data_dir() -> str:
+    """User-level data directory: ARKTRACE_DATA_DIR env var or ~/.arktrace/data.
+
+    Mirrors bootstrap._default_data_dir() — kept here so config.py has no
+    import dependency on bootstrap.py.
+    """
+    if explicit := os.getenv("ARKTRACE_DATA_DIR"):
+        return str(Path(explicit).expanduser())
+    return str(Path.home() / ".arktrace" / "data")
 
 
 def is_s3() -> bool:
@@ -109,22 +125,27 @@ def lance_db_uri() -> str:
     """LanceDB URI for GDELT event store.
 
     Returns ``s3://<bucket>/gdelt.lance`` when S3 is enabled, otherwise the
-    value of ``GDELT_LANCE_PATH`` (default ``data/processed/gdelt.lance``).
+    value of ``GDELT_LANCE_PATH`` (default ``~/.arktrace/data/gdelt.lance``).
     """
     if is_s3():
         return f"s3://{_bucket()}/gdelt.lance"
-    return os.getenv("GDELT_LANCE_PATH", "data/processed/gdelt.lance")
+    return os.getenv(
+        "GDELT_LANCE_PATH",
+        str(Path(_canonical_data_dir()) / "gdelt.lance"),
+    )
 
 
 def output_uri(filename: str) -> str:
-    """Output artifact URI.
+    """Output artifact URI for app data files.
 
     Returns ``s3://<bucket>/processed/<filename>`` when S3 is enabled,
-    otherwise ``<DATA_DIR>/<filename>`` (default ``data/processed``).
+    otherwise ``<DATA_DIR>/<filename>`` (default ``~/.arktrace/data``).
+    App users keep all data under ``~/.arktrace/data/``; pipeline/CI
+    operators can override with ``DATA_DIR=data/processed``.
     """
     if is_s3():
         return f"s3://{_bucket()}/processed/{filename}"
-    data_dir = os.getenv("DATA_DIR", "data/processed")
+    data_dir = os.getenv("DATA_DIR", _canonical_data_dir())
     return os.path.join(data_dir, filename)
 
 
@@ -153,7 +174,7 @@ def watchlist_uri() -> str:
     explicit = os.getenv("WATCHLIST_OUTPUT_PATH")
     if explicit:
         return explicit
-    db_stem = Path(os.getenv("DB_PATH", "data/processed/mpol.duckdb")).stem
+    db_stem = Path(os.getenv("DB_PATH", str(Path(_canonical_data_dir()) / "singapore.duckdb"))).stem
     filename = _DB_STEM_TO_WATCHLIST.get(db_stem, "candidate_watchlist.parquet")
     return output_uri(filename)
 
