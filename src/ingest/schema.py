@@ -17,7 +17,34 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/singapore.duckdb")
+def _default_db_path() -> str:
+    """Return the default DuckDB path.
+
+    Resolution order:
+    1. ``DB_PATH`` env var (explicit override — used in dev and CI)
+    2. ``ARKTRACE_DATA_DIR`` + ``ARKTRACE_REGION`` (user config)
+    3. ``~/.arktrace/data/<region>.duckdb`` (standard user-level location)
+    """
+    if explicit := os.getenv("DB_PATH"):
+        return explicit
+    from pathlib import Path
+
+    _REGION_TO_STEM = {
+        "singapore": "singapore",
+        "japan": "japansea",
+        "middleeast": "middleeast",
+        "europe": "europe",
+        "gulf": "gulf",
+    }
+    region = os.getenv("ARKTRACE_REGION", "singapore").lower().strip()
+    stem = _REGION_TO_STEM.get(region, "singapore")
+    data_dir = Path(os.getenv("ARKTRACE_DATA_DIR", "")).expanduser() if os.getenv(
+        "ARKTRACE_DATA_DIR"
+    ) else Path.home() / ".arktrace" / "data"
+    return str(data_dir / f"{stem}.duckdb")
+
+
+DEFAULT_DB_PATH = _default_db_path()
 
 
 def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:

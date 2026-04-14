@@ -1,19 +1,31 @@
-"""Auto-pull processed data from R2 on startup if the local cache is missing.
+"""Auto-pull processed data from R2 on startup if the local cache is missing or stale.
 
-Called from ``src.api.main`` during the FastAPI startup event.  Has no effect
-when the required files already exist, or when R2 credentials are not
-configured (S3_BUCKET / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).
+Called from ``src.api.main`` during the FastAPI startup event.
+
+Behaviour
+---------
+1. If local files are **missing** → pull from R2 (same as before).
+2. If local files are **present but older than the R2 latest snapshot** → re-pull.
+3. If local files are **current** → no-op (no network round-trip beyond reading
+   the tiny ``latest`` pointer file).
+
+Data directory and region resolution order
+------------------------------------------
+1. ``DB_PATH`` env var (explicit full path — dev / CI; overrides everything)
+2. ``ARKTRACE_DATA_DIR`` / ``ARKTRACE_REGION`` env vars
+3. ``~/.arktrace/data/<region>.duckdb`` (standard user-level install location)
 
 Environment variables
 ---------------------
-DB_PATH                 Path to the region DuckDB (used to detect which region
-                        to pull and whether the cache is present).
-                        Default: data/processed/singapore.duckdb
+DB_PATH                 Full path to the region DuckDB (overrides all below).
+ARKTRACE_REGION         Region to use: singapore (default), japan, middleeast,
+                        europe, gulf.
+ARKTRACE_DATA_DIR       Override the data directory (default: ~/.arktrace/data/).
 S3_BUCKET               R2 bucket name. Default: arktrace-public
-S3_ENDPOINT             R2 endpoint URL. Default: arktrace-public R2 endpoint
+S3_ENDPOINT             R2 endpoint URL.
 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
                         R2 credentials. When absent the public bucket is pulled
-                        anonymously (no credentials needed for reads).
+                        anonymously (no credentials needed for public bucket reads).
 AUTO_PULL               Set to "0" or "false" to disable auto-pull entirely.
 """
 
@@ -21,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -35,12 +48,49 @@ _STEM_TO_REGION: dict[str, str] = {
     "mpol": "singapore",  # default DB falls back to singapore region data
 }
 
-_DEFAULT_DB_PATH = "data/processed/singapore.duckdb"
-_WATCHLIST_PATH = "data/processed/candidate_watchlist.parquet"
+# Maps user-facing region name → DuckDB filename stem
+_REGION_TO_STEM: dict[str, str] = {
+    "singapore": "singapore",
+    "japan": "japansea",
+    "middleeast": "middleeast",
+    "europe": "europe",
+    "gulf": "gulf",
+}
+
+_DEFAULT_REGION = "singapore"
+_VALID_REGIONS = set(_REGION_TO_STEM)
 
 
-def _r2_configured() -> bool:
-    return all(os.getenv(v) for v in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"))
+def _default_data_dir() -> Path:
+    """Return the data directory, honouring env overrides."""
+    if explicit := os.getenv("ARKTRACE_DATA_DIR"):
+        return Path(explicit).expanduser()
+    return Path.home() / ".arktrace" / "data"
+
+
+def _default_region() -> str:
+    """Return the configured region (default: singapore)."""
+    region = os.getenv("ARKTRACE_REGION", _DEFAULT_REGION).lower().strip()
+    if region not in _VALID_REGIONS:
+        logger.warning(
+            "ARKTRACE_REGION=%r is not a valid region (%s). Falling back to '%s'.",
+            region,
+            ", ".join(sorted(_VALID_REGIONS)),
+            _DEFAULT_REGION,
+        )
+        return _DEFAULT_REGION
+    return region
+
+
+def _default_db_path() -> str:
+    if explicit := os.getenv("DB_PATH"):
+        return explicit
+    stem = _REGION_TO_STEM[_default_region()]
+    return str(_default_data_dir() / f"{stem}.duckdb")
+
+
+def _watchlist_path(data_dir: Path) -> Path:
+    return data_dir / "candidate_watchlist.parquet"
 
 
 def _auto_pull_enabled() -> bool:
@@ -48,50 +98,124 @@ def _auto_pull_enabled() -> bool:
     return val not in ("0", "false", "no", "off")
 
 
-def _cache_present(db_path: str) -> bool:
-    """Return True if both the region DB and the watchlist exist."""
-    return Path(db_path).exists() and Path(_WATCHLIST_PATH).exists()
+def _r2_configured() -> bool:
+    return all(os.getenv(v) for v in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"))
 
 
-def _region_for_db(db_path: str) -> str:
-    stem = Path(db_path).stem
-    return _STEM_TO_REGION.get(stem, "singapore")
+def _cache_present(db_path: Path, watchlist: Path) -> bool:
+    return db_path.exists() and watchlist.exists()
+
+
+def _remote_timestamp(fs, bucket: str) -> datetime | None:
+    """Read the R2 ``latest`` pointer and return it as an aware UTC datetime."""
+    try:
+        from scripts.sync_r2 import _read_latest
+
+        ts = _read_latest(fs, bucket)
+        if not ts:
+            return None
+        return datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+    except Exception:
+        return None
+
+
+def _local_mtime(db_path: Path, watchlist: Path) -> datetime:
+    """Return the older of the two local file mtimes as an aware UTC datetime."""
+    db_mt = db_path.stat().st_mtime
+    wl_mt = watchlist.stat().st_mtime
+    return datetime.fromtimestamp(min(db_mt, wl_mt), tz=UTC)
+
+
+def _is_stale(db_path: Path, watchlist: Path, fs, bucket: str) -> bool:
+    """Return True if the R2 latest snapshot is newer than the oldest local file."""
+    remote_dt = _remote_timestamp(fs, bucket)
+    if remote_dt is None:
+        return False  # can't determine → assume current
+    local_dt = _local_mtime(db_path, watchlist)
+    stale = remote_dt > local_dt
+    if stale:
+        logger.info(
+            "Staleness check: remote=%s local=%s → re-download triggered",
+            remote_dt.strftime("%Y%m%dT%H%M%SZ"),
+            local_dt.strftime("%Y%m%dT%H%M%SZ"),
+        )
+    else:
+        logger.debug(
+            "Staleness check: local files are current (remote=%s)",
+            remote_dt.strftime("%Y%m%dT%H%M%SZ"),
+        )
+    return stale
+
+
+def _region_for_db(db_path: Path) -> str:
+    return _STEM_TO_REGION.get(db_path.stem, "singapore")
+
+
+def _build_fs(bucket: str):
+    """Build the R2 filesystem (anonymous for public bucket reads)."""
+    import sys
+
+    scripts_dir = str(Path(__file__).parents[3] / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
+    from scripts.sync_r2 import _build_r2_fs
+
+    anon = not _r2_configured()
+    return _build_r2_fs(anonymous=anon)
 
 
 def maybe_pull() -> None:
-    """Pull data from R2 if local cache is missing and credentials are available.
+    """Pull data from R2 if the local cache is missing or stale.
 
-    This function is intentionally synchronous and blocking — the app must not
-    start serving requests before the data is ready.
+    Blocking — the app must not serve requests before data is ready.
+    Set ``AUTO_PULL=0`` to skip entirely (useful in offline environments).
     """
     if not _auto_pull_enabled():
         return
 
-    db_path = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
+    from dotenv import load_dotenv
 
-    if _cache_present(db_path):
+    load_dotenv()
+
+    import os as _os
+
+    from scripts.sync_r2 import _DEFAULT_BUCKET
+
+    db_path = Path(_default_db_path())
+    data_dir = db_path.parent
+    watchlist = _watchlist_path(data_dir)
+    bucket = _os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+
+    present = _cache_present(db_path, watchlist)
+
+    # Build fs once (used for both staleness check and potential pull)
+    try:
+        fs = _build_fs(bucket)
+    except Exception as exc:
+        if not present:
+            logger.warning(
+                "Cannot connect to R2 and local cache is missing (%s): %s. "
+                "The dashboard will show empty data.",
+                db_path,
+                exc,
+            )
         return
 
-    if not _r2_configured():
-        logger.warning(
-            "Local data cache is missing (%s) and R2 credentials are not set. "
-            "The dashboard will show empty data. "
-            "Set S3_BUCKET / S3_ENDPOINT / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY "
-            "in .env to enable auto-pull, or run: "
-            "uv run python scripts/sync_r2.py pull",
-            db_path,
+    if present:
+        if not _is_stale(db_path, watchlist, fs, bucket):
+            return  # files exist and are current — nothing to do
+        logger.info(
+            "Local data at %s is stale. Re-downloading from R2 …", data_dir
         )
-        return
+    else:
+        logger.info(
+            "Local data cache not found at %s. Pulling from R2 …", data_dir
+        )
 
     region = _region_for_db(db_path)
-    logger.info(
-        "Local data cache not found (%s). Pulling region '%s' from R2 …",
-        db_path,
-        region,
-    )
-
     try:
-        _pull(region, db_path)
+        _pull(region, db_path, fs, bucket)
     except Exception as exc:
         raise RuntimeError(
             f"Auto-pull from R2 failed for region '{region}': {exc}\n"
@@ -100,32 +224,12 @@ def maybe_pull() -> None:
         ) from exc
 
 
-def _pull(region: str, db_path: str) -> None:
+def _pull(region: str, db_path: Path, fs, bucket: str) -> None:
     """Invoke the sync_r2 pull logic directly (no subprocess)."""
-    from dotenv import load_dotenv
+    from scripts.sync_r2 import _pull_zip, _read_latest
 
-    load_dotenv()
-
-    import sys
-    from pathlib import Path as _Path
-
-    scripts_dir = str(_Path(__file__).parents[3] / "scripts")
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-
-    from sync_r2 import (
-        _DEFAULT_BUCKET,
-        _build_r2_fs,
-        _pull_zip,
-        _read_latest,
-    )
-
-    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
-    data_dir = _Path(os.getenv("DATA_DIR", "data/processed"))
-
-    # Anonymous pull if no write credentials (public bucket)
-    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
-    fs = _build_r2_fs(anonymous=anon)
+    data_dir = db_path.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = _read_latest(fs, bucket)
     if not timestamp:
@@ -136,4 +240,4 @@ def _pull(region: str, db_path: str) -> None:
 
     logger.info("Downloading %s.zip for region '%s' …", timestamp, region)
     downloaded = _pull_zip(fs, bucket, timestamp, data_dir, [region])
-    logger.info("Auto-pull complete: %.1f MB downloaded.", downloaded / 1_048_576)
+    logger.info("Auto-pull complete: %.1f MB downloaded to %s.", downloaded / 1_048_576, data_dir)

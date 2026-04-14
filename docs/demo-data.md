@@ -2,8 +2,38 @@
 
 arktrace ships a lightweight **demo bundle** to Cloudflare R2 after every
 successful data-publish CI run.  Developers can download it with a single
-command, no credentials required, to explore the dashboard output without
-running the full AIS ingestion and scoring pipeline locally.
+command, no credentials required, to explore the app without running the full
+AIS ingestion and scoring pipeline locally.
+
+---
+
+## Data directory
+
+Files are stored in **`~/.arktrace/data/`** by default — a user-level location
+that persists across repo updates and works for both installed and source builds.
+
+| Override | Description |
+|----------|-------------|
+| `ARKTRACE_DATA_DIR=<path>` | Use a custom data directory |
+| `DB_PATH=<path>` | Full path to the region DuckDB (overrides everything; dev/CI use) |
+
+Repo contributors working from source will find `data/processed/` is used
+automatically when it already exists (the resolver checks for it first).
+
+---
+
+## Region selection
+
+Default region is **singapore**. Change it with the `ARKTRACE_REGION` env var
+or the `--region` flag on `fetch_demo_data.sh`:
+
+| Region | Value |
+|--------|-------|
+| Singapore (default) | `singapore` |
+| Sea of Japan | `japan` |
+| Middle East | `middleeast` |
+| Europe | `europe` |
+| Gulf of Mexico | `gulf` |
 
 ---
 
@@ -11,10 +41,15 @@ running the full AIS ingestion and scoring pipeline locally.
 
 ```bash
 # Option A: convenience shell script (recommended)
-bash scripts/fetch_demo_data.sh
+bash scripts/fetch_demo_data.sh                        # Singapore (default)
+bash scripts/fetch_demo_data.sh --region middleeast    # Middle East
 
 # Option B: Python sync script
-uv run python scripts/sync_r2.py pull-demo
+uv run python scripts/sync_r2.py pull-demo             # uses resolved data dir
+uv run python scripts/sync_r2.py pull-demo --data-dir ~/.arktrace/data
+
+# Option C: set region via env var
+ARKTRACE_REGION=gulf bash scripts/fetch_demo_data.sh
 ```
 
 Both commands download `demo.zip` from the public R2 bucket and extract:
@@ -26,11 +61,25 @@ Both commands download `demo.zip` from the public R2 bucket and extract:
 | `causal_effects.parquet` | C3 DiD causal uplift estimates |
 | `validation_metrics.json` | Backtest metrics (AUROC, Recall@200, P@50) |
 
-Files land in `data/processed/`.  After pulling, start the dashboard:
+After pulling, start the API:
 
 ```bash
-uv run streamlit run src/ui/app.py
-open http://localhost:8501
+# Singapore (default)
+uv run uvicorn src.api.main:app --reload
+open http://localhost:8000
+
+# Different region
+ARKTRACE_REGION=japan uv run uvicorn src.api.main:app --reload
+```
+
+### Auto-pull on startup
+
+The app checks on every startup whether local files are **missing or stale**
+(older than the R2 latest snapshot). If so, it re-downloads automatically —
+no manual intervention needed after the first pull.
+
+```
+AUTO_PULL=0  # disable auto-pull (offline / air-gapped environments)
 ```
 
 ### Optional extras
@@ -56,11 +105,9 @@ every weekly pipeline run.  If you need to push a manually generated batch:
 # Singapore is the primary demo region
 uv run python scripts/run_pipeline.py --region singapore --non-interactive
 
-# Optional: also run Japan and Middle East for a fuller candidate_watchlist
+# Optional: also run other regions
 uv run python scripts/run_pipeline.py --region japan,middleeast --non-interactive
 ```
-
-This writes pipeline outputs to `data/processed/`.
 
 ### 2. Run the backtest to generate validation_metrics.json
 
@@ -74,23 +121,13 @@ uv run python scripts/run_public_backtest_batch.py \
 ### 3. Push the demo bundle to R2
 
 ```bash
-# Requires R2 write credentials in .env or environment:
+# Requires R2 write credentials in .env:
 #   AWS_ACCESS_KEY_ID=<key>
 #   AWS_SECRET_ACCESS_KEY=<secret>
 uv run python scripts/sync_r2.py push-demo
 ```
 
 This overwrites `demo.zip` in R2 with the current `data/processed/` outputs.
-The push is idempotent — re-running it replaces the previous demo bundle.
-
-### 4. Verify (optional)
-
-```bash
-# Pull in a clean temp directory to confirm the bundle is intact
-mkdir -p /tmp/arktrace-demo-check/data/processed
-uv run python scripts/sync_r2.py pull-demo --data-dir /tmp/arktrace-demo-check/data/processed
-ls -lh /tmp/arktrace-demo-check/data/processed/
-```
 
 ---
 
@@ -102,7 +139,7 @@ enabled.
 
 1. Create an R2 API token at Cloudflare Dashboard → R2 → Manage R2 API Tokens
    with **Object Read & Write** permission scoped to `arktrace-public`.
-2. Add to `.env` (or set as environment variables / CI secrets):
+2. Add to `.env`:
 
 ```dotenv
 AWS_ACCESS_KEY_ID=<your-r2-access-key-id>
@@ -112,24 +149,12 @@ S3_ENDPOINT=https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com
 S3_BUCKET=arktrace-public
 ```
 
-In CI, these are stored as repository secrets (`AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`).
-
 ---
 
 ## CI integration
 
-The `data-publish.yml` workflow runs every Monday 02:00 UTC and after each
-successful public-backtest-integration run.  The pipeline is:
-
-1. Pull watchlists from R2
-2. Run backtest (`--skip-pipeline`)
-3. **Push demo bundle** (`push-demo`) — overwrites `demo.zip`
-4. Push full snapshot (`push`) — timestamped rotation zip
-5. Push OpenSanctions DB (`push-sanctions-db`)
-6. Send metrics email
-
-Step 3 ensures the public demo bundle is always in sync with the latest
-backtest output, so developers pulling `pull-demo` always get recent data.
+The `data-publish.yml` workflow pushes the demo bundle automatically after
+every weekly pipeline run (Monday 02:00 UTC) and after each successful
+public-backtest-integration run.
 
 See also: [r2-data-layout.md](r2-data-layout.md) for the full R2 bucket structure.
