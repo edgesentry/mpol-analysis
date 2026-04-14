@@ -178,14 +178,6 @@ def build_graph_tables(
     for r in vessel_rows:
         vessels[r[0]] = {"mmsi": r[0], "imo": r[1], "name": r[2]}
 
-    # Upsert vessel nodes for sanctioned vessels not yet in vessel_meta.
-    # Without this, SANCTIONED_BY edges cannot be created for MMSI-only
-    # entities (those seen in sanctions data but never observed in AIS),
-    # causing their sanctions_distance to be stuck at 99.
-    for _entity_id, mmsi, imo, _list_source in sanctioned_vessel_rows:
-        if mmsi and mmsi not in vessels:
-            vessels[mmsi] = {"mmsi": mmsi, "imo": imo or "", "name": ""}
-
     companies: dict[str, dict] = {}
     for entity_id, name, flag, _ in company_rows:
         companies[entity_id] = {"id": entity_id, "name": name, "country": flag}
