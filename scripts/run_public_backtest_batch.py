@@ -221,6 +221,14 @@ def main() -> None:
         ),
     )
     parser.add_argument("--refresh-public-data", action="store_true")
+    parser.add_argument(
+        "--skip-pipeline",
+        action="store_true",
+        help=(
+            "Skip running the regional pipeline and use existing watchlist parquets directly. "
+            "Useful in CI when real watchlists have been pre-pulled from R2."
+        ),
+    )
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parents[1]
@@ -245,14 +253,20 @@ def main() -> None:
     for region in regions:
         if region not in WATCHLIST_BY_REGION:
             raise SystemExit(f"Unsupported region: {region}")
-        _run_pipeline_for_region(
-            scripts_dir=scripts_dir,
-            region=region,
-            gdelt_days=args.gdelt_days,
-            stream_duration=args.stream_duration,
-            seed_dummy=args.seed_dummy,
-            marine_cadastre_year=args.marine_cadastre_year,
-        )
+        if args.skip_pipeline:
+            print(
+                f"[skip-pipeline] {region}: using existing watchlist parquet",
+                flush=True,
+            )
+        else:
+            _run_pipeline_for_region(
+                scripts_dir=scripts_dir,
+                region=region,
+                gdelt_days=args.gdelt_days,
+                stream_duration=args.stream_duration,
+                seed_dummy=args.seed_dummy,
+                marine_cadastre_year=args.marine_cadastre_year,
+            )
 
     positives = _load_public_positives(public_db)
 

@@ -55,6 +55,10 @@ Commands
   pull-gdelt          download + extract gdelt.lance.zip → data/processed/gdelt.lance
   push-sanctions-db   upload public_eval.duckdb (OpenSanctions DB) to R2
   pull-sanctions-db   download public_eval.duckdb from R2 — needed for integration tests
+  push-watchlists     upload *_watchlist.parquet files as watchlists.zip (<1 MB) — run after
+                      a real pipeline run so CI can pull real watchlists for the backtest
+  pull-watchlists     download watchlists.zip from R2 and extract into data/processed/ — used
+                      by data-publish CI job (replaces seeded pipeline run)
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -70,10 +74,12 @@ Examples
   uv run python scripts/sync_r2.py push                      # push new zip, prune old
   uv run python scripts/sync_r2.py push-gdelt                # upload/update gdelt.lance.zip
   uv run python scripts/sync_r2.py push-sanctions-db         # upload/update public_eval.duckdb
+  uv run python scripts/sync_r2.py push-watchlists           # upload *_watchlist.parquet (<1 MB)
   uv run python scripts/sync_r2.py pull                      # pull latest (no credentials needed)
   uv run python scripts/sync_r2.py pull --timestamp 20260411T080000Z
   uv run python scripts/sync_r2.py pull-gdelt                # pull gdelt.lance.zip
   uv run python scripts/sync_r2.py pull-sanctions-db         # pull public_eval.duckdb for tests
+  uv run python scripts/sync_r2.py pull-watchlists           # pull watchlists.zip (used by CI)
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -103,6 +109,7 @@ _DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestora
 _LATEST_KEY = "latest"  # plain-text pointer to newest timestamp
 _GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
 _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from rotation zip
+_WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 
 # Maps user-facing region name → file prefix used in data/processed/
 # e.g. "japan" → files are japansea.duckdb, japansea_graph/, japansea_watchlist.parquet
@@ -661,6 +668,96 @@ def cmd_pull_sanctions_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_watchlists(args: argparse.Namespace) -> int:
+    """Upload *_watchlist.parquet + candidate_watchlist.parquet as watchlists.zip.
+
+    The resulting zip is tiny (< 1 MB) and is pulled by the data-publish CI job
+    via ``pull-watchlists`` so the backtest can use real watchlists instead of
+    seeded dummy data.
+    """
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    data_dir = Path(args.data_dir)
+    r2_path = f"{bucket}/{_WATCHLISTS_R2_KEY}"
+
+    # *_watchlist.parquet already matches candidate_watchlist.parquet; use a
+    # set to avoid duplicates when both patterns hit the same file.
+    seen: set[Path] = set()
+    watchlist_files = []
+    for pattern in ["*_watchlist.parquet", "candidate_watchlist.parquet"]:
+        for f in sorted(data_dir.glob(pattern)):
+            if f not in seen:
+                seen.add(f)
+                watchlist_files.append(f)
+
+    if not watchlist_files:
+        print(
+            f"No watchlist parquets found in {data_dir}. "
+            "Run the pipeline for at least one region first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        with zipmod.ZipFile(tmp_path, "w", compression=zipmod.ZIP_STORED) as zf:
+            for f in watchlist_files:
+                zf.write(f, arcname=f.name)
+                print(f"  + {f.name} ({f.stat().st_size / 1024:.1f} KB)")
+        size_mb = tmp_path.stat().st_size / 1_048_576
+        print(f"Uploading watchlists.zip ({size_mb:.2f} MB) → R2 {r2_path} ...")
+        uploaded = _upload_file(fs, tmp_path, r2_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {uploaded / 1_048_576:.2f} MB uploaded.")
+    return 0
+
+
+def cmd_pull_watchlists(args: argparse.Namespace) -> int:
+    """Download watchlists.zip from R2 and extract into data/processed/."""
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    data_dir = Path(args.data_dir)
+    r2_path = f"{bucket}/{_WATCHLISTS_R2_KEY}"
+
+    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    fs = _build_r2_fs(anonymous=anon)
+
+    import pyarrow.fs as pafs
+
+    try:
+        infos = fs.get_file_info([r2_path])
+        if infos[0].type == pafs.FileType.NotFound:
+            raise FileNotFoundError
+        size_mb = infos[0].size / 1_048_576
+    except Exception:
+        print(
+            "No watchlists.zip found in R2. Push real watchlists first with:\n"
+            "  uv run python scripts/sync_r2.py push-watchlists",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Downloading watchlists.zip ({size_mb:.2f} MB) ...")
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        downloaded = _download_file(fs, r2_path, tmp_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        with zipmod.ZipFile(tmp_path, "r") as zf:
+            zf.extractall(data_dir)
+            names = zf.namelist()
+        print(f"Extracted {len(names)} files to {data_dir}/: {', '.join(names)}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {downloaded / 1_048_576:.2f} MB downloaded.")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -789,6 +886,21 @@ def main() -> int:
     )
     pull_sanctions_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
+    push_watchlists_p = sub.add_parser(
+        "push-watchlists",
+        help=(
+            "Upload *_watchlist.parquet files as watchlists.zip — run after a real pipeline "
+            "run to make watchlists available to CI via pull-watchlists"
+        ),
+    )
+    push_watchlists_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
+    pull_watchlists_p = sub.add_parser(
+        "pull-watchlists",
+        help="Download watchlists.zip from R2 and extract into data/processed/ — used by CI",
+    )
+    pull_watchlists_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -797,7 +909,13 @@ def main() -> int:
 
     load_dotenv()
 
-    read_only = args.command in ("pull", "pull-gdelt", "pull-sanctions-db", "list")
+    read_only = args.command in (
+        "pull",
+        "pull-gdelt",
+        "pull-sanctions-db",
+        "pull-watchlists",
+        "list",
+    )
     if not _check_env(require_credentials=not read_only):
         return 1
 
@@ -808,6 +926,8 @@ def main() -> int:
         "pull-gdelt": cmd_pull_gdelt,
         "push-sanctions-db": cmd_push_sanctions_db,
         "pull-sanctions-db": cmd_pull_sanctions_db,
+        "push-watchlists": cmd_push_watchlists,
+        "pull-watchlists": cmd_pull_watchlists,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

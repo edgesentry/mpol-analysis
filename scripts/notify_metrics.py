@@ -154,6 +154,18 @@ def main() -> int:
     snapshot_info = f"{snapshot_id} ({snapshot_mb} MB)" if snapshot_id else "see CI run"
 
     report = _load_report()
+
+    # Skip email when all regions were skipped (no real watchlist data in CI).
+    # This happens when watchlists.zip has not been pushed to R2 yet or when
+    # every region falls below --min-watchlist-size (seeded dummy data only).
+    if report.get("total_known_cases", 0) == 0 and not report.get("regions"):
+        print(
+            "All regions were skipped (total_known_cases=0, evaluated regions=[]).\n"
+            "Email suppressed — push real watchlists first:\n"
+            "  uv run python scripts/sync_r2.py push-watchlists"
+        )
+        return 0
+
     subject, html_body = _format_body(report, prev_p50, run_url, snapshot_info)
 
     msg = MIMEMultipart("alternative")
