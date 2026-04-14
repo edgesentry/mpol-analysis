@@ -89,6 +89,62 @@ jobs:
           echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
+      - name: Seed demo files for push-demo
+        # push-demo reads from ~/.arktrace/data/; the backtest writes outputs to
+        # data/processed/.  Copy/generate the three required demo files so
+        # push-demo can find them regardless of whether the full pipeline ran.
+        run: |
+          uv run python - <<'EOF'
+          import json, shutil
+          from pathlib import Path
+          import polars as pl
+
+          demo_dir = Path.home() / ".arktrace" / "data"
+          demo_dir.mkdir(parents=True, exist_ok=True)
+          processed = Path("data/processed")
+
+          # composite_scores.parquet — use candidate_watchlist if available
+          src = processed / "candidate_watchlist.parquet"
+          dst = demo_dir / "composite_scores.parquet"
+          if src.exists() and not dst.exists():
+              shutil.copy2(src, dst)
+              print(f"  composite_scores.parquet ← {src}")
+
+          # causal_effects.parquet — empty schema if missing
+          dst_c = demo_dir / "causal_effects.parquet"
+          if not dst_c.exists():
+              df = pl.DataFrame(schema={
+                  "regime": pl.Utf8, "label": pl.Utf8,
+                  "n_treated": pl.Int32, "n_control": pl.Int32,
+                  "att_estimate": pl.Float64, "att_ci_lower": pl.Float64,
+                  "att_ci_upper": pl.Float64, "p_value": pl.Float64,
+                  "is_significant": pl.Boolean, "calibrated_weight": pl.Float64,
+              })
+              df.write_parquet(dst_c)
+              print("  causal_effects.parquet ← empty schema (no full pipeline in CI)")
+
+          # validation_metrics.json — derive from backtest report if missing
+          dst_m = demo_dir / "validation_metrics.json"
+          if not dst_m.exists():
+              report_path = processed / "backtest_report_public_integration.json"
+              metrics = {}
+              if report_path.exists():
+                  report = json.loads(report_path.read_text())
+                  s = report.get("summary", {})
+                  metrics = {
+                      "auroc": s.get("auroc"),
+                      "precision_at_50": s.get("precision_at_50"),
+                      "recall_at_200": s.get("recall_at_200"),
+                      "recall_at_25": s.get("recall_at_25"),
+                      "false_negatives": s.get("false_negatives"),
+                      "calibration_error": s.get("calibration_error"),
+                  }
+              dst_m.write_text(json.dumps(metrics, indent=2))
+              print(f"  validation_metrics.json ← {metrics}")
+
+          print("Seed demo files complete.")
+          EOF
+
       - name: Push demo bundle to R2 (public, no-auth download)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
