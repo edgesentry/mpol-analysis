@@ -31,14 +31,8 @@ done
 
 cd "$(dirname "$0")/.."
 
-# Resolve data dir (mirrors sync_r2._resolve_default_data_dir logic)
-if [[ -n "${ARKTRACE_DATA_DIR:-}" ]]; then
-  DATA_DIR="${ARKTRACE_DATA_DIR}"
-elif [[ -d "data/processed" ]]; then
-  DATA_DIR="data/processed"
-else
-  DATA_DIR="${HOME}/.arktrace/data"
-fi
+# Canonical location: ~/.arktrace/data  (override with ARKTRACE_DATA_DIR)
+DATA_DIR="${ARKTRACE_DATA_DIR:-${HOME}/.arktrace/data}"
 
 echo "Region: ${REGION}"
 echo "Fetching arktrace demo data from R2 → ${DATA_DIR}"

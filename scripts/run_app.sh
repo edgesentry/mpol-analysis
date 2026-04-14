@@ -68,8 +68,6 @@ case "${REGION}" in
     ;;
 esac
 
-export DB_PATH="${REPO_ROOT}/data/processed/${DB_FILENAME}"
-
 # ── Load .env ─────────────────────────────────────────────────────────────────
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -o allexport
@@ -78,11 +76,19 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   set +o allexport
 fi
 
+# ── Resolve data directory ─────────────────────────────────────────────────────
+# Canonical location: ~/.arktrace/data  (override with ARKTRACE_DATA_DIR)
+DATA_DIR="${ARKTRACE_DATA_DIR:-${HOME}/.arktrace/data}"
+export ARKTRACE_DATA_DIR="${DATA_DIR}"
+export ARKTRACE_REGION="${REGION}"
+export DB_PATH="${DATA_DIR}/${DB_FILENAME}"
+
 # ── Check local data ──────────────────────────────────────────────────────────
-if [[ ! -f "${DB_PATH}" ]]; then
-  echo "⬇️  Local data not found for region '${REGION}' (${DB_PATH})."
+WATCHLIST="${DATA_DIR}/candidate_watchlist.parquet"
+if [[ ! -f "${WATCHLIST}" ]]; then
+  echo "⬇️  Local data not found for region '${REGION}' (${DATA_DIR})."
   echo "   Pulling from R2…"
-  uv run python "${SCRIPT_DIR}/sync_r2.py" pull --region "${REGION}"
+  uv run python "${SCRIPT_DIR}/sync_r2.py" pull --region "${REGION}" --data-dir "${DATA_DIR}"
   echo ""
 fi
 
@@ -130,6 +136,7 @@ fi
 # ── Print config summary ───────────────────────────────────────────────────────
 echo "🚀 Starting dashboard"
 echo "   Region        = ${REGION}"
+echo "   Data dir      = ${DATA_DIR}"
 echo "   DB_PATH       = ${DB_PATH}"
 echo "   LLM_PROVIDER  = ${LLM_PROVIDER:-openai}"
 echo "   LLM_BASE_URL  = ${LLM_BASE_URL:-http://localhost:${LLM_PORT}/v1}"

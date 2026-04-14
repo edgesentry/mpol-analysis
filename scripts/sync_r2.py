@@ -114,17 +114,12 @@ def _resolve_default_data_dir() -> str:
 
     Resolution order:
     1. ``ARKTRACE_DATA_DIR`` env var (explicit override)
-    2. ``data/processed`` if it exists under the current working directory
-       (repo-local dev / CI — keeps existing behaviour for contributors)
-    3. ``~/.arktrace/data`` (standard user-level install location)
+    2. ``~/.arktrace/data`` (canonical user-level data location)
     """
     import os as _os
 
     if explicit := _os.getenv("ARKTRACE_DATA_DIR"):
         return str(Path(explicit).expanduser())
-    repo_local = Path("data/processed")
-    if repo_local.exists():
-        return str(repo_local)
     return str(Path.home() / ".arktrace" / "data")
 
 

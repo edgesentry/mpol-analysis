@@ -103,7 +103,15 @@ def _r2_configured() -> bool:
 
 
 def _cache_present(db_path: Path, watchlist: Path) -> bool:
-    return db_path.exists() and watchlist.exists()
+    """Return True if local data is sufficient to serve the dashboard.
+
+    The watchlist parquet alone is enough for read-only API responses.
+    The DuckDB is needed for write operations (reviews etc.) but its absence
+    should not trigger an infinite re-pull loop when the R2 snapshot only
+    contains watchlist files (e.g. after a ``push-demo`` or ``push-watchlists``
+    without a full pipeline DuckDB).
+    """
+    return watchlist.exists()
 
 
 def _remote_timestamp(fs, bucket: str) -> datetime | None:
@@ -120,10 +128,16 @@ def _remote_timestamp(fs, bucket: str) -> datetime | None:
 
 
 def _local_mtime(db_path: Path, watchlist: Path) -> datetime:
-    """Return the older of the two local file mtimes as an aware UTC datetime."""
-    db_mt = db_path.stat().st_mtime
-    wl_mt = watchlist.stat().st_mtime
-    return datetime.fromtimestamp(min(db_mt, wl_mt), tz=UTC)
+    """Return the oldest mtime among files that actually exist."""
+    mtimes = []
+    for p in (db_path, watchlist):
+        try:
+            mtimes.append(p.stat().st_mtime)
+        except FileNotFoundError:
+            pass
+    if not mtimes:
+        return datetime.fromtimestamp(0, tz=UTC)  # epoch → always stale
+    return datetime.fromtimestamp(min(mtimes), tz=UTC)
 
 
 def _is_stale(db_path: Path, watchlist: Path, fs, bucket: str) -> bool:
