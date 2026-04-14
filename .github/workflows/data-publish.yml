@@ -103,8 +103,12 @@ jobs:
           demo_dir.mkdir(parents=True, exist_ok=True)
           processed = Path("data/processed")
 
-          # composite_scores.parquet — use candidate_watchlist if available
+          # composite_scores.parquet — use candidate_watchlist if available.
+          # "Pull watchlists from R2" downloads to demo_dir, not data/processed,
+          # so check demo_dir first as a fallback source.
           src = processed / "candidate_watchlist.parquet"
+          if not src.exists():
+              src = demo_dir / "candidate_watchlist.parquet"
           dst = demo_dir / "composite_scores.parquet"
           if src.exists() and not dst.exists():
               shutil.copy2(src, dst)
