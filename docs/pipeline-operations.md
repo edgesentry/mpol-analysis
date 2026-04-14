@@ -150,7 +150,7 @@ uv run python scripts/run_pipeline.py --region singapore \
 
 ---
 
-## Custom feed drop-ins (`_inputs/custom_feeds/`)
+## Custom feed drop-ins
 
 Drop any CSV file into `_inputs/custom_feeds/` and it is auto-detected and ingested on the next pipeline run — no code changes required. Step 5 (`step_custom_feeds`) runs before the ownership graph build so proprietary position and detection data is included in feature engineering.
 

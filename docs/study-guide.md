@@ -28,7 +28,7 @@ A key requirement of the challenge is that the solution must have a "low computa
 
 Understanding the "Annex A" submission requirements is critical. We frame Arktrace as a **TRL 6 baseline** system that is ready for a 7-week trial in the Singapore Strait. Every feature we build must map back to the specific "Shadow Fleet" behaviors named in the Cap Vista solicitation.
 
-- **Internal Docs:** [docs/proposal-draft.md](proposal-draft.md), [docs/trial-specification.md](trial-specification.md).
+- **Internal Docs:** [docs/trial-specification.md](trial-specification.md).
 - **Internal Source:** `../arktrace-commercial/inputs/challenge-statements.md`.
 
 ### Day 3: Tactical Edge Vision & Architecture
@@ -280,7 +280,7 @@ The "Mastery Checklist" at the end of the guide is your final exam. If you can a
 
 Congratulations on completing the 3-week Arktrace Intensive. You are now equipped to help deliver a world-class maritime security solution for the Cap Vista challenge.
 
-- **Internal Docs:** [docs/index.md](index.md), [docs/proposal-draft.md](proposal-draft.md).
+- **Internal Docs:** [docs/index.md](index.md).
 - **Internal Source:** `../arktrace-commercial/outputs/annex-a-submission.md`.
 
 ---
