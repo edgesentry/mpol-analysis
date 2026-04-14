@@ -167,7 +167,10 @@ jobs:
         run: |
           # --force ensures the DB is always refreshed after run_public_backtest_batch.py
           # regenerates it (which happens on every data-publish run).
-          uv run python scripts/sync_r2.py push-sanctions-db --force
+          # --data-dir points to data/processed where the backtest writes public_eval.duckdb
+          # (default is ~/.arktrace/data which is not where the backtest outputs it).
+          uv run python scripts/sync_r2.py push-sanctions-db --force \
+            --data-dir data/processed
 
       - name: Lead time validation (#268)
         run: |
