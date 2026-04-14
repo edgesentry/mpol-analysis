@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -55,14 +56,19 @@ import polars as pl
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 JSONL_PATH = REPO_ROOT / "data" / "raw" / "sanctions" / "opensanctions_entities.jsonl"
-PROCESSED = REPO_ROOT / "data" / "processed"
+
+# Watchlists are pulled from R2 to the canonical user data directory.
+# Pipeline operators can override with ARKTRACE_DATA_DIR or DATA_DIR.
+_watchlist_dir = Path(
+    os.getenv("ARKTRACE_DATA_DIR") or os.getenv("DATA_DIR") or (Path.home() / ".arktrace" / "data")
+)
 
 WATCHLIST_BY_REGION = {
-    "singapore": PROCESSED / "singapore_watchlist.parquet",
-    "japan": PROCESSED / "japansea_watchlist.parquet",
-    "europe": PROCESSED / "europe_watchlist.parquet",
-    "gulf": PROCESSED / "gulf_watchlist.parquet",
-    "middleeast": PROCESSED / "middleeast_watchlist.parquet",
+    "singapore": _watchlist_dir / "singapore_watchlist.parquet",
+    "japan": _watchlist_dir / "japansea_watchlist.parquet",
+    "europe": _watchlist_dir / "europe_watchlist.parquet",
+    "gulf": _watchlist_dir / "gulf_watchlist.parquet",
+    "middleeast": _watchlist_dir / "middleeast_watchlist.parquet",
 }
 
 # Score threshold above which a vessel is considered "flagged" by the model
