@@ -341,8 +341,18 @@ def test_apply_filter_down_weights_vessels_in_corridor():
     )
     df = _make_scored_df(
         [
-            {"mmsi": "cape_vessel", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
-            {"mmsi": "normal_vessel", "behavioral_deviation_score": 0.8, "last_lat": 1.3, "last_lon": 103.8},
+            {
+                "mmsi": "cape_vessel",
+                "behavioral_deviation_score": 0.8,
+                "last_lat": -30.0,
+                "last_lon": 18.0,
+            },
+            {
+                "mmsi": "normal_vessel",
+                "behavioral_deviation_score": 0.8,
+                "last_lat": 1.3,
+                "last_lon": 103.8,
+            },
         ]
     )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
@@ -364,7 +374,12 @@ def test_apply_filter_no_effect_when_event_inactive():
     )
     df = _make_scored_df(
         [
-            {"mmsi": "vessel1", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {
+                "mmsi": "vessel1",
+                "behavioral_deviation_score": 0.8,
+                "last_lat": -30.0,
+                "last_lon": 18.0,
+            },
         ]
     )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
@@ -374,7 +389,12 @@ def test_apply_filter_no_effect_when_event_inactive():
 def test_apply_filter_no_effect_when_no_active_events():
     df = _make_scored_df(
         [
-            {"mmsi": "vessel1", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {
+                "mmsi": "vessel1",
+                "behavioral_deviation_score": 0.8,
+                "last_lat": -30.0,
+                "last_lon": 18.0,
+            },
         ]
     )
     result = apply_geopolitical_filter(df, [], reference_date=date(2025, 1, 1))

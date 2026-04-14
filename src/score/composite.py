@@ -170,10 +170,14 @@ def apply_geopolitical_filter(
     for i, (lat, lon) in enumerate(zip(lats, lons)):
         for ev in active:
             if ev.vessel_in_corridor(lat, lon):
-                behavioral_deviation_scores[i] = float(behavioral_deviation_scores[i]) * ev.down_weight
+                behavioral_deviation_scores[i] = (
+                    float(behavioral_deviation_scores[i]) * ev.down_weight
+                )
                 break  # apply the most relevant active event only
 
-    return scored_df.with_columns(pl.Series("behavioral_deviation_score", behavioral_deviation_scores, dtype=pl.Float32))
+    return scored_df.with_columns(
+        pl.Series("behavioral_deviation_score", behavioral_deviation_scores, dtype=pl.Float32)
+    )
 
 
 # ITU Maritime Identification Digits (MID) → ISO 3166-1 alpha-2 country code.
