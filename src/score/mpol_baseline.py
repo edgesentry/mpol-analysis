@@ -112,14 +112,26 @@ def _cluster_group(
             }
         )
 
+    # Minimum group size for reliable HDBSCAN clustering.  Groups smaller than
+    # this produce near-universal noise labels (label=-1, baseline_noise_score=1.0)
+    # that degrade the anomaly component for every vessel indiscriminately.
+    # Fall back to noise=0.0 (Isolation Forest dominates) for tiny groups.
+    _MIN_RELIABLE_GROUP = 5
+
     matrix = group.select(BEHAVIOR_COLUMNS).to_numpy()
-    if len(group) < 3 or np.unique(matrix, axis=0).shape[0] < 2 or HDBSCAN is None:
+    if (
+        len(group) < _MIN_RELIABLE_GROUP
+        or np.unique(matrix, axis=0).shape[0] < 2
+        or HDBSCAN is None
+    ):
         labels = np.zeros(len(group), dtype=np.int32)
         noise = np.zeros(len(group), dtype=np.float32)
     else:
         scaler = StandardScaler()
         scaled = scaler.fit_transform(matrix)
-        min_cluster_size = max(2, min(10, len(group) // 2 or 2))
+        # Use 1/5 of group size (floor 5, cap 15) — avoids aggressive noise
+        # assignment that occurred with the old 1/2 divisor on small groups.
+        min_cluster_size = max(5, min(15, len(group) // 5 or 5))
         model = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=1, allow_single_cluster=True)
         labels = model.fit_predict(scaled).astype(np.int32)
         noise = (labels == -1).astype(np.float32)

@@ -452,6 +452,34 @@ def _compute_top_signals(feature_df: pl.DataFrame, model, scaled_matrix: np.ndar
         return pl.Series("top_signals", _top_signals_fallback(feature_df))
 
 
+def _load_propagation_floor(
+    propagation_path: str,
+) -> tuple[dict[str, float], dict[str, str]]:
+    """Load propagation artifact and return (floor_map, evidence_map).
+
+    floor_map:    {mmsi: max propagated_confidence}
+    evidence_map: {mmsi: evidence_type of highest-confidence path}
+    """
+    import json
+
+    try:
+        with open(propagation_path) as f:
+            report = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}, {}
+
+    floor: dict[str, float] = {}
+    evidence: dict[str, str] = {}
+    for row in report.get("vessels", []):
+        mmsi = row.get("mmsi", "")
+        conf = float(row.get("propagated_confidence", 0.0))
+        etype = row.get("evidence_type", "propagated")
+        if mmsi and conf > 0 and conf > floor.get(mmsi, 0.0):
+            floor[mmsi] = conf
+            evidence[mmsi] = etype
+    return floor, evidence
+
+
 def compute_composite_scores(
     db_path: str = DEFAULT_DB_PATH,
     w_anomaly: float = 0.35,
@@ -459,6 +487,7 @@ def compute_composite_scores(
     w_identity: float = 0.10,
     geo_filter_path: str | None = None,
     auto_calibrate: bool = False,
+    propagation_path: str | None = None,
 ) -> pl.DataFrame:
     if auto_calibrate:
         print("Auto-calibrating graph risk weight using C3 causal model...")
@@ -508,6 +537,46 @@ def compute_composite_scores(
             .alias("vessel_type"),
         ]
     )
+
+    # Apply label-propagation floor: vessels connected to confirmed-black vessels
+    # via ownership or STS edges receive a confidence floor equal to their
+    # propagated_confidence.  This only lifts vessels — never suppresses.
+    if propagation_path:
+        prop_floor, prop_evidence = _load_propagation_floor(propagation_path)
+        if prop_floor:
+            mmsi_list = scored["mmsi"].to_list()
+            floor_series = pl.Series(
+                "prop_floor",
+                [prop_floor.get(m, 0.0) for m in mmsi_list],
+                dtype=pl.Float32,
+            )
+            scored = scored.with_columns(
+                pl.max_horizontal(pl.col("confidence"), floor_series).alias("confidence")
+            )
+            # Annotate top_signals for lifted vessels with the propagation source.
+            old_sigs = scored["top_signals"].to_list()
+            new_sigs = []
+            for m, sig in zip(mmsi_list, old_sigs):
+                floor_val = prop_floor.get(m, 0.0)
+                if floor_val > 0:
+                    etype = prop_evidence.get(m, "propagated")
+                    entry = json.dumps(
+                        {
+                            "feature": "label_propagation",
+                            "evidence_type": etype,
+                            "value": round(floor_val, 3),
+                            "contribution": 1.0,
+                        }
+                    )
+                    existing = json.loads(sig) if sig else []
+                    new_sigs.append(json.dumps([json.loads(entry)] + existing))
+                else:
+                    new_sigs.append(sig)
+            scored = scored.with_columns(pl.Series("top_signals", new_sigs))
+            n_lifted = sum(1 for m in mmsi_list if prop_floor.get(m, 0.0) > 0)
+            print(
+                f"[label propagation] floor applied to {n_lifted} vessels from {propagation_path}"
+            )
 
     return scored.select(
         [
@@ -572,6 +641,16 @@ def main() -> None:
             "to reduce false positives from legitimate commercial rerouting."
         ),
     )
+    parser.add_argument(
+        "--propagation-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to label_propagation.json produced by src.analysis.label_propagation. "
+            "Vessels connected to confirmed-black vessels receive a confidence floor "
+            "equal to their propagated_confidence (only lifts, never suppresses)."
+        ),
+    )
     args = parser.parse_args()
 
     w_graph = args.w_graph
@@ -587,6 +666,7 @@ def main() -> None:
         args.w_identity,
         geo_filter_path=args.geopolitical_event_filter,
         auto_calibrate=auto_calibrate,
+        propagation_path=args.propagation_path,
     )
     write_composite_scores(df, args.output)
     print(f"Composite rows written: {df.height}")

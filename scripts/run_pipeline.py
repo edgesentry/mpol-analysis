@@ -642,9 +642,26 @@ def step_score(
     if geo_filter_path:
         composite_cmd += ["--geopolitical-event-filter", geo_filter_path]
 
+    # Label propagation runs before composite so the floor can be applied.
+    # The output path matches label_propagation.py DEFAULT_OUTPUT_PATH.
+    propagation_path = os.path.join(os.path.dirname(p.db_path), "label_propagation.json")
+    composite_cmd += ["--propagation-path", propagation_path]
+
     cmds = [
         ([sys.executable, "-m", "src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
         ([sys.executable, "-m", "src.score.anomaly", "--db", p.db_path], "anomaly"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "src.analysis.label_propagation",
+                "--db",
+                p.db_path,
+                "--output",
+                propagation_path,
+            ],
+            "label_propagation",
+        ),
         (composite_cmd, "composite"),
         (
             [
