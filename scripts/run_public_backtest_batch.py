@@ -325,6 +325,33 @@ def main() -> None:
     manifest_path = (project_root / args.manifest_out).resolve()
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
+    if not windows:
+        print(
+            "All regions were skipped — no backtest windows to evaluate. "
+            "Run a real AIS pipeline for at least one region before running this batch.",
+            flush=True,
+        )
+        summary = {
+            "generated_at_utc": datetime.now(UTC).isoformat(),
+            "regions": [],
+            "skipped_regions": skipped_regions,
+            "skipped_reason": (
+                f"watchlist below --min-watchlist-size={args.min_watchlist_size} "
+                "(likely seeded dummy data, not a real pipeline run)"
+            ),
+            "label_positive_counts": label_counts,
+            "total_known_cases": 0,
+            "min_known_cases_target": args.min_known_cases,
+            "report_path": str(report_path := (project_root / args.report_out).resolve()),
+            "manifest_path": str(manifest_path),
+            "region_summary": [],
+            "metrics_summary": {},
+        }
+        summary_path = (project_root / args.summary_out).resolve()
+        summary_path.write_text(json.dumps(summary, indent=2))
+        print(json.dumps(summary, indent=2))
+        return
+
     report_path = (project_root / args.report_out).resolve()
     report = run_backtest(str(manifest_path), str(report_path), [25, 50, 100, 200])
     report_dict = report if isinstance(report, dict) else {}
