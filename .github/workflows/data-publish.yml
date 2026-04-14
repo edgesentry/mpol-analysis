@@ -165,6 +165,13 @@ jobs:
           # regenerates it (which happens on every data-publish run).
           uv run python scripts/sync_r2.py push-sanctions-db --force
 
+      - name: Lead time validation (#268)
+        continue-on-error: true
+        run: |
+          uv run python scripts/validate_lead_time_ofac.py \
+            --all-regions \
+            --out data/processed/lead_time_report.json
+
       - name: Send metrics email (#210)
         if: always()
         env:
