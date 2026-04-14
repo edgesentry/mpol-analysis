@@ -323,7 +323,7 @@ def test_load_geopolitical_filter(tmp_path):
 def _make_scored_df(rows: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(rows).with_columns(
         [
-            pl.col("anomaly_score").cast(pl.Float32),
+            pl.col("behavioral_deviation_score").cast(pl.Float32),
             pl.col("last_lat").cast(pl.Float64),
             pl.col("last_lon").cast(pl.Float64),
         ]
@@ -341,14 +341,14 @@ def test_apply_filter_down_weights_vessels_in_corridor():
     )
     df = _make_scored_df(
         [
-            {"mmsi": "cape_vessel", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
-            {"mmsi": "normal_vessel", "anomaly_score": 0.8, "last_lat": 1.3, "last_lon": 103.8},
+            {"mmsi": "cape_vessel", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {"mmsi": "normal_vessel", "behavioral_deviation_score": 0.8, "last_lat": 1.3, "last_lon": 103.8},
         ]
     )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
 
-    cape_score = result.filter(pl.col("mmsi") == "cape_vessel")["anomaly_score"][0]
-    normal_score = result.filter(pl.col("mmsi") == "normal_vessel")["anomaly_score"][0]
+    cape_score = result.filter(pl.col("mmsi") == "cape_vessel")["behavioral_deviation_score"][0]
+    normal_score = result.filter(pl.col("mmsi") == "normal_vessel")["behavioral_deviation_score"][0]
     assert abs(cape_score - 0.4) < 1e-5, f"Expected 0.4, got {cape_score}"
     assert abs(normal_score - 0.8) < 1e-5, "Normal vessel score must be unchanged"
 
@@ -364,21 +364,21 @@ def test_apply_filter_no_effect_when_event_inactive():
     )
     df = _make_scored_df(
         [
-            {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {"mmsi": "vessel1", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
         ]
     )
     result = apply_geopolitical_filter(df, [event], reference_date=date(2025, 1, 1))
-    assert result["anomaly_score"][0] == pytest.approx(0.8)
+    assert result["behavioral_deviation_score"][0] == pytest.approx(0.8)
 
 
 def test_apply_filter_no_effect_when_no_active_events():
     df = _make_scored_df(
         [
-            {"mmsi": "vessel1", "anomaly_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
+            {"mmsi": "vessel1", "behavioral_deviation_score": 0.8, "last_lat": -30.0, "last_lon": 18.0},
         ]
     )
     result = apply_geopolitical_filter(df, [], reference_date=date(2025, 1, 1))
-    assert result["anomaly_score"][0] == pytest.approx(0.8)
+    assert result["behavioral_deviation_score"][0] == pytest.approx(0.8)
 
 
 # ---------------------------------------------------------------------------

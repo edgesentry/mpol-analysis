@@ -73,7 +73,7 @@ def _sample_watchlist() -> pl.DataFrame:
             ],
             "flag": ["IR", "SG", "PA", "SG", "RU", "CM", "PA", "MH"],
             "confidence": [0.99, 0.60, 0.55, 0.10, 0.91, 0.87, 0.79, 0.72],
-            "anomaly_score": [0.95, 0.50, 0.45, 0.10, 0.88, 0.84, 0.70, 0.55],
+            "behavioral_deviation_score": [0.95, 0.50, 0.45, 0.10, 0.88, 0.84, 0.70, 0.55],
             "graph_risk_score": [0.90, 0.40, 0.60, 0.10, 0.92, 0.80, 0.75, 0.65],
             "identity_score": [0.80, 0.30, 0.35, 0.05, 0.75, 0.70, 0.25, 0.40],
             "top_signals": [

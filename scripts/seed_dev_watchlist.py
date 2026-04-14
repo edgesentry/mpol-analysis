@@ -92,7 +92,7 @@ NEW_VESSELS = pl.DataFrame(
         ],
         "flag": ["PA", "BB", "PA", "BZ", "PA", "PA", "GA", "PA", "BB", "PA"],
         "confidence": [0.91, 0.87, 0.79, 0.72, 0.83, 0.75, 0.88, 0.82, 0.65, 0.95],
-        "anomaly_score": [0.88, 0.84, 0.70, 0.55, 0.81, 0.68, 0.85, 0.79, 0.55, 0.92],
+        "behavioral_deviation_score": [0.88, 0.84, 0.70, 0.55, 0.81, 0.68, 0.85, 0.79, 0.55, 0.92],
         "graph_risk_score": [0.92, 0.80, 0.75, 0.65, 0.78, 0.72, 0.82, 0.75, 0.60, 0.88],
         "identity_score": [0.75, 0.70, 0.25, 0.40, 0.69, 0.55, 0.72, 0.65, 0.45, 0.85],
         "top_signals": [
@@ -323,7 +323,7 @@ def main() -> None:
                 "vessel_type": pl.Utf8,
                 "flag": pl.Utf8,
                 "confidence": pl.Float32,
-                "anomaly_score": pl.Float32,
+                "behavioral_deviation_score": pl.Float32,
                 "graph_risk_score": pl.Float32,
                 "identity_score": pl.Float32,
                 "top_signals": pl.Utf8,
@@ -353,7 +353,7 @@ def main() -> None:
     new = NEW_VESSELS.with_columns(
         pl.col("last_seen").dt.convert_time_zone(tz or "UTC"),
         pl.col("confidence").cast(pl.Float32),
-        pl.col("anomaly_score").cast(pl.Float32),
+        pl.col("behavioral_deviation_score").cast(pl.Float32),
         pl.col("graph_risk_score").cast(pl.Float32),
         pl.col("identity_score").cast(pl.Float32),
         pl.col("ais_gap_max_hours").cast(pl.Float32),

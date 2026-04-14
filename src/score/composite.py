@@ -35,7 +35,7 @@ The JSON file format::
       ]
     }
 
-``down_weight`` is a multiplier applied to ``anomaly_score`` for matching
+``down_weight`` is a multiplier applied to ``behavioral_deviation_score`` for matching
 vessels (e.g. 0.5 halves their anomaly contribution).
 """
 
@@ -104,7 +104,7 @@ class GeoEvent:
     active_from: date
     active_to: date
     corridors: list[_GeoCorridorBbox] = field(default_factory=list)
-    down_weight: float = 0.5  # multiplier on anomaly_score for affected vessels
+    down_weight: float = 0.5  # multiplier on behavioral_deviation_score for affected vessels
 
     def is_active(self, reference_date: date | None = None) -> bool:
         ref = reference_date or date.today()
@@ -152,10 +152,10 @@ def apply_geopolitical_filter(
     events: list[GeoEvent],
     reference_date: date | None = None,
 ) -> pl.DataFrame:
-    """Down-weight ``anomaly_score`` for vessels in active rerouting corridors.
+    """Down-weight ``behavioral_deviation_score`` for vessels in active rerouting corridors.
 
     Vessels whose last known position falls within an active corridor have their
-    ``anomaly_score`` multiplied by ``event.down_weight`` before the composite
+    ``behavioral_deviation_score`` multiplied by ``event.down_weight`` before the composite
     ``confidence`` is recalculated.  ``last_lat`` and ``last_lon`` must be
     present in *scored_df*.
     """
@@ -163,17 +163,17 @@ def apply_geopolitical_filter(
     if not active:
         return scored_df
 
-    anomaly_scores = scored_df["anomaly_score"].to_list()
+    behavioral_deviation_scores = scored_df["behavioral_deviation_score"].to_list()
     lats = scored_df["last_lat"].to_list()
     lons = scored_df["last_lon"].to_list()
 
     for i, (lat, lon) in enumerate(zip(lats, lons)):
         for ev in active:
             if ev.vessel_in_corridor(lat, lon):
-                anomaly_scores[i] = float(anomaly_scores[i]) * ev.down_weight
+                behavioral_deviation_scores[i] = float(behavioral_deviation_scores[i]) * ev.down_weight
                 break  # apply the most relevant active event only
 
-    return scored_df.with_columns(pl.Series("anomaly_score", anomaly_scores, dtype=pl.Float32))
+    return scored_df.with_columns(pl.Series("behavioral_deviation_score", behavioral_deviation_scores, dtype=pl.Float32))
 
 
 # ITU Maritime Identification Digits (MID) → ISO 3166-1 alpha-2 country code.
@@ -526,7 +526,7 @@ def compute_composite_scores(
     scored = scored.with_columns(
         [
             (
-                w_anomaly * pl.col("anomaly_score")
+                w_anomaly * pl.col("behavioral_deviation_score")
                 + w_graph * pl.col("graph_risk_score")
                 + w_identity * pl.col("identity_score")
             )
@@ -586,7 +586,7 @@ def compute_composite_scores(
             "vessel_type",
             "flag",
             "confidence",
-            "anomaly_score",
+            "behavioral_deviation_score",
             "graph_risk_score",
             "identity_score",
             "top_signals",
@@ -637,7 +637,7 @@ def main() -> None:
         metavar="PATH",
         help=(
             "Path to a JSON file declaring geopolitical rerouting events. "
-            "Vessels in active corridors have their anomaly_score down-weighted "
+            "Vessels in active corridors have their behavioral_deviation_score down-weighted "
             "to reduce false positives from legitimate commercial rerouting."
         ),
     )

@@ -26,7 +26,7 @@ def _make_watchlist(rows: list[dict]) -> pl.DataFrame:
             "vessel_type": [r.get("vessel_type", "Tanker") for r in rows],
             "flag": [r.get("flag", "PA") for r in rows],
             "confidence": [r.get("confidence", 0.5) for r in rows],
-            "anomaly_score": [0.5] * len(rows),
+            "behavioral_deviation_score": [0.5] * len(rows),
             "graph_risk_score": [0.5] * len(rows),
             "identity_score": [0.5] * len(rows),
             "top_signals": ["[]"] * len(rows),

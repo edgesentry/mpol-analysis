@@ -110,7 +110,7 @@ def score_anomalies(
                 "cluster_label": pl.Int32,
                 "baseline_noise_score": pl.Float32,
                 "isolation_raw_score": pl.Float32,
-                "anomaly_score": pl.Float32,
+                "behavioral_deviation_score": pl.Float32,
             }
         )
         return empty, StandardScaler(), IsolationForest(random_state=42)
@@ -145,14 +145,14 @@ def score_anomalies(
     result = joined.with_columns(
         (0.65 * pl.col("isolation_norm_score") + 0.35 * pl.col("baseline_noise_score"))
         .clip(0.0, 1.0)
-        .alias("anomaly_score")
+        .alias("behavioral_deviation_score")
     ).select(
         [
             "mmsi",
             "cluster_label",
             "baseline_noise_score",
             "isolation_raw_score",
-            "anomaly_score",
+            "behavioral_deviation_score",
         ]
     )
 
