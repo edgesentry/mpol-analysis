@@ -66,6 +66,10 @@ Commands
   pull-demo           download the demo bundle from R2 into data/processed/ — no credentials
                       required; intended for developers who want to run the dashboard
                       without running the full pipeline locally
+  push-reviews        export vessel_reviews table → reviews.parquet and upload to R2;
+                      run after an analyst session to back up / share review decisions
+  pull-reviews        download reviews.parquet from R2 and upsert into the local DuckDB
+                      vessel_reviews table (conflict resolution: newer reviewed_at wins)
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -89,6 +93,8 @@ Examples
   uv run python scripts/sync_r2.py pull-sanctions-db         # pull public_eval.duckdb for tests
   uv run python scripts/sync_r2.py pull-watchlists           # pull watchlists.zip (used by CI)
   uv run python scripts/sync_r2.py pull-demo                 # pull demo bundle (no credentials)
+  uv run python scripts/sync_r2.py push-reviews              # back up analyst reviews to R2
+  uv run python scripts/sync_r2.py pull-reviews              # restore / merge reviews from R2
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -135,6 +141,7 @@ _GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
 _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from rotation zip
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 _DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
+_REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on every push-reviews
 
 # Files included in the demo bundle — lightweight artifacts that let developers run the
 # dashboard without re-running the full pipeline.  No heavy DuckDB or Lance files.
@@ -792,6 +799,130 @@ def cmd_pull_watchlists(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_reviews(args: argparse.Namespace) -> int:
+    """Export vessel_reviews from local DuckDB → reviews.parquet and upload to R2.
+
+    Overwrites the fixed-key reviews.parquet on every run.  Run after an analyst
+    session to back up decisions and make them available to other machines.
+    """
+    import duckdb as _duckdb
+
+    db_path = Path(args.db)
+    if not db_path.exists():
+        print(f"Error: DuckDB not found at {db_path}", file=sys.stderr)
+        return 1
+
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    r2_path = f"{bucket}/{_REVIEWS_R2_KEY}"
+
+    con = _duckdb.connect(str(db_path), read_only=True)
+    try:
+        row = con.execute("SELECT COUNT(*) FROM vessel_reviews").fetchone()
+        n_rows = row[0] if row else 0
+    except Exception:
+        print("No vessel_reviews table found — nothing to push.", file=sys.stderr)
+        return 1
+    finally:
+        con.close()
+
+    if n_rows == 0:
+        print("vessel_reviews is empty — nothing to push.")
+        return 0
+
+    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        con = _duckdb.connect(str(db_path), read_only=True)
+        try:
+            con.execute(f"COPY vessel_reviews TO '{tmp_path}' (FORMAT PARQUET)")
+        finally:
+            con.close()
+
+        size_kb = tmp_path.stat().st_size / 1024
+        print(f"Exporting {n_rows} reviews ({size_kb:.1f} KB) → R2 {r2_path} ...")
+        fs = _build_r2_fs()
+        uploaded = _upload_file(fs, tmp_path, r2_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {uploaded / 1024:.1f} KB uploaded.")
+    return 0
+
+
+def cmd_pull_reviews(args: argparse.Namespace) -> int:
+    """Download reviews.parquet from R2 and upsert into the local DuckDB vessel_reviews table.
+
+    Conflict resolution: newer ``reviewed_at`` timestamp wins.  Safe to run on
+    multiple machines — duplicate MMSIs are merged, not duplicated.
+    """
+    import duckdb as _duckdb
+
+    db_path = Path(args.db)
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    r2_path = f"{bucket}/{_REVIEWS_R2_KEY}"
+
+    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    fs = _build_r2_fs(anonymous=anon)
+
+    import pyarrow.fs as pafs
+
+    try:
+        infos = fs.get_file_info([r2_path])
+        if infos[0].type == pafs.FileType.NotFound:
+            raise FileNotFoundError
+        size_kb = infos[0].size / 1024
+    except Exception:
+        print(
+            "No reviews.parquet found in R2. Push reviews first with:\n"
+            "  uv run python scripts/sync_r2.py push-reviews",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Downloading reviews.parquet ({size_kb:.1f} KB) ...")
+    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        downloaded = _download_file(fs, r2_path, tmp_path)
+
+        # Upsert into local DuckDB: newer reviewed_at wins per mmsi
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        con = _duckdb.connect(str(db_path))
+        try:
+            # Ensure table exists (in case this is a fresh DB)
+            con.execute("""
+                CREATE TABLE IF NOT EXISTS vessel_reviews (
+                    mmsi               VARCHAR NOT NULL,
+                    review_tier        VARCHAR NOT NULL,
+                    handoff_state      VARCHAR NOT NULL DEFAULT 'queued_review',
+                    rationale          TEXT,
+                    evidence_refs_json TEXT,
+                    reviewed_by        VARCHAR,
+                    reviewed_at        TIMESTAMPTZ DEFAULT now()
+                )
+            """)
+            # Load incoming reviews; keep only rows newer than what we already have
+            con.execute(f"""
+                INSERT INTO vessel_reviews
+                SELECT src.*
+                FROM read_parquet('{tmp_path}') AS src
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM vessel_reviews dst
+                    WHERE dst.mmsi = src.mmsi
+                      AND dst.reviewed_at >= src.reviewed_at
+                )
+            """)
+            merged = con.execute("SELECT COUNT(*) FROM vessel_reviews").fetchone()[0]
+        finally:
+            con.close()
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {downloaded / 1024:.1f} KB downloaded. vessel_reviews now has {merged} rows.")
+    return 0
+
+
 def cmd_push_demo(args: argparse.Namespace) -> int:
     """Upload the fixed-key demo bundle to R2 (requires credentials).
 
@@ -1051,6 +1182,22 @@ def main() -> int:
     )
     pull_demo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
+    push_reviews_p = sub.add_parser(
+        "push-reviews",
+        help="Export vessel_reviews → reviews.parquet and upload to R2 (requires credentials)",
+    )
+    push_reviews_p.add_argument(
+        "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
+    )
+
+    pull_reviews_p = sub.add_parser(
+        "pull-reviews",
+        help="Download reviews.parquet from R2 and upsert into local DuckDB vessel_reviews table",
+    )
+    pull_reviews_p.add_argument(
+        "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
+    )
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -1065,6 +1212,7 @@ def main() -> int:
         "pull-sanctions-db",
         "pull-watchlists",
         "pull-demo",
+        "pull-reviews",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -1081,6 +1229,8 @@ def main() -> int:
         "pull-watchlists": cmd_pull_watchlists,
         "push-demo": cmd_push_demo,
         "pull-demo": cmd_pull_demo,
+        "push-reviews": cmd_push_reviews,
+        "pull-reviews": cmd_pull_reviews,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

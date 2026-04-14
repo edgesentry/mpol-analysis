@@ -261,3 +261,17 @@ def _pull(region: str, db_path: Path, fs, bucket: str) -> None:
     logger.info("Downloading %s.zip for region '%s' …", timestamp, region)
     downloaded = _pull_zip(fs, bucket, timestamp, data_dir, [region])
     logger.info("Auto-pull complete: %.1f MB downloaded to %s.", downloaded / 1_048_576, data_dir)
+
+    # Restore analyst reviews from R2 so they survive data refreshes (#264).
+    # Silently skipped if no reviews.parquet exists yet in R2.
+    try:
+        import argparse as _argparse
+
+        from scripts.sync_r2 import cmd_pull_reviews
+
+        _review_args = _argparse.Namespace(db=str(db_path))
+        rc = cmd_pull_reviews(_review_args)
+        if rc == 0:
+            logger.info("Analyst reviews restored from R2.")
+    except Exception as exc:
+        logger.debug("pull-reviews skipped: %s", exc)
