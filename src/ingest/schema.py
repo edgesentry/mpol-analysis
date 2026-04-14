@@ -192,6 +192,7 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
                 unmatched_sar_detections_30d      INTEGER,
                 eo_dark_count_30d                 INTEGER,
                 eo_ais_mismatch_ratio             FLOAT,
+                sanctions_list_count              INTEGER,
                 computed_at                       TIMESTAMPTZ DEFAULT now()
             )
         """)
@@ -207,6 +208,10 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
         con.execute("""
             ALTER TABLE vessel_features
             ADD COLUMN IF NOT EXISTS eo_ais_mismatch_ratio FLOAT DEFAULT 0.0
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS sanctions_list_count INTEGER DEFAULT 0
         """)
     finally:
         con.close()

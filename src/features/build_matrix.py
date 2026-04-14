@@ -47,6 +47,7 @@ DEFAULTS = {
     "unmatched_sar_detections_30d": 0,
     "eo_dark_count_30d": 0,
     "eo_ais_mismatch_ratio": 0.0,
+    "sanctions_list_count": 0,
 }
 
 CORE_COLUMNS = [
@@ -147,6 +148,58 @@ def _empty_eo() -> pl.DataFrame:
     )
 
 
+def _compute_sanctions_list_count(db_path: str, matrix: pl.DataFrame) -> pl.DataFrame:
+    """Count the number of distinct sanction programs per vessel.
+
+    Joins sanctions_entities via MMSI and via IMO (through vessel_meta) and
+    counts distinct program tokens from the semicolon-separated list_source
+    field.  Vessels with no sanctions entry get count 0.
+    """
+    try:
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            count_df = con.execute(
+                """
+                WITH vessel_programs AS (
+                    SELECT
+                        se.mmsi,
+                        UNNEST(STRING_SPLIT(se.list_source, ';')) AS program
+                    FROM sanctions_entities se
+                    WHERE se.mmsi IS NOT NULL AND se.mmsi <> ''
+                    UNION
+                    SELECT
+                        vm.mmsi,
+                        UNNEST(STRING_SPLIT(se.list_source, ';')) AS program
+                    FROM vessel_meta vm
+                    JOIN sanctions_entities se ON se.imo = vm.imo
+                    WHERE vm.imo IS NOT NULL AND vm.imo <> ''
+                      AND vm.mmsi IS NOT NULL AND vm.mmsi <> ''
+                )
+                SELECT mmsi, COUNT(DISTINCT program) AS sanctions_list_count
+                FROM vessel_programs
+                WHERE program IS NOT NULL AND program <> ''
+                GROUP BY mmsi
+                """
+            ).pl()
+        finally:
+            con.close()
+    except Exception:
+        return matrix  # DB unavailable; leave sanctions_list_count at default 0
+
+    if count_df.is_empty():
+        return matrix
+
+    count_df = count_df.with_columns(
+        pl.col("mmsi").cast(pl.Utf8),
+        pl.col("sanctions_list_count").cast(pl.Int32),
+    ).rename({"sanctions_list_count": "_slc"})
+    return (
+        matrix.join(count_df, on="mmsi", how="left")
+        .with_columns(pl.col("_slc").fill_null(0).cast(pl.Int32).alias("sanctions_list_count"))
+        .drop("_slc")
+    )
+
+
 def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 30,
@@ -174,6 +227,9 @@ def build_feature_matrix(
         # appears directly in sanctions_entities. The Lance Graph only covers vessels
         # that were in vessel_meta at graph-build time; this corrects the gap.
         matrix = _apply_direct_sanctions_fallback(matrix, db_path)
+        # Count distinct sanction programs per vessel to break score ties between
+        # vessels that share the same sanctions_distance (e.g. all directly sanctioned).
+        matrix = _compute_sanctions_list_count(db_path, matrix)
 
     return matrix
 
@@ -212,6 +268,7 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 unmatched_sar_detections_30d,
                 eo_dark_count_30d,
                 eo_ais_mismatch_ratio,
+                sanctions_list_count,
                 computed_at
             )
             SELECT
@@ -237,6 +294,7 @@ def write_vessel_features(db_path: str, feature_df: pl.DataFrame) -> int:
                 unmatched_sar_detections_30d,
                 eo_dark_count_30d,
                 eo_ais_mismatch_ratio,
+                sanctions_list_count,
                 now()
             FROM feature_df
             """

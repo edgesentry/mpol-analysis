@@ -52,25 +52,26 @@ def _seed_scoring_data(db_path: str) -> None:
                 flag_changes_2y, name_changes_2y, owner_changes_2y,
                 high_risk_flag_ratio, ownership_depth, sanctions_distance,
                 cluster_sanctions_ratio, shared_manager_risk, shared_address_centrality,
-                sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value
+                sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value,
+                sanctions_list_count
             )
             VALUES
-                ('111111111', 12, 18.0, 4, 3, 0.10, 22.0, 3, 2, 2, 1.0, 4, 1, 0.50, 1, 8, 4, 1.0, 100000.0),
-                ('222222222', 1, 1.0, 0, 0, 0.90, 1.0, 0, 0, 0, 0.0, 1, 5, 0.00, 5, 0, 0, 0.0, 0.0),
-                ('333333333', 2, 2.5, 0, 1, 0.70, 2.0, 0, 1, 0, 0.1, 2, 4, 0.10, 4, 1, 1, 0.0, 1000.0),
-                ('444444444', 0, 0.5, 0, 0, 0.95, 0.5, 0, 0, 0, 0.0, 1, 6, 0.00, 6, 0, 0, 0.0, 0.0),
+                ('111111111', 12, 18.0, 4, 3, 0.10, 22.0, 3, 2, 2, 1.0, 4, 1, 0.50, 1, 8, 4, 1.0, 100000.0, 3),
+                ('222222222', 1, 1.0, 0, 0, 0.90, 1.0, 0, 0, 0, 0.0, 1, 5, 0.00, 5, 0, 0, 0.0, 0.0,       0),
+                ('333333333', 2, 2.5, 0, 1, 0.70, 2.0, 0, 1, 0, 0.1, 2, 4, 0.10, 4, 1, 1, 0.0, 1000.0,    0),
+                ('444444444', 0, 0.5, 0, 0, 0.95, 0.5, 0, 0, 0, 0.0, 1, 6, 0.00, 6, 0, 0, 0.0, 0.0,       0),
                 -- PETROVSKY ZVEZDA: 14 AIS gaps in 30d (max 22h), reflagged twice in 2y, 1 hop from sanctioned entity,
                 --   60% of co-owned fleet is OFAC-listed, confirmed route-cargo mismatch on Iran crude export route
-                ('273456782', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 1, 0.60, 1, 3, 3, 1.0, 50000.0),
+                ('273456782', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 1, 0.60, 1, 3, 3, 1.0, 50000.0, 4),
                 -- SARI NOUR: 8 AIS gaps, 3 GPS position jumps (>50-knot implied speed), reflagged IR→CM in 2024,
                 --   route-cargo mismatch: operates Kharg Island routes with no Comtrade crude import record
-                ('613115678', 8, 14.0, 3, 1, 0.08, 35.0, 1, 2, 1, 0.85, 4, 2, 0.45, 2, 2, 2, 1.0, 75000.0),
+                ('613115678', 8, 14.0, 3, 1, 0.08, 35.0, 1, 2, 1, 0.85, 4, 2, 0.45, 2, 2, 2, 1.0, 75000.0, 2),
                 -- OCEAN VOYAGER: low AIS gaps but 6 distinct STS partners, shares a Piraeus address with 5 other vessels
                 --   of which 40% are under OFAC designation; route-cargo mismatch on Ceuta dark transfer corridor
-                ('352123456', 3, 7.5, 0, 5, 0.45, 15.0, 0, 0, 1, 0.30, 3, 3, 0.40, 3, 5, 6, 1.0, 120000.0),
+                ('352123456', 3, 7.5, 0, 5, 0.45, 15.0, 0, 0, 1, 0.30, 3, 3, 0.40, 3, 5, 6, 1.0, 120000.0, 3),
                 -- VERA SUNSET: clean AIS but 5-layer ownership chain; renamed once; beneficial owner 2 hops from
                 --   a designated entity; 25% of co-managed fleet sanctioned
-                ('538009876', 1, 3.0, 0, 0, 0.75, 3.0, 0, 1, 2, 0.20, 5, 2, 0.25, 2, 2, 1, 0.0, 8000.0)
+                ('538009876', 1, 3.0, 0, 0, 0.75, 3.0, 0, 1, 2, 0.20, 5, 2, 0.25, 2, 2, 1, 0.0, 8000.0,   1)
             """
         )
     finally:
@@ -88,6 +89,61 @@ def test_baseline_and_anomaly_scores(tmp_db):
     assert anomaly_df.height == 8
     assert anomaly_df["anomaly_score"].min() >= 0.0
     assert anomaly_df["anomaly_score"].max() <= 1.0
+
+
+def test_directly_sanctioned_vessels_differentiated_by_list_count(tmp_db):
+    """Vessels at sanctions_distance=0 with different program counts must not all tie.
+
+    Root cause of #243: when anomaly_score≈0 and identity_score≈0, the only
+    remaining signal is graph_risk_score.  With identical sanctions_distance the
+    old formula gave every directly-sanctioned vessel the same score.
+    sanctions_list_count breaks this tie.
+    """
+    con = duckdb.connect(tmp_db)
+    try:
+        con.execute(
+            """
+            INSERT INTO vessel_meta (mmsi, imo, name, flag, ship_type) VALUES
+                ('900000001', 'IMO9000001', 'VESSEL_ONE_LIST',   'PA', 82),
+                ('900000002', 'IMO9000002', 'VESSEL_THREE_LIST', 'PA', 82)
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) VALUES
+                ('900000001', '2026-03-01 00:00:00+00', 1.0, 103.0, 0.5, 1, 82),
+                ('900000002', '2026-03-01 00:00:00+00', 1.1, 103.1, 0.5, 1, 82)
+            """
+        )
+        # Both directly sanctioned (distance=0), sparse AIS → anomaly≈0, identity≈0.
+        # Only difference: sanctions_list_count (1 vs 3 programs).
+        con.execute(
+            """
+            INSERT INTO vessel_features (
+                mmsi, ais_gap_count_30d, ais_gap_max_hours, position_jump_count,
+                sts_candidate_count, port_call_ratio, loitering_hours_30d,
+                flag_changes_2y, name_changes_2y, owner_changes_2y,
+                high_risk_flag_ratio, ownership_depth, sanctions_distance,
+                cluster_sanctions_ratio, shared_manager_risk, shared_address_centrality,
+                sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value,
+                sanctions_list_count
+            ) VALUES
+                ('900000001', 0, 0.0, 0, 0, 0.5, 0.0, 0, 0, 0, 0.0, 0, 0, 0.0, 99, 0, 0, 0.0, 0.0, 1),
+                ('900000002', 0, 0.0, 0, 0, 0.5, 0.0, 0, 0, 0, 0.0, 0, 0, 0.0, 99, 0, 0, 0.0, 0.0, 3)
+            """
+        )
+    finally:
+        con.close()
+
+    composite = compute_composite_scores(tmp_db)
+    rows = {r["mmsi"]: r for r in composite.iter_rows(named=True)}
+
+    score_one = rows["900000001"]["confidence"]
+    score_three = rows["900000002"]["confidence"]
+    assert score_three > score_one, (
+        f"Vessel on 3 programs ({score_three:.4f}) should outscore vessel on 1 program "
+        f"({score_one:.4f}) when all other features are identical"
+    )
 
 
 def test_composite_and_watchlist_output(tmp_db, tmp_path):
