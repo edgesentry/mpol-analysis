@@ -51,10 +51,10 @@ jobs:
         run: uv sync --all-extras --group dev
 
       # Pull proprietary feed files (AIS, SAR, cargo, custom sanctions) from the
-      # private arktrace-private-capvista bucket into _inputs/custom_feeds/ so the
-      # pipeline ingests them at step 5.  Uses the same AWS_* credentials scoped to
-      # both buckets.  Skips gracefully when credentials are absent (forks).
-      - name: Pull custom feeds from arktrace-private-capvista
+      # private bucket via arktrace-private-capvista.edgesentry.io into
+      # _inputs/custom_feeds/ so the pipeline ingests them at step 5.
+      # Skips gracefully when credentials are absent (forks).
+      - name: Pull custom feeds from arktrace-private-capvista.edgesentry.io
         continue-on-error: true
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

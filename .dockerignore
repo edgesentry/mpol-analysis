@@ -1,4 +1,5 @@
 data/
+_data/
 .git/
 .venv/
 __pycache__/

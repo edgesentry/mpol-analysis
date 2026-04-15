@@ -1,44 +1,53 @@
 #!/usr/bin/env bash
-# fetch_demo_data.sh — download the arktrace demo bundle from R2 (no credentials required).
+# fetch_demo_data.sh — download the arktrace demo bundle (no credentials required)
 #
 # Downloads candidate_watchlist.parquet, composite_scores.parquet,
-# causal_effects.parquet, and validation_metrics.json.
+# causal_effects.parquet, and validation_metrics.json from the public
+# arktrace-public.edgesentry.io custom domain.
 #
 # Usage:
-#   bash scripts/fetch_demo_data.sh [--region REGION]
+#   bash scripts/fetch_demo_data.sh [--force]
 #
-#   REGION: singapore (default), japan, middleeast, europe, gulf
+#   --force    Re-download even if data is already present
 #
 # Data directory resolution (first match wins):
 #   1. ARKTRACE_DATA_DIR env var
-#   2. data/processed/ if it exists under the current directory (repo-local dev)
-#   3. ~/.arktrace/data/  (standard user-level install location)
+#   2. ~/.arktrace/data/  (standard install location)
 #
-# Requirements: uv must be installed (https://docs.astral.sh/uv/)
-# No R2 credentials needed — the demo bundle is publicly accessible.
+# Requirements: curl, unzip — both standard on macOS/Linux, no Python/uv needed.
 
 set -euo pipefail
 
-REGION="${ARKTRACE_REGION:-singapore}"
+BASE_URL="https://arktrace-public.edgesentry.io"
+DEMO_KEY="demo.zip"
+DATA_DIR="${ARKTRACE_DATA_DIR:-${HOME}/.arktrace/data}"
+FORCE=0
 
-# Parse --region flag
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --region) REGION="$2"; shift 2 ;;
+    --force) FORCE=1; shift ;;
+    --data-dir) DATA_DIR="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
-cd "$(dirname "$0")/.."
+if [[ "${FORCE}" == "0" ]] && [[ -f "${DATA_DIR}/candidate_watchlist.parquet" ]]; then
+  echo "Demo data already present in ${DATA_DIR} — skipping download."
+  echo "Run with --force to re-download."
+  exit 0
+fi
 
-# Canonical location: ~/.arktrace/data  (override with ARKTRACE_DATA_DIR)
-DATA_DIR="${ARKTRACE_DATA_DIR:-${HOME}/.arktrace/data}"
+echo "Fetching arktrace demo data → ${DATA_DIR}"
+mkdir -p "${DATA_DIR}"
 
-echo "Region: ${REGION}"
-echo "Fetching arktrace demo data from R2 → ${DATA_DIR}"
-ARKTRACE_REGION="${REGION}" uv run python scripts/sync_r2.py pull-demo --data-dir "${DATA_DIR}"
+TMP="$(mktemp /tmp/arktrace-demo-XXXXXX.zip)"
+trap 'rm -f "${TMP}"' EXIT
 
+curl -fsSL --progress-bar "${BASE_URL}/${DEMO_KEY}" -o "${TMP}"
+unzip -o -q "${TMP}" -d "${DATA_DIR}"
+
+echo "Done. Demo data ready in ${DATA_DIR}."
 echo ""
 echo "Start the dashboard:"
-echo "  ARKTRACE_REGION=${REGION} uv run uvicorn src.api.main:app --reload"
+echo "  uv run uvicorn src.api.main:app --reload"
 echo "  open http://localhost:8000"
