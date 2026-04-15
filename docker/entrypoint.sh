@@ -28,8 +28,8 @@ export ARKTRACE_DATA_DIR="${DATA_DIR}"
 
 # ── 1. Pull demo data ──────────────────────────────────────────────────────────
 if [[ "${AUTO_PULL}" != "0" ]] && [[ ! -f "${DATA_DIR}/candidate_watchlist.parquet" ]]; then
-  echo "Pulling demo data from R2 (region: ${REGION})…"
-  python scripts/sync_r2.py pull-demo --data-dir "${DATA_DIR}" || {
+  echo "Pulling demo data from arktrace-public.edgesentry.io…"
+  ARKTRACE_DATA_DIR="${DATA_DIR}" bash scripts/fetch_demo_data.sh || {
     echo "⚠️  Demo data pull failed — dashboard will start but may show no vessels."
     echo "   Check your network connection or set AUTO_PULL=0 to skip."
   }

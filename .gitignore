@@ -207,6 +207,7 @@ marimo/_lsp/
 __marimo__/
 
 # Project-specific
+_data/              # local demo data dir (downloaded via fetch_demo_data.sh)
 data/raw/           # downloaded AIS, sanctions, registry raw files — can be large
 data/processed/     # DuckDB files, Parquet outputs, Neo4j database
 # local runtime databases (singapore.duckdb, etc.)

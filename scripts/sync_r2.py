@@ -145,6 +145,9 @@ _DEFAULT_REGION = "singapore"
 _DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
 _DEFAULT_BUCKET = "arktrace-public"
 _DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
+# Public custom domain — used for unauthenticated (curl/urllib) downloads only.
+# The S3 API (push, pull with credentials) still uses _DEFAULT_ENDPOINT.
+_PUBLIC_BASE_URL = "https://arktrace-public.edgesentry.io"
 # The dedicated arktrace-public bucket contains only public OSS artifacts,
 # so no sub-prefix is needed — all objects live at the bucket root.
 _LATEST_KEY = "latest"  # plain-text pointer to newest timestamp
@@ -987,52 +990,51 @@ def cmd_push_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_pull_demo(args: argparse.Namespace) -> int:
-    """Download the demo bundle from R2 into data/processed/ (no credentials required).
+    """Download the demo bundle from the public custom domain (no credentials required).
 
-    Provides a zero-auth path for developers who want to explore the dashboard
-    output without running the full AIS ingestion + scoring pipeline locally.
+    Uses a plain HTTPS GET against arktrace-public.edgesentry.io so callers
+    don't need pyarrow or R2 credentials — only stdlib urllib is required.
     """
-    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    import urllib.error
+    import urllib.request
+
     data_dir = Path(args.data_dir)
-    r2_path = f"{bucket}/{_DEMO_R2_KEY}"
+    url = f"{_PUBLIC_BASE_URL}/{_DEMO_R2_KEY}"
 
-    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
-    fs = _build_r2_fs(anonymous=anon)
-
-    import pyarrow.fs as pafs
-
-    try:
-        infos = fs.get_file_info([r2_path])
-        if infos[0].type == pafs.FileType.NotFound:
-            raise FileNotFoundError
-        size_mb = infos[0].size / 1_048_576
-    except Exception:
-        print(
-            "No demo.zip found in R2. The app owner needs to run:\n"
-            "  uv run python scripts/run_pipeline.py --region singapore --non-interactive\n"
-            "  uv run python scripts/sync_r2.py push-demo",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(f"Downloading demo.zip ({size_mb:.2f} MB) ...")
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        downloaded = _download_file(fs, r2_path, tmp_path)
+        print(f"Downloading {_DEMO_R2_KEY} from {_PUBLIC_BASE_URL} …")
+        urllib.request.urlretrieve(url, tmp_path)
+        size_mb = tmp_path.stat().st_size / 1_048_576
+        print(f"  {size_mb:.2f} MB downloaded.")
         data_dir.mkdir(parents=True, exist_ok=True)
         with zipmod.ZipFile(tmp_path, "r") as zf:
             names = zf.namelist()
             zf.extractall(data_dir)
         print(f"Extracted {len(names)} files to {data_dir}/: {', '.join(names)}")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            print(
+                "demo.zip not found at public URL. The app owner needs to run:\n"
+                "  uv run python scripts/run_pipeline.py --region singapore --non-interactive\n"
+                "  uv run python scripts/sync_r2.py push-demo",
+                file=sys.stderr,
+            )
+        else:
+            print(f"HTTP {exc.code} downloading demo bundle: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"Error downloading demo bundle: {exc}", file=sys.stderr)
+        return 1
     finally:
         tmp_path.unlink(missing_ok=True)
 
-    print(f"Done. {downloaded / 1_048_576:.2f} MB downloaded.")
+    print(f"Done. {size_mb:.2f} MB downloaded.")
     print(
         "\nYou can now run the dashboard without a full pipeline:\n"
-        "  uv run streamlit run src/ui/app.py\n"
-        "  open http://localhost:8501"
+        "  uv run uvicorn src.api.main:app --reload\n"
+        "  open http://localhost:8000"
     )
     return 0
 
