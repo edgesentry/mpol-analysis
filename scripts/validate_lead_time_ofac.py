@@ -306,8 +306,33 @@ def main() -> None:
     print(f"Loading watchlist(s): {[str(p) for p in wl_paths]} …", flush=True)
     watchlist = _load_watchlist(wl_paths)
     if watchlist.is_empty():
-        print("No watchlist data found. Run the pipeline first.", file=sys.stderr)
-        sys.exit(1)
+        print(
+            "[warn] No watchlist data found in any of the expected paths. "
+            "The pipeline may have produced no candidates for these regions.",
+            file=sys.stderr,
+        )
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            empty_report = {
+                "generated_at_utc": datetime.now(UTC).isoformat(),
+                "confidence_threshold": CONFIDENCE_THRESHOLD,
+                "watchlist_size": 0,
+                "designation_dates_loaded": len(designation_dates),
+                "matched_to_designation": 0,
+                "pre_designation_count": 0,
+                "post_designation_count": 0,
+                "mean_lead_days": 0,
+                "median_lead_days": 0,
+                "unknown_unknown_candidates": 0,
+                "pre_designation_vessels": [],
+                "post_designation_vessels": [],
+                "unknown_unknown_watch": [],
+                "methodology": "No watchlist data — pipeline produced no candidates.",
+            }
+            out_path.write_text(json.dumps(empty_report, indent=2))
+            print(f"Empty report written to {args.out}")
+        sys.exit(0)
     print(f"  {watchlist.height} unique vessels loaded", flush=True)
 
     reference_date = datetime.now(UTC)
