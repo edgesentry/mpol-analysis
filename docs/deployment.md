@@ -14,28 +14,21 @@
 
 The fastest path. No Python, no uv, no repo clone required.
 
-### Single container
-
 ```bash
-docker run -p 8000:8000 ghcr.io/edgesentry/arktrace:latest
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
-Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run.
-
-### Docker Compose (recommended — persists data across restarts)
-
-```bash
-# Download the standalone compose file — no repo clone needed
-curl -fsSL https://raw.githubusercontent.com/edgesentry/arktrace/main/docker-compose.quickstart.yml \
-  -o docker-compose.yml
-
-docker compose up
-```
+Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run. The named volume `arktrace-data` persists data across restarts.
 
 To change region:
 
 ```bash
-ARKTRACE_REGION=japan docker compose up
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  -e ARKTRACE_REGION=japan \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
 ### Enable analyst briefs (optional)
@@ -44,12 +37,13 @@ Analyst briefs are disabled by default in Docker (CPU inference is slower and th
 
 **Option A — Anthropic API (recommended for Docker):**
 
-Add to `docker-compose.yml` under `environment`:
-
-```yaml
-LLM_PROVIDER: anthropic
-LLM_API_KEY: sk-ant-...
-LLM_MODEL: claude-haiku-4-5-20251001
+```bash
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  -e LLM_PROVIDER=anthropic \
+  -e LLM_API_KEY=sk-ant-... \
+  -e LLM_MODEL=claude-haiku-4-5-20251001 \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
 **Option B — Local GGUF model (CPU):**
@@ -65,11 +59,11 @@ docker run --rm \
     Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir /models
 
 # Start with the model mounted
-GGUF_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
-  docker run -p 8000:8000 \
-    -v "$(pwd)/models:/models:ro" \
-    -e LLM_MODEL="${GGUF_MODEL}" \
-    ghcr.io/edgesentry/arktrace:latest
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  -v "$(pwd)/models:/models:ro" \
+  -e LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
 **Linux with NVIDIA GPU:**

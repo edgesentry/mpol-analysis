@@ -9,17 +9,12 @@ Built for **Cap Vista Accelerator Solicitation 5.0, Challenge 1** (deadline: 29 
 ### Docker — Windows, Linux, macOS (zero prerequisites beyond Docker Desktop)
 
 ```bash
-docker run -p 8000:8000 ghcr.io/edgesentry/arktrace:latest
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
-Or with Docker Compose (recommended — persists data across restarts):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/edgesentry/arktrace/main/docker-compose.quickstart.yml -o docker-compose.yml
-docker compose up
-```
-
-Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run — no credentials needed.
+Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run — no credentials needed. The named volume persists data across restarts.
 
 ### Native — macOS / Linux / Windows (Git Bash / WSL2)
 

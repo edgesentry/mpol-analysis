@@ -12,7 +12,7 @@
 #   llama.cpp (for analyst briefs — optional, dashboard works without it):
 #     macOS:          brew install llama.cpp
 #     Linux / WSL2:   see https://github.com/ggml-org/llama.cpp/releases/latest
-#     Windows native: use Docker instead — see docker-compose.quickstart.yml
+#     Windows native: use Docker instead — see docs/deployment.md
 #
 # Usage:
 #   bash scripts/run_app.sh
@@ -125,14 +125,14 @@ if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
         echo "     Download the pre-built binary for your arch from:"
         echo "     https://github.com/ggml-org/llama.cpp/releases/latest"
         echo "     e.g. llama-<tag>-bin-ubuntu-x64.zip  →  unzip, add to PATH"
-        echo "   Or use Docker: docker compose -f docker-compose.quickstart.yml up"
+        echo "   Or use Docker: docker run -p 8000:8000 -v arktrace-data:/root/.arktrace/data ghcr.io/edgesentry/arktrace:latest"
         ;;
       "Windows (Git Bash)")
         echo "     Download the Windows binary from:"
         echo "     https://github.com/ggml-org/llama.cpp/releases/latest"
         echo "     e.g. llama-<tag>-bin-win-avx2-x64.zip  →  unzip, add to PATH"
         echo "   Or use Docker (recommended on Windows):"
-        echo "     docker compose -f docker-compose.quickstart.yml up"
+        echo "     docker run -p 8000:8000 -v arktrace-data:/root/.arktrace/data ghcr.io/edgesentry/arktrace:latest"
         ;;
     esac
     echo ""

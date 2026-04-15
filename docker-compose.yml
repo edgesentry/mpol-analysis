@@ -22,7 +22,8 @@ services:
       # LLM_MODEL: claude-haiku-4-5-20251001
     volumes:
       - arktrace-data:/root/.arktrace/data
-      - ${MODEL_DIR:-/dev/null}:/models:ro
+      # Uncomment and set MODEL_DIR to enable local GGUF model inference:
+      # - ${MODEL_DIR:?set MODEL_DIR to your models directory}:/models:ro
 
   pipeline:
     build: .
