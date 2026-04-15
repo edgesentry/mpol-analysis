@@ -224,3 +224,63 @@ data and want to share it within your team:
 2. Share credentials only with authorised team members.
 3. Do not push to `arktrace-public` — that bucket is reserved for OSS
    artifacts that can be freely distributed.
+
+---
+
+## Private bucket — arktrace-private-capvista
+
+A second private R2 bucket (`arktrace-private-capvista`) holds proprietary
+customer feed files (AIS, SAR, cargo manifests, custom sanctions lists) that
+are used to generate demo scoring output.  These files are **never** published
+to `arktrace-public`.
+
+### Bucket roles
+
+| Bucket | Access | Purpose |
+|---|---|---|
+| `arktrace-public` | Public (anonymous read) | OSS artifacts — app users pull from here |
+| `arktrace-private-capvista` | Authenticated read/write | Proprietary customer feeds for demo scoring |
+
+### Credential model
+
+The same R2 API token is scoped to **both** buckets (Object Read & Write on
+each).  Create it at Cloudflare Dashboard → R2 → Manage R2 API Tokens and
+add both buckets to the token's scope.
+
+| Who | Operation | Credentials |
+|---|---|---|
+| App users | Pull from `arktrace-public` | None (anonymous) |
+| CI | Pull feeds from `arktrace-private-capvista` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` secrets → mapped to `AWS_*` |
+| App owner | Push to both buckets | Same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+
+### Managing feed files
+
+```bash
+# Upload non-sample CSVs from _inputs/custom_feeds/ to the private bucket
+uv run python scripts/sync_r2.py push-custom-feeds
+
+# Download all feed files from the private bucket into _inputs/custom_feeds/
+uv run python scripts/sync_r2.py pull-custom-feeds
+```
+
+Files ending with `_sample` (local smoke-test fixtures) are always skipped by
+`push-custom-feeds`.  The `.gitkeep` file is also skipped.
+
+### File naming conventions
+
+| Suffix | Behaviour |
+|---|---|
+| `_sample.csv` | Skipped by pipeline ingestion and `push-custom-feeds` — local dev fixtures only |
+| `_demo.csv` | Uploaded to private bucket; ingested by pipeline in demo scoring runs |
+| (no suffix) | Treated as real proprietary data; uploaded and ingested normally |
+
+### CI jobs
+
+| Job | Data source | Scoring mode |
+|---|---|---|
+| `score_regression_gate` | `arktrace-public` only | `--seed-dummy` (ensures backtest floor) |
+| `demo_artifacts` | `arktrace-private-capvista` feeds | No `--seed-dummy` — real scoring from custom feed data |
+
+The `demo_artifacts` job uploads `singapore_watchlist.parquet`,
+`composite_scores.parquet`, and `validation_metrics.json` as a PR artifact
+(`demo-artifacts-<sha>`) for review.

@@ -186,6 +186,24 @@ _inputs/custom_feeds/spire_feed.columnmap.json
 {"mmsi": "vessel_id", "lat": "latitude", "lon": "longitude", "timestamp": "time_utc"}
 ```
 
+### Sourcing feeds from the private R2 bucket
+
+Proprietary feed files are stored in `arktrace-private-capvista` and pulled
+before pipeline runs that require them:
+
+```bash
+# Pull all feed files from arktrace-private-capvista → _inputs/custom_feeds/
+# (requires AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in .env)
+uv run python scripts/sync_r2.py pull-custom-feeds
+
+# Upload feed files from _inputs/custom_feeds/ → arktrace-private-capvista
+uv run python scripts/sync_r2.py push-custom-feeds
+```
+
+Files ending with `_sample` and `.gitkeep` are always skipped by
+`push-custom-feeds`.  See [R2 data layout](r2-data-layout.md#private-bucket--arktrace-private-capvista)
+for the full credential and bucket model.
+
 ### Run standalone
 
 ```bash
