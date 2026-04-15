@@ -97,25 +97,99 @@ Target: stay under **10 GB**.
 
 ---
 
-## CI workflow
+## Actor responsibilities
 
-The `data-publish` workflow (`.github/workflows/data-publish.yml`) runs the
-full multi-region pipeline on public data and publishes the results.
+Three actors interact with the R2 buckets. Each has a distinct role:
 
-**Steps:**
+| Actor | Reads from | Writes to | How |
+|---|---|---|---|
+| **App owner** | `arktrace-private-capvista` *(optional)* | `arktrace-private-capvista` *(optional)* | `sync_r2.py pull-custom-feeds` / `push-custom-feeds` |
+| **App owner** | — | `arktrace-public` (generation zips, demo bundle, GDELT) | `sync_r2.py push`, `push-demo`, `push-gdelt` |
+| **CI (`data-publish`)** | `arktrace-private-capvista` *(optional — skipped if absent)* | `arktrace-public` (generation zip, demo bundle, sanctions DB) | Automated via `data-publish.yml` |
+| **App user** | `arktrace-public` (generation zip, demo bundle, sanctions DB) | — | `sync_r2.py pull` / `pull-demo` / `pull-sanctions-db` |
 
-1. Run `scripts/run_public_backtest_batch.py` for all five regions
-   (`--stream-duration 0 --seed-dummy`).
-2. `sync_r2.py push --keep 1` — zips all region artifacts into one file,
-   uploads to R2, and deletes any previous generation.
-3. `sync_r2.py push-sanctions-db --force` — uploads `public_eval.duckdb`
-   (refreshed by step 1) as a standalone R2 object.
-4. `sync_r2.py push-gdelt` — uploads `gdelt.lance.zip` only if it does not
-   already exist (skipped on most runs; re-run with `--force` after GDELT
-   re-ingestion).
+---
 
-Trigger: manual dispatch (`workflow_dispatch`) or automatically after
-`Public Backtest Integration` succeeds on `main`.
+## Data flow — end to end
+
+```
+App owner                     CI (data-publish)              App user
+──────────                    ─────────────────              ────────
+1. Run pipeline locally       1. Pull custom feeds from       1. pull --region <r>
+   (run_pipeline.py)             arktrace-private-capvista       OR pull-demo
+2. push-custom-feeds →           (continue-on-error)
+   arktrace-private-capvista  2. Run full pipeline on         2. Start dashboard
+3. push-gdelt →                  all 5 regions (seed mode +      (run_app.sh or
+   arktrace-public               custom feeds ingested)           docker compose up)
+   (only after re-ingestion)  3. push → arktrace-public
+                              4. push-demo → arktrace-public
+                              5. push-sanctions-db →
+                                 arktrace-public
+```
+
+### App owner: what to generate and upload
+
+| Step | Command | Destination |
+|---|---|---|
+| Upload custom feed CSVs (AIS, SAR, cargo, sanctions) | `sync_r2.py push-custom-feeds` | `arktrace-private-capvista` |
+| Upload generation zip (all 5 regions, manually refreshed) | `sync_r2.py push --keep 1` | `arktrace-public` |
+| Upload GDELT Lance store (after re-ingestion only) | `sync_r2.py push-gdelt` | `arktrace-public` |
+| Upload demo bundle (after local pipeline run) | `sync_r2.py push-demo` | `arktrace-public` |
+
+Custom feeds are CSV files dropped in `_inputs/custom_feeds/`. Files ending in `_sample` or `.gitkeep` are never uploaded. See [pipeline-operations.md](pipeline-operations.md#custom-feed-drop-ins) for the full file format reference.
+
+### CI: what it reads and writes
+
+The `data-publish` workflow (`.github/workflows/data-publish.yml`) runs automatically
+every Monday 02:00 UTC and after every successful `Public Backtest Integration` run on `main`.
+
+**Reads:**
+
+| Source | Object | Step |
+|---|---|---|
+| `arktrace-private-capvista` | All feed CSVs in bucket root | `sync_r2.py pull-custom-feeds` (continue-on-error; skips gracefully on forks) |
+
+**Writes:**
+
+| Destination | Object | Step |
+|---|---|---|
+| `arktrace-public` | `<timestamp>.zip` (generation zip, all 5 regions) | `sync_r2.py push --keep 1` |
+| `arktrace-public` | `latest` (plain-text pointer to current generation) | same push step |
+| `arktrace-public` | `demo.zip` | `sync_r2.py push-demo` |
+| `arktrace-public` | `public_eval.duckdb` | `sync_r2.py push-sanctions-db --force` |
+
+**Pipeline steps (in order):**
+
+1. `sync_r2.py pull-custom-feeds` — pull proprietary feeds from `arktrace-private-capvista` into `_inputs/custom_feeds/` (skipped if credentials absent).
+2. `run_public_backtest_batch.py --seed-dummy` — run full 9-step pipeline for all 5 regions; custom feeds are ingested at step 5.
+3. `sync_r2.py push --keep 1` — zip all region artifacts, upload to `arktrace-public`, delete previous generation.
+4. `sync_r2.py push-demo` — overwrite `demo.zip` with fresh pipeline outputs.
+5. `sync_r2.py push-sanctions-db --force` — upload `public_eval.duckdb` as a standalone object.
+6. `validate_lead_time_ofac.py` — lead time validation report (local only, not pushed).
+7. `notify_metrics.py` — email summary to `NOTIFY_EMAIL`.
+
+### App user: what to download
+
+| Command | Downloads | Size |
+|---|---|---|
+| `sync_r2.py pull --region <r>` | One region's artifacts from latest generation zip | 100–300 MB |
+| `sync_r2.py pull --region all` | All 5 regions | 500 MB – 1.5 GB |
+| `sync_r2.py pull-demo` | `demo.zip` (lightweight bundle, no DuckDB) | ~10–50 MB |
+| `sync_r2.py pull-sanctions-db` | `public_eval.duckdb` (OpenSanctions, integration tests) | ~50 MB |
+| `sync_r2.py pull-gdelt` | `gdelt.lance.zip` (GDELT corpus, analyst brief / chat) | ~1.2 GB |
+
+No credentials are required for any pull command — `arktrace-public` has public access enabled.
+
+After pulling, start the dashboard:
+
+```bash
+bash scripts/run_app.sh --region singapore
+# or: ARKTRACE_REGION=japan uv run uvicorn src.api.main:app --reload
+```
+
+---
+
+## CI workflow (legacy summary — see actor responsibilities above for current state)
 
 ---
 
@@ -227,31 +301,36 @@ data and want to share it within your team:
 
 ---
 
-## Private bucket — arktrace-private-capvista
+## Private bucket — arktrace-private-capvista (optional)
 
-A second private R2 bucket (`arktrace-private-capvista`) holds proprietary
-customer feed files (AIS, SAR, cargo manifests, custom sanctions lists) that
-are used to generate demo scoring output.  These files are **never** published
-to `arktrace-public`.
+`arktrace-private-capvista` is an **optional, private** R2 bucket.  You only
+need it if you want to feed proprietary custom data (AIS, SAR, cargo manifests,
+custom sanctions lists) into the CI pipeline.  Without it, CI runs on public
+data only (`--seed-dummy`) and `pull-custom-feeds` exits silently.
+
+These files are **never** published to `arktrace-public`.
 
 ### Bucket roles
 
-| Bucket | Access | Purpose |
-|---|---|---|
-| `arktrace-public` | Public (anonymous read) | OSS artifacts — app users pull from here |
-| `arktrace-private-capvista` | Authenticated read/write | Proprietary customer feeds for demo scoring |
+| Bucket | Access | Purpose | Required? |
+|---|---|---|---|
+| `arktrace-public` | Public (anonymous read) | OSS artifacts — app users pull from here | **Yes** |
+| `arktrace-private-capvista` | Authenticated read/write | Proprietary custom feeds ingested by CI pipeline | **Optional** |
 
 ### Credential model
 
-The same R2 API token is scoped to **both** buckets (Object Read & Write on
-each).  Create it at Cloudflare Dashboard → R2 → Manage R2 API Tokens and
-add both buckets to the token's scope.
+When the private bucket is used, a single R2 API token is scoped to **both**
+buckets (Object Read & Write on each).  Create it at Cloudflare Dashboard →
+R2 → Manage R2 API Tokens and add both buckets to the token's scope.
+
+Both app owner and CI have full read and write access to the private bucket
+using the same credentials.
 
 | Who | Operation | Credentials |
 |---|---|---|
 | App users | Pull from `arktrace-public` | None (anonymous) |
-| CI | Pull feeds from `arktrace-private-capvista` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` secrets → mapped to `AWS_*` |
-| App owner | Push to both buckets | Same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| CI | Pull feeds from `arktrace-private-capvista`; push artifacts to `arktrace-public` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` secrets → mapped to `AWS_*` |
+| App owner | Read/write to both buckets | Same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
 
 ### Managing feed files
 

@@ -50,31 +50,31 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --group dev
 
-      # Pull real watchlists from R2 (uploaded after a local dev pipeline run via
-      # `sync_r2.py push-watchlists`). These are tiny (< 1 MB total) and avoid
-      # re-running live AIS streaming in CI.  Continue on error so the job does
-      # not fail hard when no watchlists have been pushed yet — the backtest will
-      # simply skip all regions and the email guard in notify_metrics.py will
-      # suppress the all-zeros notification.
-      - name: Pull watchlists from R2
+      # Pull proprietary feed files (AIS, SAR, cargo, custom sanctions) from the
+      # private arktrace-private-capvista bucket into _inputs/custom_feeds/ so the
+      # pipeline ingests them at step 5.  Uses the same AWS_* credentials scoped to
+      # both buckets.  Skips gracefully when credentials are absent (forks).
+      - name: Pull custom feeds from arktrace-private-capvista
         continue-on-error: true
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
-        run: uv run python scripts/sync_r2.py pull-watchlists
+        run: uv run python scripts/sync_r2.py pull-custom-feeds
 
-      # Run the backtest against pre-pulled watchlists.  --skip-pipeline bypasses
-      # the seeded AIS pipeline so we evaluate real data.  --strict-known-cases is
-      # omitted; if R2 has no watchlists yet the job finishes cleanly with 0 cases.
-      - name: Run backtest (skip pipeline — use R2 watchlists)
+      # Run the full pipeline for all regions in seed mode (no live AIS key needed)
+      # then evaluate the freshly generated watchlists with the backtest.
+      # --seed-dummy injects 10 known OFAC vessels so backtest metrics are
+      # meaningful; custom feeds from _inputs/custom_feeds/ are ingested during
+      # pipeline step 5 and their signals appear in the published watchlists.
+      - name: Run pipeline + backtest (seed mode, custom feeds included)
         run: |
           uv run python scripts/run_public_backtest_batch.py \
             --regions singapore,japan,middleeast,europe,gulf \
             --gdelt-days 14 \
-            --skip-pipeline \
+            --seed-dummy \
             --max-known-cases 200 \
-            --min-known-cases 30
+            --min-known-cases 5
 
       - name: Push artifacts to R2
         id: push
