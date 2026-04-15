@@ -186,8 +186,9 @@ _cleanup() {
     _kill_with_timeout "${UVICORN_PID}" 3
   fi
   # uvicorn --reload spawns a multiprocessing worker in a separate process
-  # group that survives the parent being killed.  Sweep it by port.
-  WORKERS=$(lsof -ti ":${PORT}" 2>/dev/null || true)
+  # group that survives the parent being killed.  Sweep by process pattern
+  # (not by port) to avoid killing unrelated system processes on the same port.
+  WORKERS=$(pgrep -f "uvicorn src.api.main:app" 2>/dev/null || true)
   if [[ -n "${WORKERS}" ]]; then
     kill -9 ${WORKERS} 2>/dev/null || true
   fi
