@@ -8,8 +8,8 @@ Storage layout in R2
     gdelt.lance.zip                ← shared; push separately with `push-gdelt`
 
 Each generation is a single .zip file, so push/pull is always 1 object.
-Only 1 generation is kept by default (--keep 1) to stay within a ~10 GB
-bucket budget.  Pass --keep N to retain more generations.
+3 generations are kept by default (--keep 3): ~2 GB/snapshot × 3 ≈ 6 GB,
+well within the 10 GB R2 free tier.  Pass --keep N to adjust.
 
 The bucket is fully public (Cloudflare R2 → Settings → Public Access).
 Users can pull without any credentials — just set S3_BUCKET and S3_ENDPOINT
@@ -150,7 +150,7 @@ def _resolve_default_data_dir() -> str:
 
 _DEFAULT_DATA_DIR = _resolve_default_data_dir()
 _DEFAULT_REGION = "singapore"
-_DEFAULT_KEEP = 1  # keeps bucket under ~10 GB; pass --keep N to retain more
+_DEFAULT_KEEP = 3  # ~2 GB/snapshot × 3 ≈ 6 GB; well within the 10 GB free tier
 _DEFAULT_BUCKET = "arktrace-public"
 _DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
 # Public custom domain — used for unauthenticated (curl/urllib) downloads only.
