@@ -31,6 +31,7 @@ For implementation-level commands and flags, see [Pipeline Operations](pipeline-
 | Review-Feedback Evaluation | Learn from human review outcomes and detect quality drift | Weekly/monthly quality cycle, after enough reviews accumulate | Tier-aware and ops-aware quality report with regression checks |
 | Public Data Integration Batch | End-to-end known-case coverage check across regions | Post-merge main branch validation and major-change dry runs | Public-overlap integration report and known-case floor check |
 | Demo / Smoke Pipeline | Fast environment and UI verification without full ingestion | Demos, incident triage, local sanity checks | Deterministic watchlist for quick dashboard and flow validation |
+| Data Publishing (CI) | Build and publish fresh artifacts to R2 for app users | Weekly (Monday 02:00 UTC) and after each successful integration run | Generation zip + demo bundle pushed to `arktrace-public` |
 
 ## 1) Full Screening Pipeline (9-step)
 
@@ -248,6 +249,62 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 - UI loads non-empty candidate list quickly
 - Core interaction paths work (filter, detail, review actions)
 
+## 8) Data Publishing Pipeline (CI)
+
+### Purpose
+
+Build fresh pipeline artifacts for all five regions and publish them to
+`arktrace-public` so app users can pull pre-built data without running the
+pipeline locally.
+
+### When To Run
+
+- Automatically every Monday 02:00 UTC (`data-publish.yml` schedule).
+- Automatically after every successful `Public Backtest Integration` run on `main`.
+- Manually via `workflow_dispatch` after a data update.
+
+### Main Inputs
+
+| Source | What | Notes |
+|---|---|---|
+| `arktrace-private-capvista` | Custom feed CSVs (AIS, SAR, cargo, sanctions) | Pulled at start of run; skipped gracefully if credentials absent (forks) |
+| Public data (GDELT, OpenSanctions) | Fetched during pipeline run | No API key required |
+| `--seed-dummy` flag | Injects 10 known OFAC vessels into scoring | Ensures backtest has sufficient labeled positives |
+
+### Pipeline Steps
+
+1. Pull custom feeds from `arktrace-private-capvista` → `_inputs/custom_feeds/` (`continue-on-error`).
+2. Run `run_public_backtest_batch.py` for all 5 regions in seed mode — custom feeds are ingested at step 5 of the 9-step pipeline.
+3. `sync_r2.py push --keep 1` — zip all region artifacts, upload to `arktrace-public`, delete previous generation.
+4. `sync_r2.py push-demo` — overwrite `demo.zip` (lightweight bundle for quick developer setup).
+5. `sync_r2.py push-sanctions-db --force` — upload `public_eval.duckdb`.
+6. Lead time validation (`validate_lead_time_ofac.py`).
+7. Metrics email notification (`notify_metrics.py`).
+
+### Expected Outputs
+
+| Artifact | Destination | Consumer |
+|---|---|---|
+| `<timestamp>.zip` (all 5 regions) | `arktrace-public` | App users via `sync_r2.py pull` |
+| `latest` (plain-text pointer) | `arktrace-public` | `sync_r2.py pull` staleness check |
+| `demo.zip` | `arktrace-public` | Developers via `sync_r2.py pull-demo` |
+| `public_eval.duckdb` | `arktrace-public` | Integration tests via `sync_r2.py pull-sanctions-db` |
+
+Each generation zip contains, per region:
+`{region}.duckdb`, `{region}_watchlist.parquet`, `{region}_causal_effects.parquet`,
+`{region}_graph/`, `candidate_watchlist.parquet`, `validation_metrics.json`.
+
+### Operational Success Criteria
+
+- All 5 regions produce non-empty watchlists.
+- `push` step reports a non-empty snapshot ID in its output.
+- Metrics email is sent (or gracefully skipped if SMTP secrets absent).
+- No region DuckDB or watchlist parquet is missing from the zip.
+
+See [r2-data-layout.md](r2-data-layout.md) for the full bucket layout, actor responsibilities, and credential model.
+
+---
+
 ## Suggested Operations Cadence
 
 | Cadence | Pipeline | Goal | Trigger Type | Triggered By (if Event) |
@@ -255,6 +312,7 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 | Continuous | Continuous Monitoring | Live situational awareness | Scheduled (always-on service loop) | N/A |
 | Daily or per watch | Full Screening (if non-streaming mode) | Fresh candidate ranking | Scheduled or Event-triggered | Duty operations officer / shift lead |
 | Weekly | Review-Feedback Evaluation | Threshold tuning and drift control | Scheduled | N/A |
+| Weekly (Monday 02:00 UTC) | Data Publishing (CI) | Publish fresh artifacts to R2 for app users | Scheduled + Event-triggered | CI schedule or after Public Backtest Integration succeeds |
 | After each confirmed label | Delayed-Label Intelligence (Backtracking) | Precursor discovery + graph uplift | Event-triggered | Analyst submitting confirmed review / weekly sweep |
 | Pre-release | Historical Backtesting + Public Integration Batch | Quality gate before change promotion | Event-triggered | Release owner / CI pipeline on release candidate |
 | On-demand | Demo/Smoke | Fast verification and incident checks | Event-triggered | Analyst / operator / incident commander |
@@ -268,3 +326,4 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 - Need to convert a new confirmed label into precursor insights and graph uplift: run Backtracking.
 - Need broad post-merge safety check on practical known positives: run Public Data Integration Batch.
 - Need a quick UI/environment confidence check: run Demo/Smoke.
+- Need to publish fresh pre-built artifacts to R2 for app users: run Data Publishing (CI) via `workflow_dispatch` or wait for the weekly schedule.

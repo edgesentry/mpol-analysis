@@ -11,7 +11,24 @@
 │  Sanctions (OFAC SDN, EU, UN, OpenSanctions CC0)                │
 │  Vessel registry (Equasis, ITU MMSI)                            │
 │  Trade flow (UN Comtrade API)                                   │
+│  GDELT (public HTTP feed — news-signal enrichment)              │
 └──────────────────────────┬──────────────────────────────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────────────┐
+│  PROPRIETARY FEEDS  [OPTIONAL — private bucket]  │              │
+│  arktrace-private-capvista (Cloudflare R2)       │              │
+│                                                  │              │
+│  Only needed if you want custom data ingested    │              │
+│  into the CI pipeline.  Skip this bucket and     │              │
+│  CI runs on public data only (--seed-dummy).     │              │
+│                                                  │              │
+│  App owner & CI: read + write access (same key). │              │
+│                                                  │              │
+│  AIS CSV / NMEA ─────────────────────────────────┤              │
+│  SAR detections ──  push: sync_r2.py push-custom-feeds         │
+│  Cargo manifests ─  pull: sync_r2.py pull-custom-feeds         │
+│  Custom sanctions ──  (skipped gracefully if bucket absent)     │
+└──────────────────────────┼──────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -21,6 +38,11 @@
 │  Sanctions entities ─────────────► DuckDB (sanctions_entities)  │
 │  Vessel ownership chains ────────► Lance Graph (on-disk files)  │
 │  Trade flow by route ────────────► DuckDB (trade_flow table)    │
+│  Custom feeds (step 5) ──────────► DuckDB (auto-detected type)  │
+│    · AIS CSV → ais_positions                                    │
+│    · SAR CSV → sar_detections                                   │
+│    · Cargo CSV → trade_flow                                     │
+│    · Sanctions CSV → sanctions_entities                         │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -62,7 +84,22 @@
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  OUTPUT                                                         │
+│  CI DATA PUBLISHING  (data-publish.yml — weekly + on-merge)     │
+│                                                                 │
+│  Runs full pipeline (all 5 regions, seed mode + custom feeds)   │
+│  then pushes artifacts to arktrace-public (Cloudflare R2):      │
+│                                                                 │
+│  · <timestamp>.zip  ── generation zip (all region artifacts)    │
+│  · demo.zip         ── lightweight bundle (no DuckDB)           │
+│  · public_eval.duckdb ── OpenSanctions DB (integration tests)   │
+│  · gdelt.lance.zip  ── GDELT corpus (analyst brief / chat)      │
+│                                                                 │
+│  arktrace-public is fully public — no credentials to download.  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │  app users pull via sync_r2.py
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  OUTPUT  (local — from pipeline run or R2 pull)                 │
 │                                                                 │
 │  data/processed/candidate_watchlist.parquet                     │
 │  FastAPI + HTMX dashboard  (src/api/)  → http://localhost:8000  │
@@ -79,20 +116,24 @@
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│  STORAGE LAYER  (cross-cutting; local or S3-compatible)         │
+│  STORAGE LAYER  (cross-cutting)                                 │
 │                                                                 │
 │  OLAP  — DuckDB + Parquet                                       │
-│    · local:  data/processed/mpol.duckdb                         │
+│    · local:  data/processed/<region>.duckdb                     │
 │    · Parquet outputs: data/processed/*.parquet                  │
 │              or  s3://arktrace/processed/  (MinIO / S3)         │
 │                                                                 │
 │  Graph — Lance (embedded, serverless)                           │
-│    · local:  data/processed/mpol_graph/                         │
+│    · local:  data/processed/<region>_graph/                     │
 │              data/processed/gdelt.lance                         │
 │    · remote: s3://arktrace/mpol_graph/                          │
 │              s3://arktrace/gdelt.lance  (MinIO / S3)            │
 │                                                                 │
-│  Object store — MinIO  localhost:9000  (docker-compose.yml)     │
+│  Object store — Cloudflare R2  (production distribution)        │
+│    · arktrace-public    — public read; app users pull from here │
+│    · arktrace-private-capvista — auth; proprietary custom feeds │
+│                                                                 │
+│  Object store — MinIO  localhost:9000  (local dev / Docker)     │
 │    · bucket: arktrace  (created by minio_init on first run)     │
 │    · console: localhost:9001                                    │
 └─────────────────────────────────────────────────────────────────┘
@@ -145,6 +186,57 @@ Lance Graph stores the vessel ownership graph as columnar Lance datasets — no 
 # Minimum BFS distance from vessel to any sanctioned company
 # 0 = directly sanctioned, 1 = 1-hop owner/manager, 2 = 2-hop via CONTROLLED_BY, 99 = none
 ```
+
+---
+
+## Data Distribution (Cloudflare R2)
+
+CI generates pre-built artifacts and publishes them to Cloudflare R2 after every
+weekly pipeline run so app users can start the dashboard without running the
+pipeline locally.
+
+### Two-bucket model
+
+| Bucket | Access | Contents | Who reads/writes | Required? |
+|---|---|---|---|---|
+| `arktrace-public` | Anonymous read (no credentials) | Generation zips, demo bundle, `public_eval.duckdb`, `gdelt.lance.zip` | CI writes; app users read; app owner writes | **Yes** |
+| `arktrace-private-capvista` | Authenticated read/write | Proprietary custom feed CSVs (AIS, SAR, cargo, sanctions) | App owner reads/writes; CI reads | **Optional** — only needed to feed custom data into the CI pipeline. Without it, CI runs on public data only (`--seed-dummy`). |
+
+`arktrace-private-capvista` is **private and optional**. If the bucket or its credentials
+are absent, `pull-custom-feeds` exits silently and the pipeline continues with public data.
+No code changes are required — the step uses `continue-on-error: true` in CI.
+
+When the private bucket is used, a single R2 API token (Cloudflare Dashboard → R2 →
+Manage R2 API Tokens) is scoped to both buckets and shared between app owner and CI.
+CI maps `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` repository secrets to
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+
+### CI pipeline (data-publish.yml)
+
+Triggers: weekly cron (Monday 02:00 UTC) and after every successful
+`Public Backtest Integration` run on `main`.
+
+1. Pull custom feed CSVs from `arktrace-private-capvista` → `_inputs/custom_feeds/` (`continue-on-error`; forks skip gracefully).
+2. Run the full 9-step pipeline for all five regions in seed mode (`--seed-dummy`). Custom feeds are ingested at step 5 and their signals appear in all downstream scoring.
+3. Push generation zip (`<timestamp>.zip`) to `arktrace-public`; delete previous generation (`--keep 1`).
+4. Push `demo.zip` (lightweight bundle for quick developer setup).
+5. Push `public_eval.duckdb` (OpenSanctions DB).
+
+### App user pull options
+
+```bash
+# Pull one region — starts dashboard immediately
+uv run python scripts/sync_r2.py pull --region singapore
+
+# Lightweight demo bundle (no DuckDB, ~10–50 MB)
+uv run python scripts/sync_r2.py pull-demo
+
+# OpenSanctions DB for integration tests
+uv run python scripts/sync_r2.py pull-sanctions-db
+```
+
+No credentials required. See [r2-data-layout.md](r2-data-layout.md) for the full
+bucket layout, actor responsibilities, and credential model.
 
 ---
 
