@@ -1060,7 +1060,6 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
     Only uploads files whose names do NOT end with ``_sample`` (sample fixtures are
     local smoke-test data only and must never be pushed to the private bucket).
     """
-    bucket = args.bucket
     feeds_dir = Path(args.feeds_dir)
 
     if not feeds_dir.exists():
