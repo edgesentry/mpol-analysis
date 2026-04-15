@@ -176,6 +176,12 @@ _cleanup() {
     kill "${UVICORN_PID}" 2>/dev/null || true
     wait "${UVICORN_PID}" 2>/dev/null || true
   fi
+  # uvicorn --reload spawns a multiprocessing worker in a separate process
+  # group that survives the parent being killed.  Sweep it by port.
+  WORKERS=$(lsof -ti ":${PORT}" 2>/dev/null || true)
+  if [[ -n "${WORKERS}" ]]; then
+    kill -9 ${WORKERS} 2>/dev/null || true
+  fi
   if [[ -n "${LLM_PID:-}" ]]; then
     echo "  Stopping llama-server (PID ${LLM_PID})…"
     kill "${LLM_PID}" 2>/dev/null || true
