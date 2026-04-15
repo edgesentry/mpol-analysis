@@ -208,17 +208,17 @@ For developers, the key is mastering **Prompt Engineering** in `src/api/routes/b
 - **External Docs:** [Prompt Engineering Guide](https://www.promptingguide.ai/).
 - **Internal Source:** `src/api/routes/briefs.py`, `src/api/llm.py`.
 
-### Day 16: Local LLM Inference (mlx-lm)
-To maintain our "Local-First" promise, we run our LLMs natively on Apple Silicon (M-series chips) using the **mlx-lm** framework. This framework is specifically optimized for Apple's unified memory architecture, allowing us to run high-quality models (like Qwen2.5-7B) with very high tokens-per-second.
+### Day 16: Local LLM Inference (llama.cpp)
+To maintain our "Local-First" promise, we run LLMs locally using **llama.cpp** (`llama-server`). Unlike platform-specific solutions, llama.cpp runs on macOS (Metal), Linux (CPU/CUDA), and Windows — the same stack in development, Docker, and air-gapped edge deployments.
 
-Native local inference is a critical capability for air-gapped deployments on ships or in secure facilities. It ensures zero data leakage (the vessel data never leaves the laptop) and zero dependency on expensive or high-latency satellite internet connections.
+Native local inference is a critical capability for air-gapped deployments on ships or in secure facilities. It ensures zero data leakage (vessel data never leaves the device) and zero dependency on expensive or high-latency satellite internet connections.
 
-We expose our local LLM via an **OpenAI-compatible REST endpoint**. This means we can swap between a local model running on `mlx-lm`, an `ollama` instance, or even a remote OpenAI/Anthropic API just by changing an environment variable (`LLM_PROVIDER`), without changing a single line of application code.
+We expose the local LLM via an **OpenAI-compatible REST endpoint** (`llama-server` on port 8080). This means we can swap between a local model, or a remote OpenAI/Anthropic API just by changing an environment variable (`LLM_PROVIDER`), without changing a single line of application code.
 
-For developers, Day 16 is about learning how to manage the `mlx-lm.server` process and how to select the right model quantization (e.g., 4-bit vs 8-bit) to balance performance and memory usage on constrained edge hardware.
+The default model is `bartowski/Qwen2.5-7B-Instruct-GGUF` (Q4_K_M, ~4.4 GB), licensed under Apache 2.0 — commercially safe with no government or defence restrictions. For developers, Day 16 is about learning how to select the right GGUF quantisation (Q4_K_M vs Q8_0) to balance quality and memory on constrained edge hardware.
 
 - **Internal Docs:** [docs/local-llm-setup.md](local-llm-setup.md).
-- **External Docs:** [MLX Framework](https://github.com/ml-explore/mlx), [mlx-lm Examples](https://github.com/ml-explore/mlx-examples/tree/main/llms/mlx_lm).
+- **External Docs:** [llama.cpp install guide](https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md), [GGUF quantisation guide](https://github.com/ggml-org/llama.cpp/blob/master/docs/quantization.md).
 - **Internal Source:** `scripts/run_app.sh`, `src/api/llm.py`.
 
 ### Day 17: The Tactical Interface (FastAPI, HTMX, SSE)

@@ -23,7 +23,7 @@ Prompts are short (500–1,200 tokens in, 150–300 out). A 4–7B model is suff
 
 arktrace uses **llama.cpp** (`llama-server`) as its local inference backend. It runs on macOS (Metal), Linux (CPU/CUDA), and Windows — the same stack everywhere.
 
-The default model is `bartowski/Qwen2.5-7B-Instruct-GGUF` (Q4_K_M quantisation), which is commercially licensed under Apache 2.0 and matches what was previously used via mlx-lm.
+The default model is `bartowski/Qwen2.5-7B-Instruct-GGUF` (Q4_K_M quantisation), commercially licensed under Apache 2.0.
 
 ### One-time installation
 
