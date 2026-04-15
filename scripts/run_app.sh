@@ -162,10 +162,28 @@ if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
   export LLM_BASE_URL="http://localhost:${LLM_PORT}/v1"
   export LLM_API_KEY="${LLM_API_KEY:-local}"
   export LLM_MODEL="${GGUF_FILE}"
-
-  # Shut down llama-server when the script exits
-  trap 'echo ""; echo "Stopping llama-server (PID ${LLM_PID})…"; kill "${LLM_PID}" 2>/dev/null || true' EXIT
 fi
+
+# ── Shutdown handler — registered before uvicorn starts ───────────────────────
+# Kills uvicorn (and its --reload workers) and llama-server on Ctrl+C or EXIT.
+# Using kill -- -$$ sends SIGTERM to the entire process group, which catches
+# uvicorn's worker subprocesses that survive a direct kill on the parent PID.
+_cleanup() {
+  echo ""
+  echo "Shutting down…"
+  if [[ -n "${UVICORN_PID:-}" ]]; then
+    echo "  Stopping uvicorn (PID ${UVICORN_PID})…"
+    kill "${UVICORN_PID}" 2>/dev/null || true
+    wait "${UVICORN_PID}" 2>/dev/null || true
+  fi
+  if [[ -n "${LLM_PID:-}" ]]; then
+    echo "  Stopping llama-server (PID ${LLM_PID})…"
+    kill "${LLM_PID}" 2>/dev/null || true
+    wait "${LLM_PID}" 2>/dev/null || true
+  fi
+  echo "Done."
+}
+trap '_cleanup' EXIT INT TERM
 
 # ── Print config summary ───────────────────────────────────────────────────────
 echo "🚀 Starting dashboard"
@@ -176,11 +194,17 @@ echo "   LLM_PROVIDER  = ${LLM_PROVIDER:-openai}"
 echo "   LLM_BASE_URL  = ${LLM_BASE_URL:-http://localhost:${LLM_PORT}/v1}"
 echo "   LLM_MODEL     = ${LLM_MODEL:-${GGUF_FILE}}"
 echo "   Dashboard     → http://localhost:${PORT}"
+echo "   Press Ctrl+C to stop."
 echo ""
 
 # ── Run dashboard ──────────────────────────────────────────────────────────────
+# Run uvicorn in the background and wait so the shell stays alive to handle
+# Ctrl+C via the trap above.  Do NOT use `exec` here — exec replaces the shell
+# and prevents the EXIT trap from firing.
 cd "${REPO_ROOT}"
-exec uv run uvicorn src.api.main:app \
+uv run uvicorn src.api.main:app \
   --host 0.0.0.0 \
   --port "${PORT}" \
-  --reload
+  --reload &
+UVICORN_PID=$!
+wait "${UVICORN_PID}"
