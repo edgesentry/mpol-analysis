@@ -168,13 +168,22 @@ fi
 # Kills uvicorn (and its --reload workers) and llama-server on Ctrl+C or EXIT.
 # Using kill -- -$$ sends SIGTERM to the entire process group, which catches
 # uvicorn's worker subprocesses that survive a direct kill on the parent PID.
+_kill_with_timeout() {
+  local pid="$1" timeout="${2:-3}"
+  kill "${pid}" 2>/dev/null || return 0          # SIGTERM
+  for _ in $(seq 1 "${timeout}"); do
+    sleep 1
+    kill -0 "${pid}" 2>/dev/null || return 0     # already gone
+  done
+  kill -9 "${pid}" 2>/dev/null || true           # force kill after timeout
+}
+
 _cleanup() {
   echo ""
   echo "Shutting down…"
   if [[ -n "${UVICORN_PID:-}" ]]; then
     echo "  Stopping uvicorn (PID ${UVICORN_PID})…"
-    kill "${UVICORN_PID}" 2>/dev/null || true
-    wait "${UVICORN_PID}" 2>/dev/null || true
+    _kill_with_timeout "${UVICORN_PID}" 3
   fi
   # uvicorn --reload spawns a multiprocessing worker in a separate process
   # group that survives the parent being killed.  Sweep it by port.
@@ -184,8 +193,7 @@ _cleanup() {
   fi
   if [[ -n "${LLM_PID:-}" ]]; then
     echo "  Stopping llama-server (PID ${LLM_PID})…"
-    kill "${LLM_PID}" 2>/dev/null || true
-    wait "${LLM_PID}" 2>/dev/null || true
+    _kill_with_timeout "${LLM_PID}" 5
   fi
   echo "Done."
 }
