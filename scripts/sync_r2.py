@@ -1055,10 +1055,9 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
 
     _SKIP = {".gitkeep", ".gitignore"}
     candidates = sorted(
-        f for f in feeds_dir.iterdir()
-        if f.is_file()
-        and f.name not in _SKIP
-        and not f.stem.endswith("_sample")
+        f
+        for f in feeds_dir.iterdir()
+        if f.is_file() and f.name not in _SKIP and not f.stem.endswith("_sample")
     )
     if not candidates:
         print(
@@ -1094,8 +1093,7 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
     """
     if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
         print(
-            "[skip] AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set "
-            "— skipping pull-custom-feeds",
+            "[skip] AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set — skipping pull-custom-feeds",
             file=sys.stderr,
         )
         return 0
