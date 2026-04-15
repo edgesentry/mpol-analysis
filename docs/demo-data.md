@@ -138,7 +138,8 @@ without credentials because the `arktrace-public` bucket has public access
 enabled.
 
 1. Create an R2 API token at Cloudflare Dashboard → R2 → Manage R2 API Tokens
-   with **Object Read & Write** permission scoped to `arktrace-public`.
+   with **Object Read & Write** permission scoped to **both** `arktrace-public`
+   and `arktrace-private-capvista`.
 2. Add to `.env`:
 
 ```dotenv
@@ -148,6 +149,10 @@ AWS_REGION=auto
 S3_ENDPOINT=https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com
 S3_BUCKET=arktrace-public
 ```
+
+The same token is used for both the public and private buckets.  See
+[R2 data layout](r2-data-layout.md#private-bucket--arktrace-private-capvista)
+for the full credential model.
 
 ---
 
