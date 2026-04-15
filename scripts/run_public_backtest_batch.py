@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -34,12 +35,18 @@ _DUMMY_MMSIS: frozenset[str] = frozenset(
     }
 )
 
-WATCHLIST_BY_REGION = {
-    "singapore": "data/processed/singapore_watchlist.parquet",
-    "japan": "data/processed/japansea_watchlist.parquet",
-    "middleeast": "data/processed/middleeast_watchlist.parquet",
-    "europe": "data/processed/europe_watchlist.parquet",
-    "gulf": "data/processed/gulf_watchlist.parquet",
+# Watchlists are pulled from R2 to the canonical user data directory.
+# Pipeline operators can override with ARKTRACE_DATA_DIR or DATA_DIR.
+_watchlist_dir = Path(
+    os.getenv("ARKTRACE_DATA_DIR") or os.getenv("DATA_DIR") or (Path.home() / ".arktrace" / "data")
+)
+
+WATCHLIST_BY_REGION: dict[str, Path] = {
+    "singapore": _watchlist_dir / "singapore_watchlist.parquet",
+    "japan": _watchlist_dir / "japansea_watchlist.parquet",
+    "middleeast": _watchlist_dir / "middleeast_watchlist.parquet",
+    "europe": _watchlist_dir / "europe_watchlist.parquet",
+    "gulf": _watchlist_dir / "gulf_watchlist.parquet",
 }
 
 
@@ -325,7 +332,7 @@ def main() -> None:
     windows: list[dict[str, Any]] = []
     label_counts: dict[str, int] = {}
     for region in regions:
-        watchlist_path = (project_root / WATCHLIST_BY_REGION[region]).resolve()
+        watchlist_path = WATCHLIST_BY_REGION[region].resolve()
         if not watchlist_path.exists():
             print(f"[skip] {region}: watchlist not found at {watchlist_path}", flush=True)
             skipped_regions.append(region)
@@ -368,9 +375,9 @@ def main() -> None:
     # a vessel scored in multiple regions is represented once at its best score.
     evaluated_regions = [r for r in regions if r not in skipped_regions]
     watchlist_parts = [
-        pl.read_parquet((project_root / WATCHLIST_BY_REGION[r]).resolve())
+        pl.read_parquet(WATCHLIST_BY_REGION[r].resolve())
         for r in evaluated_regions
-        if (project_root / WATCHLIST_BY_REGION[r]).exists()
+        if WATCHLIST_BY_REGION[r].exists()
     ]
     if watchlist_parts:
         combined_raw = pl.concat(watchlist_parts, how="vertical_relaxed")
