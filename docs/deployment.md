@@ -1,5 +1,132 @@
 # Deployment
 
+## Platform quick-reference
+
+| Platform | Recommended path | LLM inference |
+|---|---|---|
+| Windows | Docker | CPU (works out of the box) |
+| Linux | Docker or native (`run_app.sh`) | CPU (Docker) or NVIDIA CUDA (native) |
+| macOS (Apple Silicon) | Docker or native (`run_app.sh`) | CPU (Docker) or Metal GPU (native) |
+
+---
+
+## Docker quickstart — Windows, Linux, macOS (zero prerequisites)
+
+The fastest path. No Python, no uv, no repo clone required.
+
+```bash
+docker run --name arktrace -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  ghcr.io/edgesentry/arktrace:latest
+```
+
+Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run. The named volume `arktrace-data` persists data across restarts.
+
+To change region:
+
+```bash
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  -e ARKTRACE_REGION=japan \
+  ghcr.io/edgesentry/arktrace:latest
+```
+
+### Enable analyst briefs (optional)
+
+Analyst briefs are disabled by default in Docker (CPU inference is slower and the model is large). Two options:
+
+**Option A — Anthropic API (recommended for Docker):**
+
+```bash
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  -e LLM_PROVIDER=anthropic \
+  -e LLM_API_KEY=sk-ant-... \
+  -e LLM_MODEL=claude-haiku-4-5-20251001 \
+  ghcr.io/edgesentry/arktrace:latest
+```
+
+**Option B — Native with GPU (macOS Metal or Linux CUDA):**
+
+The Docker image does not include `llama-server`. For local model inference with GPU acceleration, use the native path:
+
+```bash
+bash scripts/run_app.sh   # macOS: Metal GPU; Linux: CUDA if llama.cpp built with CUDA
+```
+
+**Linux with NVIDIA GPU (Docker):**
+
+```bash
+docker run --gpus all -p 8000:8000 \
+  -v "$(pwd)/models:/models:ro" \
+  -e LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
+  ghcr.io/edgesentry/arktrace:latest
+```
+
+### Update to a new version
+
+```bash
+docker pull ghcr.io/edgesentry/arktrace:latest
+```
+
+Then stop the running container (Ctrl+C or `docker stop arktrace`) and re-run the same `docker run` command. The `arktrace-data` volume is preserved — no data is lost on update.
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `ARKTRACE_REGION` | `singapore` | Region to serve |
+| `AUTO_PULL` | `1` | Set to `0` to disable automatic R2 data pull on startup |
+| `LLM_PROVIDER` | _(unset — briefs disabled)_ | `anthropic` or `openai` (local llama-server) |
+| `LLM_API_KEY` | _(unset)_ | API key for Anthropic or remote OpenAI-compatible endpoint |
+| `LLM_MODEL` | `Qwen2.5-7B-Instruct-Q4_K_M.gguf` | GGUF filename in `/models` or Anthropic model ID |
+
+---
+
+## Native — all platforms (developer path)
+
+For developers running from a cloned repo with native GPU acceleration.
+
+### Prerequisites
+
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- llama.cpp (optional — for analyst briefs):
+
+| Platform | Install |
+|---|---|
+| macOS | `brew install llama.cpp` |
+| Linux | Download binary from [github.com/ggml-org/llama.cpp/releases/latest](https://github.com/ggml-org/llama.cpp/releases/latest) (`llama-<tag>-bin-ubuntu-x64.zip`) and add to `PATH` |
+| Windows | Use Docker (recommended). Or download the Windows binary (`llama-<tag>-bin-win-avx2-x64.zip`) and run via Git Bash or WSL2 |
+
+### Start
+
+```bash
+git clone https://github.com/edgesentry/arktrace && cd arktrace
+bash scripts/run_app.sh                    # Singapore (default)
+bash scripts/run_app.sh --region japan     # different region
+bash scripts/run_app.sh --no-llm           # skip llama-server (briefs disabled)
+bash scripts/run_app.sh --provider anthropic  # use Anthropic API for briefs
+```
+
+Data is pulled from R2 automatically if not already present. Press **Ctrl+C** to stop everything (uvicorn + llama-server).
+
+See [docs/local-llm-setup.md](local-llm-setup.md) for model selection and LLM provider options.
+
+---
+
+## Docker image — published to GHCR
+
+The multi-arch image (`linux/amd64` + `linux/arm64`) is published automatically:
+
+| Tag | When |
+|---|---|
+| `ghcr.io/edgesentry/arktrace:latest` | Every push to `main` |
+| `ghcr.io/edgesentry/arktrace:v1.2.3` | Release tags |
+
+Source: `.github/workflows/docker-publish.yml`.
+
+---
+
 ## Local — single command (Docker Compose)
 
 The fastest way to run the dashboard locally without touching Python:

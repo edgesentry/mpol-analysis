@@ -107,6 +107,18 @@ All models below are permissively licensed (Apache 2.0 or MIT) — compatible wi
 
 ---
 
+## Docker — analyst briefs in containers
+
+The Docker image does not include `llama-server`. Two options for briefs in Docker:
+
+**Option A — Anthropic API (recommended):** Pass `LLM_PROVIDER=anthropic` and `LLM_API_KEY` to `docker run`. No model download required.
+
+**Option B — Native run_app.sh:** For local model inference with GPU acceleration (Metal on macOS, CUDA on Linux), use `bash scripts/run_app.sh` instead of Docker. llama-server runs on the host with full GPU access.
+
+See [docs/deployment.md](deployment.md) → "Enable analyst briefs" for the exact compose snippets.
+
+---
+
 ## Provider: anthropic (remote)
 
 ```bash

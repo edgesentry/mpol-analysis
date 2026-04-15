@@ -1,56 +1,48 @@
 services:
-  # Downloads the GGUF model on first run; skips if already present in the volume.
-  # Set MODEL_NAME to override the default (phi-4-mini-it, MIT, ~2.4 GB).
-  # Set HF_TOKEN if the model repo is gated.
-  model_init:
-    build:
-      context: .
-      target: downloader
-    container_name: mpol-model-init
-    volumes:
-      - models:/app/models
-    environment:
-      MODEL_NAME: ${MODEL_NAME:-phi-4-mini-it}
-      MODEL_DIR: /app/models
-      HF_TOKEN: ${HF_TOKEN:-}
-    command: ["python", "scripts/download_model.py"]
-
   dashboard:
     build: .
-    container_name: mpol-dashboard
+    image: ghcr.io/edgesentry/arktrace:latest
+    container_name: arktrace-dashboard
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      VALIDATION_METRICS_PATH: data/processed/validation_metrics.json
-      ALERT_CONFIDENCE_THRESHOLD: "0.75"
-      ALERT_POLL_INTERVAL: "60"
-      # Local LLM — defaults to llamacpp with the model downloaded by model_init
-      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
-      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf}
+      ARKTRACE_REGION: ${ARKTRACE_REGION:-singapore}
+      AUTO_PULL: ${AUTO_PULL:-1}
+      # LLM — uncomment one block to enable analyst briefs:
+      #
+      # Option A: local model (mount a GGUF file into /models)
+      # LLM_MODEL: Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      #
+      # Option B: Anthropic API
+      # LLM_PROVIDER: anthropic
+      # LLM_API_KEY: sk-ant-...
+      # LLM_MODEL: claude-haiku-4-5-20251001
     volumes:
-      - ./data:/app/data   # DuckDB + processed data (pulled from R2 via sync_r2.py pull)
-      - models:/app/models  # GGUF model downloaded by model_init
-    depends_on:
-      model_init:
-        condition: service_completed_successfully
-    command: ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
+      - arktrace-data:/root/.arktrace/data
+      # Uncomment and set MODEL_DIR to enable local GGUF model inference:
+      # - ${MODEL_DIR:?set MODEL_DIR to your models directory}:/models:ro
 
   pipeline:
     build: .
+    image: ghcr.io/edgesentry/arktrace:latest
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      ARKTRACE_REGION: ${PIPELINE_REGION:-singapore}
     volumes:
-      - ./data:/app/data
+      - arktrace-data:/root/.arktrace/data
     profiles:
       - pipeline
+    entrypoint: []
     command: >
-      uv run python scripts/run_pipeline.py
+      python scripts/run_pipeline.py
       --region ${PIPELINE_REGION:-singapore}
       --non-interactive
       --seed-dummy
-      ${PIPELINE_STREAM_DURATION:+--stream-duration ${PIPELINE_STREAM_DURATION}}
 
 volumes:
-  models:  # GGUF model files — persists across rebuilds
+  arktrace-data:

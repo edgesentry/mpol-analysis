@@ -6,18 +6,28 @@ Built for **Cap Vista Accelerator Solicitation 5.0, Challenge 1** (deadline: 29 
 
 ## Quick Start
 
+### Docker — Windows, Linux, macOS (zero prerequisites beyond Docker Desktop)
+
 ```bash
-# Pull pre-built image (linux/amd64 and linux/arm64)
-docker pull ghcr.io/edgesentry/arktrace:latest
-docker compose up
+docker run -p 8000:8000 \
+  -v arktrace-data:/root/.arktrace/data \
+  ghcr.io/edgesentry/arktrace:latest
 ```
 
-Or build from source:
+Open **http://localhost:8000**. Demo data is pulled from R2 automatically on first run — no credentials needed. The named volume persists data across restarts.
+
+### Native — macOS / Linux / Windows (Git Bash / WSL2)
+
+For developers running from source with native GPU acceleration:
 
 ```bash
 git clone https://github.com/edgesentry/arktrace && cd arktrace
-docker compose up
+bash scripts/run_app.sh
 ```
+
+Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/), and [llama.cpp](https://github.com/ggml-org/llama.cpp/releases/latest) (optional — for analyst briefs).
+
+See [docs/deployment.md](docs/deployment.md) for full setup options.
 
 ## What It Does
 
@@ -41,6 +51,7 @@ Full documentation is in [`docs/`](docs/):
 | [Background](docs/background.md) | Shadow fleet problem, geography, evasion techniques, prior art |
 | [Architecture](docs/architecture.md) | Pipeline diagram, data storage design, feature and scoring design |
 | [Technical Solution](docs/technical-solution.md) | Tech stack, data sources, algorithms, output schema |
+| [Deployment](docs/deployment.md) | Docker quickstart, native setup, cloud deployment |
 | [Scenarios](docs/scenarios.md) | End-to-end workflows: morning brief, investigation, streaming, patrol handoff |
 | [Roadmap](docs/roadmap.md) | Phase A (screening) + Phase B (field investigation in edgesentry OSS) |
 | [Field Investigation](docs/field-investigation.md) | Physical vessel measurement, evidence capture, VDES reporting (edgesentry-rs/app) |
