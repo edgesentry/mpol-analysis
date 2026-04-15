@@ -73,6 +73,12 @@ class OpenAICompatClient:
                 json=payload,
                 headers={"Authorization": f"Bearer {self._api_key}"},
             ) as resp:
+                if resp.status_code == 404:
+                    raise RuntimeError(
+                        f"/v1/chat/completions not found at {self._base_url}. "
+                        "Your llama.cpp is likely outdated — upgrade it: "
+                        "brew upgrade llama.cpp  (or see docs/local-llm-setup.md)"
+                    )
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):

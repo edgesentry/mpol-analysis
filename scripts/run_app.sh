@@ -124,9 +124,10 @@ if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
   LLM_PID=$!
   echo "   llama-server PID: ${LLM_PID}"
   echo "   Waiting for server to be ready…"
+  LLAMA_READY=false
   for i in $(seq 1 30); do
     if curl -sf "http://localhost:${LLM_PORT}/v1/models" > /dev/null 2>&1; then
-      echo "   ✅ llama-server ready → http://localhost:${LLM_PORT}/v1"
+      LLAMA_READY=true
       break
     fi
     sleep 2
@@ -134,6 +135,26 @@ if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
       echo "   ⚠️  llama-server did not respond in 60s — dashboard will start anyway"
     fi
   done
+
+  if [[ "${LLAMA_READY}" == true ]]; then
+    # Verify /v1/chat/completions is available — older llama.cpp returns 404 here.
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "http://localhost:${LLM_PORT}/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -d '{"model":"test","messages":[{"role":"user","content":"ping"}],"max_tokens":1}' \
+      2>/dev/null || echo "000")
+    if [[ "${HTTP_STATUS}" == "404" ]]; then
+      echo ""
+      echo "   ❌ llama-server is running but /v1/chat/completions returned 404."
+      echo "      Your llama.cpp is outdated. Upgrade it and retry:"
+      echo "        brew upgrade llama.cpp"
+      echo "      Then re-run: bash scripts/run_app.sh"
+      echo ""
+      kill "${LLM_PID}" 2>/dev/null || true
+      exit 1
+    fi
+    echo "   ✅ llama-server ready → http://localhost:${LLM_PORT}/v1"
+  fi
   echo ""
 
   # Point the dashboard at the local llama-server
