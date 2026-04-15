@@ -1053,13 +1053,16 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
         print(f"Error: feeds directory does not exist: {feeds_dir}", file=sys.stderr)
         return 1
 
+    _SKIP = {".gitkeep", ".gitignore"}
     candidates = sorted(
         f for f in feeds_dir.iterdir()
-        if f.is_file() and not f.stem.endswith("_sample")
+        if f.is_file()
+        and f.name not in _SKIP
+        and not f.stem.endswith("_sample")
     )
     if not candidates:
         print(
-            f"No non-sample feed files found in {feeds_dir}. "
+            f"No uploadable feed files found in {feeds_dir}. "
             "Add CSVs (without _sample suffix) and retry.",
             file=sys.stderr,
         )
