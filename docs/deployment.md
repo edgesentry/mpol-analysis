@@ -46,27 +46,15 @@ docker run -p 8000:8000 \
   ghcr.io/edgesentry/arktrace:latest
 ```
 
-**Option B — Local GGUF model (CPU):**
+**Option B — Native with GPU (macOS Metal or Linux CUDA):**
+
+The Docker image does not include `llama-server`. For local model inference with GPU acceleration, use the native path:
 
 ```bash
-# Download a model (~4.4 GB) into a local models/ directory
-mkdir -p models
-docker run --rm \
-  -v "$(pwd)/models:/models" \
-  --entrypoint huggingface-cli \
-  ghcr.io/edgesentry/arktrace:latest \
-  download bartowski/Qwen2.5-7B-Instruct-GGUF \
-    Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir /models
-
-# Start with the model mounted
-docker run -p 8000:8000 \
-  -v arktrace-data:/root/.arktrace/data \
-  -v "$(pwd)/models:/models:ro" \
-  -e LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
-  ghcr.io/edgesentry/arktrace:latest
+bash scripts/run_app.sh   # macOS: Metal GPU; Linux: CUDA if llama.cpp built with CUDA
 ```
 
-**Linux with NVIDIA GPU:**
+**Linux with NVIDIA GPU (Docker):**
 
 ```bash
 docker run --gpus all -p 8000:8000 \

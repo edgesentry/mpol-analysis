@@ -1,9 +1,13 @@
 # syntax=docker/dockerfile:1
 #
 # Multi-stage build:
-#   builder      — installs Python deps (compiles Rust/lance-graph)
-#   llama-server — copies the pre-built llama-server binary from the official image
-#   runtime      — lean final image: Python app + llama-server binary
+#   builder  — installs Python deps (compiles Rust/lance-graph)
+#   runtime  — lean final image: Python app
+#
+# LLM inference in Docker:
+#   Option A (recommended): set LLM_PROVIDER=anthropic + LLM_API_KEY
+#   Option B: mount a GGUF model volume and install llama-server on the host,
+#             or use native run_app.sh for Metal/CUDA GPU acceleration.
 
 # ── builder: Python deps (Rust/maturin for lance-graph) ───────────────────────
 FROM python:3.12-slim AS builder
@@ -33,34 +37,24 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev --frozen
 
-# ── llama-server: copy pre-built binary from official llama.cpp image ─────────
-# The official server image is multi-arch (linux/amd64 + linux/arm64).
-# Binary is at /llama-server inside that image.
-FROM ghcr.io/ggml-org/llama.cpp:server AS llama-server-src
-
 # ── runtime: lean final image ─────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Runtime libs: libgomp (OpenMP, required by llama-server), curl (health checks)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
     curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Python virtualenv from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# llama-server binary from the official llama.cpp image
-COPY --from=llama-server-src /llama-server /usr/local/bin/llama-server
-
 # Application source
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh /usr/local/bin/llama-server
+RUN chmod +x /entrypoint.sh
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
