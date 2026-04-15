@@ -189,13 +189,14 @@ _cleanup() {
     echo "  Stopping uvicorn (PID ${UVICORN_PID})…"
     _kill_with_timeout "${UVICORN_PID}" 3
   fi
-  # uvicorn --reload spawns a multiprocessing worker in a separate process
-  # group that survives the parent being killed.  Sweep by process pattern
-  # (not by port) to avoid killing unrelated system processes on the same port.
+  # uvicorn --reload spawns multiprocessing spawn/resource-tracker workers in a
+  # separate process group that survive the parent being killed.  Match both
+  # the main uvicorn process and any .venv python workers from this repo.
   WORKERS=$(pgrep -f "uvicorn src.api.main:app" 2>/dev/null || true)
-  if [[ -n "${WORKERS}" ]]; then
-    kill -9 ${WORKERS} 2>/dev/null || true
-  fi
+  VENV_WORKERS=$(pgrep -f "${REPO_ROOT}/.venv/bin/python.*multiprocessing" 2>/dev/null || true)
+  for PID in ${WORKERS} ${VENV_WORKERS}; do
+    kill -9 "${PID}" 2>/dev/null || true
+  done
   if [[ -n "${LLM_PID:-}" ]]; then
     echo "  Stopping llama-server (PID ${LLM_PID})…"
     _kill_with_timeout "${LLM_PID}" 5
