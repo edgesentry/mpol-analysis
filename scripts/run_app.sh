@@ -162,10 +162,48 @@ if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
   export LLM_BASE_URL="http://localhost:${LLM_PORT}/v1"
   export LLM_API_KEY="${LLM_API_KEY:-local}"
   export LLM_MODEL="${GGUF_FILE}"
-
-  # Shut down llama-server when the script exits
-  trap 'echo ""; echo "Stopping llama-server (PID ${LLM_PID})…"; kill "${LLM_PID}" 2>/dev/null || true' EXIT
 fi
+
+# ── Shutdown handler — registered before uvicorn starts ───────────────────────
+# Kills uvicorn (and its --reload workers) and llama-server on Ctrl+C or EXIT.
+# Using kill -- -$$ sends SIGTERM to the entire process group, which catches
+# uvicorn's worker subprocesses that survive a direct kill on the parent PID.
+_CLEANED_UP=false
+
+_kill_with_timeout() {
+  local pid="$1" timeout="${2:-3}"
+  kill "${pid}" 2>/dev/null || return 0          # SIGTERM
+  for _ in $(seq 1 "${timeout}"); do
+    sleep 1
+    kill -0 "${pid}" 2>/dev/null || return 0     # already gone
+  done
+  kill -9 "${pid}" 2>/dev/null || true           # force kill after timeout
+}
+
+_cleanup() {
+  [[ "${_CLEANED_UP}" == true ]] && return
+  _CLEANED_UP=true
+  echo ""
+  echo "Shutting down…"
+  if [[ -n "${UVICORN_PID:-}" ]]; then
+    echo "  Stopping uvicorn (PID ${UVICORN_PID})…"
+    _kill_with_timeout "${UVICORN_PID}" 3
+  fi
+  # uvicorn --reload spawns multiprocessing spawn/resource-tracker workers in a
+  # separate process group that survive the parent being killed.  Match both
+  # the main uvicorn process and any .venv python workers from this repo.
+  WORKERS=$(pgrep -f "uvicorn src.api.main:app" 2>/dev/null || true)
+  VENV_WORKERS=$(pgrep -f "${REPO_ROOT}/.venv/bin/python.*multiprocessing" 2>/dev/null || true)
+  for PID in ${WORKERS} ${VENV_WORKERS}; do
+    kill -9 "${PID}" 2>/dev/null || true
+  done
+  if [[ -n "${LLM_PID:-}" ]]; then
+    echo "  Stopping llama-server (PID ${LLM_PID})…"
+    _kill_with_timeout "${LLM_PID}" 5
+  fi
+  echo "Done."
+}
+trap '_cleanup' EXIT INT TERM
 
 # ── Print config summary ───────────────────────────────────────────────────────
 echo "🚀 Starting dashboard"
@@ -176,11 +214,17 @@ echo "   LLM_PROVIDER  = ${LLM_PROVIDER:-openai}"
 echo "   LLM_BASE_URL  = ${LLM_BASE_URL:-http://localhost:${LLM_PORT}/v1}"
 echo "   LLM_MODEL     = ${LLM_MODEL:-${GGUF_FILE}}"
 echo "   Dashboard     → http://localhost:${PORT}"
+echo "   Press Ctrl+C to stop."
 echo ""
 
 # ── Run dashboard ──────────────────────────────────────────────────────────────
+# Run uvicorn in the background and wait so the shell stays alive to handle
+# Ctrl+C via the trap above.  Do NOT use `exec` here — exec replaces the shell
+# and prevents the EXIT trap from firing.
 cd "${REPO_ROOT}"
-exec uv run uvicorn src.api.main:app \
+uv run uvicorn src.api.main:app \
   --host 0.0.0.0 \
   --port "${PORT}" \
-  --reload
+  --reload &
+UVICORN_PID=$!
+wait "${UVICORN_PID}"
