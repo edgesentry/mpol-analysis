@@ -121,6 +121,14 @@ import zipfile as zipmod
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Load .env before resolving any defaults that read env vars.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+
+    _load_dotenv()
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -160,6 +168,9 @@ _REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on 
 # Private bucket for proprietary customer feeds (e.g. Cap Vista MPOL data).
 # Uses separate credentials so it is never confused with the public bucket.
 _PRIVATE_BUCKET = "arktrace-private-capvista"
+# Custom domain for the private bucket — used as the S3 endpoint for CI reads/writes.
+# The domain IS the bucket, so S3 paths are bare keys (no bucket-name prefix).
+_PRIVATE_ENDPOINT = "https://arktrace-private-capvista.edgesentry.io"
 _PRIVATE_FEEDS_DIR = Path(__file__).resolve().parents[1] / "_inputs" / "custom_feeds"
 
 # Files included in the demo bundle — lightweight artifacts that let developers run the
@@ -273,14 +284,15 @@ def _collect_snapshot_files(data_dir: Path) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def _build_r2_fs(anonymous: bool = False):  # -> pyarrow.fs.S3FileSystem
+def _build_r2_fs(anonymous: bool = False, endpoint: str | None = None):  # -> pyarrow.fs.S3FileSystem
     """Build an S3FileSystem for R2.
 
     Pass ``anonymous=True`` for public-bucket reads that need no credentials.
+    Pass ``endpoint`` to override the default R2 endpoint (e.g. a custom domain).
     """
     import pyarrow.fs as pafs
 
-    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
+    endpoint = endpoint or os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if not endpoint:
         # Plain AWS S3
         kwargs: dict = {"region": os.getenv("AWS_REGION", "us-east-1")}
@@ -1069,16 +1081,18 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
         )
         return 1
 
-    fs = _build_r2_fs()
-    print(f"Uploading {len(candidates)} file(s) to {bucket}/")
+    # Use the private bucket custom domain as the S3 endpoint.
+    # The domain IS the bucket, so S3 paths are bare keys — no bucket-name prefix.
+    fs = _build_r2_fs(endpoint=_PRIVATE_ENDPOINT)
+    print(f"Uploading {len(candidates)} file(s) to {_PRIVATE_ENDPOINT}/")
     for local_path in candidates:
-        r2_path = f"{bucket}/{local_path.name}"
+        r2_path = local_path.name  # bare key — bucket implied by custom domain endpoint
         size_kb = local_path.stat().st_size / 1024
         print(f"  {local_path.name} ({size_kb:.1f} KB) → {r2_path} ...", end="", flush=True)
         _upload_file(fs, local_path, r2_path)
         print(" ✓")
 
-    print(f"\nDone. Custom feeds uploaded to {bucket}/")
+    print(f"\nDone. Custom feeds uploaded to {_PRIVATE_ENDPOINT}/")
     print("Pull them in CI with: uv run python scripts/sync_r2.py pull-custom-feeds")
     return 0
 
@@ -1102,31 +1116,31 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
 
     import pyarrow.fs as pafs
 
-    bucket = args.bucket
     feeds_dir = Path(args.feeds_dir)
     feeds_dir.mkdir(parents=True, exist_ok=True)
 
-    fs = _build_r2_fs()
+    # Use the private bucket custom domain as the S3 endpoint.
+    # The domain IS the bucket, so S3 paths are bare keys — no bucket-name prefix.
+    fs = _build_r2_fs(endpoint=_PRIVATE_ENDPOINT)
 
-    selector = pafs.FileSelector(f"{bucket}/", recursive=True)
+    selector = pafs.FileSelector("", recursive=True)
     try:
         infos = fs.get_file_info(selector)
     except Exception as exc:
-        print(f"Error listing {bucket}: {exc}", file=sys.stderr)
+        print(f"Error listing {_PRIVATE_ENDPOINT}: {exc}", file=sys.stderr)
         return 1
 
     files = [i for i in infos if i.type == pafs.FileType.File]
     if not files:
-        print(f"No files found in {bucket}/ — nothing to download.")
+        print(f"No files found at {_PRIVATE_ENDPOINT} — nothing to download.")
         return 0
 
-    print(f"Downloading {len(files)} file(s) from {bucket}/ → {feeds_dir}/")
+    print(f"Downloading {len(files)} file(s) from {_PRIVATE_ENDPOINT} → {feeds_dir}/")
     for info in files:
-        rel = info.path.removeprefix(f"{bucket}/")
-        local_path = feeds_dir / rel
+        local_path = feeds_dir / info.path
         local_path.parent.mkdir(parents=True, exist_ok=True)
         size_kb = info.size / 1024
-        print(f"  {rel} ({size_kb:.1f} KB) ...", end="", flush=True)
+        print(f"  {info.path} ({size_kb:.1f} KB) ...", end="", flush=True)
         try:
             _download_file(fs, info.path, local_path)
             print(" ✓")
