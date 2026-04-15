@@ -71,10 +71,10 @@ Commands
   pull-reviews        download reviews.parquet from R2 and upsert into the local DuckDB
                       vessel_reviews table (conflict resolution: newer reviewed_at wins)
   push-custom-feeds   upload files from _inputs/custom_feeds/ to the private
-                      arktrace-private-capvista R2 bucket (requires PRIVATE_R2_ACCESS_KEY_ID /
-                      PRIVATE_R2_SECRET_ACCESS_KEY)
+                      arktrace-private-capvista R2 bucket (requires AWS_ACCESS_KEY_ID /
+                      AWS_SECRET_ACCESS_KEY — same key used for arktrace-public)
   pull-custom-feeds   download all feed files from the private arktrace-private-capvista R2
-                      bucket into _inputs/custom_feeds/ — credentials required; skips
+                      bucket into _inputs/custom_feeds/ — same AWS_* credentials; skips
                       gracefully when absent (forks / local dev without access)
   list                show all snapshot zips and shared objects in R2
 
@@ -83,8 +83,11 @@ Env vars (loaded from .env automatically)
   S3_BUCKET               R2 bucket name. Default: arktrace-public
   S3_ENDPOINT             R2 endpoint URL. Default: arktrace-public R2 endpoint
   AWS_REGION              Default: "auto" (correct for R2)
-  AWS_ACCESS_KEY_ID       R2 access key ID (required for push commands only)
-  AWS_SECRET_ACCESS_KEY   R2 secret access key (required for push commands only)
+  AWS_ACCESS_KEY_ID       R2 access key ID (required for push commands and pull-custom-feeds)
+  AWS_SECRET_ACCESS_KEY   R2 secret access key (required for push commands and pull-custom-feeds)
+                          The same key must have Object Read & Write on both arktrace-public
+                          and arktrace-private-capvista.  App users never need credentials —
+                          they only pull from the public bucket anonymously.
 
 Examples
 --------
@@ -1034,33 +1037,14 @@ def cmd_pull_demo(args: argparse.Namespace) -> int:
     return 0
 
 
-def _build_private_r2_fs():  # -> pyarrow.fs.S3FileSystem
-    """Build an S3FileSystem for the private capvista R2 bucket.
-
-    Uses PRIVATE_R2_ACCESS_KEY_ID / PRIVATE_R2_SECRET_ACCESS_KEY env vars so
-    credentials are never mixed with the public bucket's AWS_* vars.
-    """
-    import pyarrow.fs as pafs
-
-    access_key = os.environ["PRIVATE_R2_ACCESS_KEY_ID"]
-    secret_key = os.environ["PRIVATE_R2_SECRET_ACCESS_KEY"]
-    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
-    host = endpoint.split("://", 1)[-1].rstrip("/")
-    scheme = "https" if endpoint.startswith("https://") else "http"
-    return pafs.S3FileSystem(
-        access_key=access_key,
-        secret_key=secret_key,
-        endpoint_override=host,
-        scheme=scheme,
-        region=os.getenv("AWS_REGION", "auto"),
-    )
-
-
 def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
     """Upload files from _inputs/custom_feeds/ to the private arktrace-private-capvista bucket.
 
+    Uses the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY credentials — the same
+    key that writes to arktrace-public must also have write access on arktrace-private-capvista.
+
     Only uploads files whose names do NOT end with ``_sample`` (sample fixtures are
-    local smoke-test data only and must never be pushed to the customer bucket).
+    local smoke-test data only and must never be pushed to the private bucket).
     """
     bucket = args.bucket
     feeds_dir = Path(args.feeds_dir)
@@ -1081,7 +1065,7 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
         )
         return 1
 
-    fs = _build_private_r2_fs()
+    fs = _build_r2_fs()
     print(f"Uploading {len(candidates)} file(s) to {bucket}/")
     for local_path in candidates:
         r2_path = f"{bucket}/{local_path.name}"
@@ -1099,14 +1083,15 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
     """Download all feed files from the private arktrace-private-capvista bucket.
 
     Extracts files into ``_inputs/custom_feeds/`` so the pipeline's auto-detection
-    step picks them up on the next run.  Skips gracefully when private credentials
-    are absent (forks without access, local dev machines).
+    step picks them up on the next run.
+
+    Uses the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY credentials — the
+    same key that accesses arktrace-public.  Skips gracefully when credentials are
+    absent (forks without repo secrets, local dev machines without .env).
     """
-    access_key = os.getenv("PRIVATE_R2_ACCESS_KEY_ID")
-    secret_key = os.getenv("PRIVATE_R2_SECRET_ACCESS_KEY")
-    if not access_key or not secret_key:
+    if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
         print(
-            "[skip] PRIVATE_R2_ACCESS_KEY_ID / PRIVATE_R2_SECRET_ACCESS_KEY not set "
+            "[skip] AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set "
             "— skipping pull-custom-feeds",
             file=sys.stderr,
         )
@@ -1118,7 +1103,7 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
     feeds_dir = Path(args.feeds_dir)
     feeds_dir.mkdir(parents=True, exist_ok=True)
 
-    fs = _build_private_r2_fs()
+    fs = _build_r2_fs()
 
     selector = pafs.FileSelector(f"{bucket}/", recursive=True)
     try:
@@ -1134,7 +1119,6 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
 
     print(f"Downloading {len(files)} file(s) from {bucket}/ → {feeds_dir}/")
     for info in files:
-        # Strip bucket prefix to get just the filename / relative path
         rel = info.path.removeprefix(f"{bucket}/")
         local_path = feeds_dir / rel
         local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1334,8 +1318,8 @@ def main() -> int:
         "push-custom-feeds",
         help=(
             "Upload non-sample feed files from _inputs/custom_feeds/ to the private "
-            "arktrace-private-capvista R2 bucket (requires PRIVATE_R2_ACCESS_KEY_ID / "
-            "PRIVATE_R2_SECRET_ACCESS_KEY)"
+            "arktrace-private-capvista R2 bucket (requires AWS_ACCESS_KEY_ID / "
+            "AWS_SECRET_ACCESS_KEY with write access on both buckets)"
         ),
     )
     push_custom_feeds_p.add_argument(

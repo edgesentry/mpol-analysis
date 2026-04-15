@@ -128,12 +128,12 @@ jobs:
           fi
 
       - name: Pull custom feeds from private R2 bucket
-        # Skip gracefully when private credentials are absent (forks, public PRs).
-        # When present, feeds are extracted to _inputs/custom_feeds/ and the
-        # pipeline auto-detects them in the ingest_custom_feeds step.
+        # The same R2 key used for arktrace-public also has read access on
+        # arktrace-private-capvista.  Skips gracefully when credentials are
+        # absent (forks, public PRs without repo secrets).
         env:
-          PRIVATE_R2_ACCESS_KEY_ID: ${{ secrets.PRIVATE_R2_ACCESS_KEY_ID }}
-          PRIVATE_R2_SECRET_ACCESS_KEY: ${{ secrets.PRIVATE_R2_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           uv run python scripts/sync_r2.py pull-custom-feeds
 
