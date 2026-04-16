@@ -50,6 +50,7 @@ WATCHLIST_BY_REGION: dict[str, Path] = {
     "gulfofguinea": _watchlist_dir / "gulfofguinea_watchlist.parquet",
     "gulfofaden": _watchlist_dir / "gulfofaden_watchlist.parquet",
     "gulfofmexico": _watchlist_dir / "gulfofmexico_watchlist.parquet",
+    "blacksea": _watchlist_dir / "blacksea_watchlist.parquet",
 }
 
 

@@ -8,7 +8,7 @@ Usage (non-interactive):
     uv run python scripts/run_pipeline.py --region singapore --non-interactive
     uv run python scripts/run_pipeline.py --region japan --non-interactive
 
-Available regions: singapore, japan, middleeast, europe, persiangulf
+Available regions: singapore, japan, middleeast, europe, persiangulf, blacksea
 """
 
 from __future__ import annotations
@@ -134,6 +134,18 @@ PRESETS: dict[str, RegionPreset] = {
         w_identity=0.20,
         db_path="data/processed/gulfofmexico.duckdb",
         watchlist_path="data/processed/gulfofmexico_watchlist.parquet",
+    ),
+    "blacksea": RegionPreset(
+        name="blacksea",
+        label="Black Sea / Bosphorus",
+        bbox=[40, 27, 48, 42],
+        gap_threshold_h=6,
+        window_days=30,
+        w_anomaly=0.45,
+        w_graph=0.35,
+        w_identity=0.20,
+        db_path="data/processed/blacksea.duckdb",
+        watchlist_path="data/processed/blacksea_watchlist.parquet",
     ),
 }
 
