@@ -22,7 +22,7 @@
 #   bash scripts/run_app.sh --no-llm               # skip llama-server entirely
 #
 # Options:
-#   --region REGION   singapore|japan|middleeast|europe|gulf  (default: singapore)
+#   --region REGION   singapore|japan|middleeast|europe|persiangulf  (default: singapore)
 #   --model MODEL     HuggingFace repo (bartowski/...) or local .gguf path
 #   --gguf-file FILE  GGUF filename within the HF repo (default: Qwen2.5-7B-Instruct-Q4_K_M.gguf)
 #   --provider NAME   openai (llama-server, default) | anthropic
@@ -77,10 +77,10 @@ case "${REGION}" in
   japan)      DB_FILENAME="japansea.duckdb" ;;
   middleeast) DB_FILENAME="middleeast.duckdb" ;;
   europe)     DB_FILENAME="europe.duckdb" ;;
-  gulf)       DB_FILENAME="gulf.duckdb" ;;
+  persiangulf)  DB_FILENAME="persiangulf.duckdb" ;;
   *)
     echo "Error: unknown region '${REGION}'." >&2
-    echo "Valid regions: singapore, japan, middleeast, europe, gulf" >&2
+    echo "Valid regions: singapore, japan, middleeast, europe, persiangulf" >&2
     exit 1
     ;;
 esac

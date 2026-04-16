@@ -74,11 +74,11 @@ run_full_screening() {
   echo "[1] Full Screening"
 
   local region
-  region="$(prompt "Region (singapore/japan/middleeast/europe/gulf)" "singapore")"
+  region="$(prompt "Region (singapore/japan/middleeast/europe/persiangulf)" "singapore")"
   region="$(tr '[:upper:]' '[:lower:]' <<< "$region")"
 
   case "$region" in
-    singapore|japan|middleeast|europe|gulf) ;;
+    singapore|japan|middleeast|europe|persiangulf) ;;
     *)
       echo "Unsupported region: $region"
       return
@@ -113,7 +113,7 @@ run_full_screening() {
     japan) watchlist="$PROJECT_ROOT/data/processed/japansea_watchlist.parquet" ;;
     middleeast) watchlist="$PROJECT_ROOT/data/processed/middleeast_watchlist.parquet" ;;
     europe) watchlist="$PROJECT_ROOT/data/processed/europe_watchlist.parquet" ;;
-    gulf) watchlist="$PROJECT_ROOT/data/processed/gulf_watchlist.parquet" ;;
+    persiangulf) watchlist="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
   esac
   print_watchlist_summary "$watchlist"
 }
@@ -141,7 +141,7 @@ run_backtesting_public_batch() {
   echo "[3] Historical Backtesting + Public Integration Batch"
 
   local regions
-  regions="$(prompt "Regions (comma-separated)" "singapore,japan,middleeast,europe,gulf")"
+  regions="$(prompt "Regions (comma-separated)" "singapore,japan,middleeast,europe,persiangulf")"
 
   local strict_flag=()
   if prompt_yes_no "Enable strict known-case floor" "false"; then
@@ -1386,7 +1386,7 @@ run_predemo_checklist() {
   echo
 
   local region
-  region="$(prompt "Region (singapore/japan/middleeast/europe/gulf)" "singapore")"
+  region="$(prompt "Region (singapore/japan/middleeast/europe/persiangulf)" "singapore")"
   region="$(tr '[:upper:]' '[:lower:]' <<< "$region")"
 
   local eval_db
@@ -1398,7 +1398,7 @@ run_predemo_checklist() {
     japan)      screening_db="data/processed/japansea.duckdb" ;;
     middleeast) screening_db="data/processed/middleeast.duckdb" ;;
     europe)     screening_db="data/processed/europe.duckdb" ;;
-    gulf)       screening_db="data/processed/gulf.duckdb" ;;
+    persiangulf)  screening_db="data/processed/persiangulf.duckdb" ;;
     *)          screening_db="data/processed/mpol.duckdb" ;;
   esac
 
@@ -1478,7 +1478,7 @@ PYEOF
       japan)      watchlist_path="$PROJECT_ROOT/data/processed/japansea_watchlist.parquet" ;;
       middleeast) watchlist_path="$PROJECT_ROOT/data/processed/middleeast_watchlist.parquet" ;;
       europe)     watchlist_path="$PROJECT_ROOT/data/processed/europe_watchlist.parquet" ;;
-      gulf)       watchlist_path="$PROJECT_ROOT/data/processed/gulf_watchlist.parquet" ;;
+      persiangulf)  watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
       *)          watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet" ;;
     esac
     print_watchlist_summary "$watchlist_path"
@@ -1500,7 +1500,7 @@ PYEOF
       japan)      watchlist_path="data/processed/japansea_watchlist.parquet" ;;
       middleeast) watchlist_path="data/processed/middleeast_watchlist.parquet" ;;
       europe)     watchlist_path="data/processed/europe_watchlist.parquet" ;;
-      gulf)       watchlist_path="data/processed/gulf_watchlist.parquet" ;;
+      persiangulf)  watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
       *)          watchlist_path="data/processed/candidate_watchlist.parquet" ;;
     esac
 

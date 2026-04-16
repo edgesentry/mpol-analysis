@@ -8,7 +8,7 @@ Usage (non-interactive):
     uv run python scripts/run_pipeline.py --region singapore --non-interactive
     uv run python scripts/run_pipeline.py --region japan --non-interactive
 
-Available regions: singapore, japan, middleeast, europe, gulf
+Available regions: singapore, japan, middleeast, europe, persiangulf
 """
 
 from __future__ import annotations
@@ -87,8 +87,8 @@ PRESETS: dict[str, RegionPreset] = {
         db_path="data/processed/europe.duckdb",
         watchlist_path="data/processed/europe_watchlist.parquet",
     ),
-    "gulf": RegionPreset(
-        name="gulf",
+    "persiangulf": RegionPreset(
+        name="persiangulf",
         label="US Gulf / Caribbean",
         bbox=[8, -98, 32, -60],
         gap_threshold_h=6,
@@ -96,7 +96,7 @@ PRESETS: dict[str, RegionPreset] = {
         w_anomaly=0.50,
         w_graph=0.30,
         w_identity=0.20,
-        db_path="data/processed/gulf.duckdb",
+        db_path="data/processed/persiangulf.duckdb",
         watchlist_path="data/processed/gulf_watchlist.parquet",
     ),
 }
@@ -788,7 +788,7 @@ def main() -> None:
         default=None,
         help="Load a Marine Cadastre historical year before the live pipeline runs "
         "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
-        "Uses the region bbox automatically. Useful for the gulf region.",
+        "Uses the region bbox automatically. Useful for the persiangulf region.",
     )
     parser.add_argument(
         "--geopolitical-event-filter",
