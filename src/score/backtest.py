@@ -522,7 +522,7 @@ def run_backtest(manifest_path: str, output_path: str, capacities: list[int]) ->
     auroc_vals = [
         float(w["metrics"]["auroc"])  # type: ignore[index]
         for w in window_reports
-        if w["metrics"].get("auroc") is not None  # type: ignore[index]
+        if w["metrics"]["auroc"] is not None  # type: ignore[index]
     ]
 
     report: dict[str, object] = {
