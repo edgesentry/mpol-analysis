@@ -519,6 +519,11 @@ def run_backtest(manifest_path: str, output_path: str, capacities: list[int]) ->
     p50 = [float(w["metrics"]["precision_at_50"]) for w in window_reports]  # type: ignore[index]
     p100 = [float(w["metrics"]["precision_at_100"]) for w in window_reports]  # type: ignore[index]
     r200 = [float(w["metrics"]["recall_at_200"]) for w in window_reports]  # type: ignore[index]
+    auroc_vals = [
+        float(w["metrics"]["auroc"])  # type: ignore[index]
+        for w in window_reports
+        if w["metrics"]["auroc"] is not None  # type: ignore[index]
+    ]
 
     report: dict[str, object] = {
         "schema_version": schema_version,
@@ -530,6 +535,7 @@ def run_backtest(manifest_path: str, output_path: str, capacities: list[int]) ->
             "precision_at_50": _metric_ci(p50),
             "precision_at_100": _metric_ci(p100),
             "recall_at_200": _metric_ci(r200),
+            "auroc": _metric_ci(auroc_vals) if auroc_vals else None,
         },
     }
 
