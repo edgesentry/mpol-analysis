@@ -47,6 +47,9 @@ WATCHLIST_BY_REGION: dict[str, Path] = {
     "middleeast": _watchlist_dir / "middleeast_watchlist.parquet",
     "europe": _watchlist_dir / "europe_watchlist.parquet",
     "persiangulf": _watchlist_dir / "persiangulf_watchlist.parquet",
+    "gulfofguinea": _watchlist_dir / "gulfofguinea_watchlist.parquet",
+    "gulfofaden": _watchlist_dir / "gulfofaden_watchlist.parquet",
+    "gulfofmexico": _watchlist_dir / "gulfofmexico_watchlist.parquet",
 }
 
 
@@ -224,7 +227,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run public-data backtest integration batch")
     parser.add_argument(
         "--regions",
-        default="singapore,japan,middleeast,europe,persiangulf",
+        default="singapore,japan,middleeast,europe,persiangulf,gulfofguinea,gulfofaden,gulfofmexico",
         help="Comma-separated region list",
     )
     parser.add_argument("--gdelt-days", type=int, default=14)

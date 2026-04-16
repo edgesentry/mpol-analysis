@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Gulf of Guinea — West African oil hub, piracy zone
+     bbox: lat -5–10°N, lon -5–10°E
+     Covers Nigeria, Ghana, Gabon, Cameroon, Equatorial Guinea. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.arktrace.aisstream.gulfofguinea</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace</string>
+    <string>python</string>
+    <string>-m</string>
+    <string>src.ingest.ais_stream</string>
+    <string>--db</string>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace/data/processed/gulfofguinea.duckdb</string>
+    <string>--bbox</string>
+    <string>-5</string>
+    <string>-5</string>
+    <string>10</string>
+    <string>10</string>
+    <string>--duration</string>
+    <string>0</string>
+    <string>--flush-interval</string>
+    <string>60</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yoheionishi/work/edgesentry/arktrace</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AISSTREAM_API_KEY</key>
+    <string>REPLACE_WITH_AISSTREAM_API_KEY</string>
+    <key>DB_PATH</key>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace/data/processed/gulfofguinea.duckdb</string>
+    <key>HOME</key>
+    <string>/Users/yoheionishi</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/yoheionishi/.local/bin:/Users/yoheionishi/.cargo/bin</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yoheionishi/.arktrace/gulfofguinea.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/yoheionishi/.arktrace/gulfofguinea.err</string>
+</dict>
+</plist>

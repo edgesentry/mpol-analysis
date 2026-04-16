@@ -78,6 +78,18 @@ _REGION_ARTIFACTS: dict[str, list[str]] = {
         "europe_causal_effects.parquet",
         "europe_graph",
     ],
+    "gulfofguinea": [
+        "gulfofguinea.duckdb",
+        "gulfofguinea_watchlist.parquet",
+    ],
+    "gulfofaden": [
+        "gulfofaden.duckdb",
+        "gulfofaden_watchlist.parquet",
+    ],
+    "gulfofmexico": [
+        "gulfofmexico.duckdb",
+        "gulfofmexico_watchlist.parquet",
+    ],
     "persiangulf": [
         "persiangulf.duckdb",
         "gulf_watchlist.parquet",
@@ -139,7 +151,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--regions",
-        default="singapore,japan,middleeast,europe,persiangulf",
+        default="singapore,japan,middleeast,europe,persiangulf,gulfofguinea,gulfofaden,gulfofmexico",
         help="Comma-separated regions to process (default: all five)",
     )
     parser.add_argument(

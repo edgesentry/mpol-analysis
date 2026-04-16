@@ -190,6 +190,9 @@ _REGION_PREFIX: dict[str, str] = {
     "middleeast": "middleeast",
     "europe": "europe",
     "persiangulf": "persiangulf",
+    "gulfofguinea": "gulfofguinea",
+    "gulfofaden": "gulfofaden",
+    "gulfofmexico": "gulfofmexico",
 }
 
 # Files always downloaded regardless of region (shared by the API across all regions)

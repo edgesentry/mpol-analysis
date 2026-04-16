@@ -78,7 +78,7 @@ run_full_screening() {
   region="$(tr '[:upper:]' '[:lower:]' <<< "$region")"
 
   case "$region" in
-    singapore|japan|middleeast|europe|persiangulf) ;;
+    singapore|japan|middleeast|europe|persiangulf|gulfofguinea|gulfofaden|gulfofmexico) ;;
     *)
       echo "Unsupported region: $region"
       return
@@ -113,7 +113,10 @@ run_full_screening() {
     japan) watchlist="$PROJECT_ROOT/data/processed/japansea_watchlist.parquet" ;;
     middleeast) watchlist="$PROJECT_ROOT/data/processed/middleeast_watchlist.parquet" ;;
     europe) watchlist="$PROJECT_ROOT/data/processed/europe_watchlist.parquet" ;;
-    persiangulf) watchlist="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
+    persiangulf)   watchlist="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
+    gulfofguinea)  watchlist="$PROJECT_ROOT/data/processed/gulfofguinea_watchlist.parquet" ;;
+    gulfofaden)    watchlist="$PROJECT_ROOT/data/processed/gulfofaden_watchlist.parquet" ;;
+    gulfofmexico)  watchlist="$PROJECT_ROOT/data/processed/gulfofmexico_watchlist.parquet" ;;
   esac
   print_watchlist_summary "$watchlist"
 }
@@ -1398,8 +1401,11 @@ run_predemo_checklist() {
     japan)      screening_db="data/processed/japansea.duckdb" ;;
     middleeast) screening_db="data/processed/middleeast.duckdb" ;;
     europe)     screening_db="data/processed/europe.duckdb" ;;
-    persiangulf)  screening_db="data/processed/persiangulf.duckdb" ;;
-    *)          screening_db="data/processed/mpol.duckdb" ;;
+    persiangulf)   screening_db="data/processed/persiangulf.duckdb" ;;
+    gulfofguinea)  screening_db="data/processed/gulfofguinea.duckdb" ;;
+    gulfofaden)    screening_db="data/processed/gulfofaden.duckdb" ;;
+    gulfofmexico)  screening_db="data/processed/gulfofmexico.duckdb" ;;
+    *)             screening_db="data/processed/mpol.duckdb" ;;
   esac
 
   local overall_ok=true
@@ -1478,8 +1484,11 @@ PYEOF
       japan)      watchlist_path="$PROJECT_ROOT/data/processed/japansea_watchlist.parquet" ;;
       middleeast) watchlist_path="$PROJECT_ROOT/data/processed/middleeast_watchlist.parquet" ;;
       europe)     watchlist_path="$PROJECT_ROOT/data/processed/europe_watchlist.parquet" ;;
-      persiangulf)  watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
-      *)          watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet" ;;
+      persiangulf)   watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
+      gulfofguinea)  watchlist_path="$PROJECT_ROOT/data/processed/gulfofguinea_watchlist.parquet" ;;
+      gulfofaden)    watchlist_path="$PROJECT_ROOT/data/processed/gulfofaden_watchlist.parquet" ;;
+      gulfofmexico)  watchlist_path="$PROJECT_ROOT/data/processed/gulfofmexico_watchlist.parquet" ;;
+      *)             watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet" ;;
     esac
     print_watchlist_summary "$watchlist_path"
   fi
@@ -1500,8 +1509,11 @@ PYEOF
       japan)      watchlist_path="data/processed/japansea_watchlist.parquet" ;;
       middleeast) watchlist_path="data/processed/middleeast_watchlist.parquet" ;;
       europe)     watchlist_path="data/processed/europe_watchlist.parquet" ;;
-      persiangulf)  watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
-      *)          watchlist_path="data/processed/candidate_watchlist.parquet" ;;
+      persiangulf)   watchlist_path="$PROJECT_ROOT/data/processed/persiangulf_watchlist.parquet" ;;
+      gulfofguinea)  watchlist_path="$PROJECT_ROOT/data/processed/gulfofguinea_watchlist.parquet" ;;
+      gulfofaden)    watchlist_path="$PROJECT_ROOT/data/processed/gulfofaden_watchlist.parquet" ;;
+      gulfofmexico)  watchlist_path="$PROJECT_ROOT/data/processed/gulfofmexico_watchlist.parquet" ;;
+      *)             watchlist_path="data/processed/candidate_watchlist.parquet" ;;
     esac
 
     (cd "$PROJECT_ROOT" && uv run python - <<PYEOF

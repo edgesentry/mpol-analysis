@@ -77,10 +77,13 @@ case "${REGION}" in
   japan)      DB_FILENAME="japansea.duckdb" ;;
   middleeast) DB_FILENAME="middleeast.duckdb" ;;
   europe)     DB_FILENAME="europe.duckdb" ;;
-  persiangulf)  DB_FILENAME="persiangulf.duckdb" ;;
+  persiangulf)   DB_FILENAME="persiangulf.duckdb" ;;
+  gulfofguinea)  DB_FILENAME="gulfofguinea.duckdb" ;;
+  gulfofaden)    DB_FILENAME="gulfofaden.duckdb" ;;
+  gulfofmexico)  DB_FILENAME="gulfofmexico.duckdb" ;;
   *)
     echo "Error: unknown region '${REGION}'." >&2
-    echo "Valid regions: singapore, japan, middleeast, europe, persiangulf" >&2
+    echo "Valid regions: singapore, japan, middleeast, europe, persiangulf, gulfofguinea, gulfofaden, gulfofmexico" >&2
     exit 1
     ;;
 esac
