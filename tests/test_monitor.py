@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 import pytest
 
-from src.analysis.monitor import (
+from pipeline.src.analysis.monitor import (
     SEVERITY_CRITICAL,
     SEVERITY_OK,
     SEVERITY_WARNING,
@@ -21,7 +21,7 @@ from src.analysis.monitor import (
     check_watchlist_score_shift,
     run_drift_checks,
 )
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture

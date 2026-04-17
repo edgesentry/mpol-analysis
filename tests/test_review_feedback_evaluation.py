@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 import duckdb
 import polars as pl
 
-from src.ingest.schema import init_schema
-from src.score.review_feedback_evaluation import run_review_feedback_evaluation
+from pipeline.src.ingest.schema import init_schema
+from pipeline.src.score.review_feedback_evaluation import run_review_feedback_evaluation
 
 
 def _write_watchlist(path, rows):

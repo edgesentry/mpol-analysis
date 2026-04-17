@@ -7,12 +7,12 @@ import duckdb
 import polars as pl
 import pyarrow as pa
 
-from src.features.ownership_graph import (
+from pipeline.src.features.ownership_graph import (
     MAX_HOPS,
     _apply_direct_sanctions_fallback,
     _compute_sts_hub_degree,
 )
-from src.graph.store import NODE_SCHEMAS, REL_SCHEMAS
+from pipeline.src.graph.store import NODE_SCHEMAS, REL_SCHEMAS
 
 # ---------------------------------------------------------------------------
 # Helpers

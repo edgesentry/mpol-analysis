@@ -63,7 +63,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type check (mypy)
-        run: uv run mypy src/
+        run: uv run mypy pipeline/src/
 
   docker_build:
     name: Docker build
@@ -124,12 +124,12 @@ jobs:
           if [ -z "$R2_ACCOUNT_ID" ]; then
             echo "[skip] R2 credentials absent — skipping pull-sanctions-db"
           else
-            uv run python scripts/sync_r2.py pull-sanctions-db
+            uv run python pipeline/scripts/sync_r2.py pull-sanctions-db
           fi
 
       - name: Run Singapore pipeline (seed mode)
         run: |
-          uv run python scripts/run_pipeline.py \
+          uv run python pipeline/scripts/run_pipeline.py \
             --region singapore \
             --non-interactive \
             --seed-dummy
@@ -140,7 +140,7 @@ jobs:
           # DATA_DIR tells run_public_backtest_batch where to find them.
           DATA_DIR: data/processed
         run: |
-          uv run python scripts/run_public_backtest_batch.py \
+          uv run python pipeline/scripts/run_public_backtest_batch.py \
             --regions singapore \
             --seed-dummy \
             --min-known-cases 5 \
@@ -151,7 +151,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run python scripts/check_score_regression.py \
+          uv run python pipeline/scripts/check_score_regression.py \
             --summary data/processed/backtest_public_integration_summary.json \
             --report  data/processed/backtest_report_public_integration.json \
             | tee /tmp/regression_check_output.txt
@@ -192,7 +192,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          uv run python scripts/sync_r2.py pull-custom-feeds
+          uv run python pipeline/scripts/sync_r2.py pull-custom-feeds
           if [ -z "$(ls _inputs/custom_feeds/*.csv 2>/dev/null)" ]; then
             echo "[skip] no custom feed files pulled — skipping demo job"
             exit 0
@@ -205,7 +205,7 @@ jobs:
         env:
           DATA_DIR: data/processed
         run: |
-          uv run python scripts/run_pipeline.py \
+          uv run python pipeline/scripts/run_pipeline.py \
             --region singapore \
             --non-interactive
 

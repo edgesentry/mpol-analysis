@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 
-from src.ingest.vessel_registry import build_graph_tables
+from pipeline.src.ingest.vessel_registry import build_graph_tables
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -285,14 +285,14 @@ def _seed_ais_positions(db_path: str, rows: list[tuple]) -> None:
 
 
 def test_sts_contacts_empty_db(tmp_db):
-    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+    from pipeline.src.ingest.vessel_registry import build_sts_contacts_from_ais
 
     assert build_sts_contacts_from_ais(tmp_db) == []
 
 
 def test_sts_contacts_pair_detected(tmp_db):
     """Two vessels in the same H3 cell at the same 30-min bucket ≥2 times → STS contact."""
-    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+    from pipeline.src.ingest.vessel_registry import build_sts_contacts_from_ais
 
     # Anchor point in Singapore Strait
     lat, lon = 1.26, 103.85
@@ -314,7 +314,7 @@ def test_sts_contacts_pair_detected(tmp_db):
 
 def test_sts_contacts_single_overlap_excluded(tmp_db):
     """Only 1 bucket overlap → below STS_MIN_CO_LOCATIONS → not a contact."""
-    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+    from pipeline.src.ingest.vessel_registry import build_sts_contacts_from_ais
 
     lat, lon = 1.26, 103.85
     _seed_ais_positions(
@@ -333,7 +333,7 @@ def test_sts_contacts_single_overlap_excluded(tmp_db):
 
 def test_sts_contacts_pair_ordering(tmp_db):
     """src_id < dst_id lexicographically — each pair appears exactly once."""
-    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+    from pipeline.src.ingest.vessel_registry import build_sts_contacts_from_ais
 
     lat, lon = 1.26, 103.85
     _seed_ais_positions(
@@ -352,7 +352,7 @@ def test_sts_contacts_pair_ordering(tmp_db):
 
 def test_sts_contacts_different_cells_not_paired(tmp_db):
     """Vessels in different H3 cells must not be paired even in the same time bucket."""
-    from src.ingest.vessel_registry import build_sts_contacts_from_ais
+    from pipeline.src.ingest.vessel_registry import build_sts_contacts_from_ais
 
     _seed_ais_positions(
         tmp_db,

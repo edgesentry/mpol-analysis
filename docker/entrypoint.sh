@@ -29,7 +29,7 @@ export ARKTRACE_DATA_DIR="${DATA_DIR}"
 # ── 1. Pull demo data ──────────────────────────────────────────────────────────
 if [[ "${AUTO_PULL}" != "0" ]] && [[ ! -f "${DATA_DIR}/candidate_watchlist.parquet" ]]; then
   echo "Pulling demo data from arktrace-public.edgesentry.io…"
-  ARKTRACE_DATA_DIR="${DATA_DIR}" bash scripts/fetch_demo_data.sh || {
+  ARKTRACE_DATA_DIR="${DATA_DIR}" bash pipeline/scripts/fetch_demo_data.sh || {
     echo "⚠️  Demo data pull failed — dashboard will start but may show no vessels."
     echo "   Check your network connection or set AUTO_PULL=0 to skip."
   }
@@ -82,4 +82,4 @@ trap '_cleanup' EXIT INT TERM
 
 # ── 3. Start uvicorn ──────────────────────────────────────────────────────────
 echo "Starting dashboard → http://0.0.0.0:8000"
-exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+exec uvicorn pipeline.src.api.main:app --host 0.0.0.0 --port 8000

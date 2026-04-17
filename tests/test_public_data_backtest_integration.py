@@ -8,9 +8,9 @@ from typing import Any, cast
 import polars as pl
 import pytest
 
-from src.ingest.sanctions import download_opensanctions, load_jsonl_to_duckdb
-from src.ingest.schema import init_schema
-from src.score.backtest import run_backtest
+from pipeline.src.ingest.sanctions import download_opensanctions, load_jsonl_to_duckdb
+from pipeline.src.ingest.schema import init_schema
+from pipeline.src.score.backtest import run_backtest
 
 
 @pytest.mark.integration

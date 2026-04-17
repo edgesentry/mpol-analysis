@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scripts.check_score_regression import run_checks
+from pipeline.scripts.check_score_regression import run_checks
 
 
 def _write_fixtures(tmp_path, summary_overrides=None, report_overrides=None):

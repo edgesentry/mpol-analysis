@@ -48,17 +48,17 @@ def client(watchlist_parquet, tmp_db, monkeypatch):
 
     import importlib
 
-    import src.api.routes.alerts as alerts_mod
-    import src.api.routes.briefs as briefs_mod
-    import src.api.routes.chat as chat_mod
-    import src.api.routes.vessels as vessels_mod
+    import pipeline.src.api.routes.alerts as alerts_mod
+    import pipeline.src.api.routes.briefs as briefs_mod
+    import pipeline.src.api.routes.chat as chat_mod
+    import pipeline.src.api.routes.vessels as vessels_mod
 
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
     importlib.reload(briefs_mod)
     importlib.reload(chat_mod)
 
-    from src.api.main import create_app
+    from pipeline.src.api.main import create_app
 
     return TestClient(create_app())
 
@@ -71,9 +71,9 @@ def test_chat_vessel_streams_tokens(client):
     mock_llm.stream_messages = _fake_stream
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
-        patch("src.api.routes.chat._query_graph_ownership", return_value="No graph."),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="No graph."),
     ):
         resp = client.post(
             "/api/chat", json={"message": "Why is this vessel flagged?", "mmsi": "123456789"}
@@ -108,9 +108,9 @@ def test_chat_vessel_context_in_system_prompt(client):
     ]
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=gdelt_events),
-        patch("src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=gdelt_events),
+        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"),
     ):
         client.post("/api/chat", json={"message": "Explain risk.", "mmsi": "123456789"})
 
@@ -131,8 +131,8 @@ def test_chat_cross_vessel_no_mmsi(client):
     mock_llm.stream_messages = _fake_stream
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
     ):
         resp = client.post(
             "/api/chat", json={"message": "Which vessels share the same owner network?"}
@@ -154,8 +154,8 @@ def test_chat_cross_vessel_fleet_overview_in_prompt(client):
     mock_llm.stream_messages = _cap
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
     ):
         client.post("/api/chat", json={"message": "Cross vessel question"})
 
@@ -179,9 +179,9 @@ def test_chat_response_cached_after_first_call(client, tmp_db):
     mock_llm.stream_messages = _counting_stream
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
-        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="none"),
     ):
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Why flagged?", "mmsi": "123456789"})
@@ -201,9 +201,9 @@ def test_chat_different_questions_not_shared_cache(client):
     mock_llm.stream_messages = _counting_stream
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
-        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="none"),
     ):
         client.post("/api/chat", json={"message": "Question A", "mmsi": "123456789"})
         client.post("/api/chat", json={"message": "Question B", "mmsi": "123456789"})
@@ -225,8 +225,8 @@ def test_chat_unknown_mmsi_falls_back_to_fleet_context(client):
     mock_llm.stream_messages = _cap
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
     ):
         resp = client.post("/api/chat", json={"message": "Any info?", "mmsi": "000000000"})
 
@@ -256,9 +256,9 @@ def test_chat_history_forwarded_to_llm(client):
     ]
 
     with (
-        patch("src.api.routes.chat.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.chat.query_gdelt_context", return_value=[]),
-        patch("src.api.routes.chat._query_graph_ownership", return_value="none"),
+        patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="none"),
     ):
         client.post(
             "/api/chat",

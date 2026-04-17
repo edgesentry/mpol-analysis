@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import duckdb
 
-from src.ingest.ais_stream import _flush_batch, _parse_position_report
+from pipeline.src.ingest.ais_stream import _flush_batch, _parse_position_report
 
 
 def _make_msg(mmsi=123456789, lat=1.3, lon=103.8, nav_status=0, ship_type=80):

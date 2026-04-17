@@ -39,7 +39,7 @@ services:
       - pipeline
     entrypoint: []
     command: >
-      python scripts/run_pipeline.py
+      python pipeline/scripts/run_pipeline.py
       --region ${PIPELINE_REGION:-singapore}
       --non-interactive
       --seed-dummy

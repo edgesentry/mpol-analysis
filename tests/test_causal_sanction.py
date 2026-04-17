@@ -14,7 +14,7 @@ import duckdb
 import numpy as np
 import polars as pl
 
-from src.score.causal_sanction import (
+from pipeline.src.score.causal_sanction import (
     SANCTION_REGIMES,
     CausalEffect,
     _did_estimate,
@@ -452,7 +452,7 @@ def test_calibrated_weight_feeds_composite(tmp_db):
     The calibrated weight from run_causal_model should be usable as
     --w-graph in compute_composite_scores without error.
     """
-    from src.score.composite import compute_composite_scores
+    from pipeline.src.score.composite import compute_composite_scores
     from tests.test_scoring_pipeline import _seed_scoring_data
 
     _seed_scoring_data(tmp_db)

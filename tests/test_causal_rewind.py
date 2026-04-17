@@ -3,13 +3,13 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 import pytest
 
-from src.analysis.causal_rewind import (
+from pipeline.src.analysis.causal_rewind import (
     compute_monthly_snapshots,
     detect_precursor_signals,
     rewind_vessel,
     run_causal_rewind,
 )
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture

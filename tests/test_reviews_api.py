@@ -11,8 +11,8 @@ def review_client(tmp_path, monkeypatch):
     db_path = tmp_path / "reviews.duckdb"
     monkeypatch.setenv("DB_PATH", str(db_path))
 
-    import src.api.main as main_mod
-    import src.api.routes.reviews as reviews_mod
+    import pipeline.src.api.main as main_mod
+    import pipeline.src.api.routes.reviews as reviews_mod
 
     importlib.reload(reviews_mod)
     importlib.reload(main_mod)

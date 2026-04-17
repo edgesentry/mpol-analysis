@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/kpibar.tsx","./src/components/syncstatus.tsx","./src/components/vesseldetail.tsx","./src/components/vesselmap.tsx","./src/components/watchlisttable.tsx","./src/lib/duckdb.ts","./src/lib/opfs.ts"],"version":"5.9.3"}

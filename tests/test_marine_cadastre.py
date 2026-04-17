@@ -3,7 +3,7 @@ from pathlib import Path
 
 import duckdb
 
-from src.ingest.marine_cadastre import BBOX, _parse_bbox, _parse_range, load_csv_to_duckdb
+from pipeline.src.ingest.marine_cadastre import BBOX, _parse_bbox, _parse_range, load_csv_to_duckdb
 
 
 def _write_csv(path: Path, rows: list[dict]) -> None:

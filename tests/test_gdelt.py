@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from src.ingest.gdelt import _RELEVANT_ROOT_CODES, _parse_csv
+from pipeline.src.ingest.gdelt import _RELEVANT_ROOT_CODES, _parse_csv
 
 # ── CSV generation helpers ─────────────────────────────────────────────────
 

@@ -9,11 +9,11 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from src.ingest.custom_feeds import (
+from pipeline.src.ingest.custom_feeds import (
     _detect_feed_type,
     ingest_custom_feeds,
 )
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 # ---------------------------------------------------------------------------
 # Helpers

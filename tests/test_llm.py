@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.api.llm import AnthropicClient, OpenAICompatClient, get_llm_client
+from pipeline.src.api.llm import AnthropicClient, OpenAICompatClient, get_llm_client
 
 # ── helpers ────────────────────────────────────────────────────────────────
 

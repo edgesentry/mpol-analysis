@@ -7,14 +7,14 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 import pytest
 
-from src.analysis.causal import (
+from pipeline.src.analysis.causal import (
     CausalEvidence,
     CausalSignal,
     UnknownUnknownCandidate,
     _compute_signal_score,
     score_unknown_unknowns,
 )
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture
@@ -217,7 +217,7 @@ def test_score_sorted_descending(causal_db):
 
 
 def test_score_attaches_causal_evidence(causal_db):
-    from src.score.causal_sanction import CausalEffect
+    from pipeline.src.score.causal_sanction import CausalEffect
 
     _seed_vessel(causal_db, "EVI001", sanctions_distance=99, sts_count=5)
     as_of = datetime(2026, 4, 4, tzinfo=UTC)
@@ -243,7 +243,7 @@ def test_score_attaches_causal_evidence(causal_db):
 
 def test_score_negative_att_not_attached(causal_db):
     """Effects with negative ATT (sanction → fewer gaps) should not be attached."""
-    from src.score.causal_sanction import CausalEffect
+    from pipeline.src.score.causal_sanction import CausalEffect
 
     _seed_vessel(causal_db, "NEG001", sanctions_distance=99, sts_count=5)
     as_of = datetime(2026, 4, 4, tzinfo=UTC)

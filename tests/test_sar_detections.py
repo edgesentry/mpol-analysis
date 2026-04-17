@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 
-from src.features.sar_detections import compute_unmatched_sar_detections
-from src.ingest.sar import ingest_sar_records
+from pipeline.src.features.sar_detections import compute_unmatched_sar_detections
+from pipeline.src.ingest.sar import ingest_sar_records
 
 
 def _now() -> datetime:

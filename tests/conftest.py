@@ -1,6 +1,6 @@
 import pytest
 
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture

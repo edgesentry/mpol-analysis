@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 
-from src.features.eo_fusion import compute_eo_features
-from src.ingest.eo_gfw import ingest_eo_records
+from pipeline.src.features.eo_fusion import compute_eo_features
+from pipeline.src.ingest.eo_gfw import ingest_eo_records
 
 
 def _now() -> datetime:

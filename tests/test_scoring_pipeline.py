@@ -2,10 +2,10 @@ import json
 
 import duckdb
 
-from src.score.anomaly import load_feature_frame, score_anomalies
-from src.score.composite import compute_composite_scores
-from src.score.mpol_baseline import build_mpol_baseline
-from src.score.watchlist import build_candidate_watchlist, write_candidate_watchlist
+from pipeline.src.score.anomaly import load_feature_frame, score_anomalies
+from pipeline.src.score.composite import compute_composite_scores
+from pipeline.src.score.mpol_baseline import build_mpol_baseline
+from pipeline.src.score.watchlist import build_candidate_watchlist, write_candidate_watchlist
 
 
 def _seed_scoring_data(db_path: str) -> None:

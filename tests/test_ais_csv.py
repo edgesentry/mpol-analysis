@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from src.ingest.ais_csv import (
+from pipeline.src.ingest.ais_csv import (
     _armored_to_bits,
     _decode_position_report,
     _iter_nmea_records,

@@ -109,15 +109,15 @@ def client(watchlist_parquet, tmp_db, monkeypatch):
 
     import importlib
 
-    import src.api.routes.alerts as alerts_mod
-    import src.api.routes.briefs as briefs_mod
-    import src.api.routes.vessels as vessels_mod
+    import pipeline.src.api.routes.alerts as alerts_mod
+    import pipeline.src.api.routes.briefs as briefs_mod
+    import pipeline.src.api.routes.vessels as vessels_mod
 
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
     importlib.reload(briefs_mod)
 
-    from src.api.main import create_app
+    from pipeline.src.api.main import create_app
 
     return TestClient(create_app())
 
@@ -130,8 +130,8 @@ def test_brief_streams_tokens(client, monkeypatch):
     mock_llm.chat = _fake_chat
 
     with (
-        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=[]),
     ):
         resp = client.get("/api/briefs/123456789")
 
@@ -145,7 +145,7 @@ def test_brief_streams_tokens(client, monkeypatch):
 
 
 def test_brief_unknown_vessel_returns_not_found(client):
-    with patch("src.api.routes.briefs.query_gdelt_context", return_value=[]):
+    with patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=[]):
         resp = client.get("/api/briefs/000000000")
 
     assert resp.status_code == 200
@@ -172,8 +172,8 @@ def test_brief_includes_gdelt_events_in_prompt(client, monkeypatch):
     mock_llm.chat = _capture_chat
 
     with (
-        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.briefs.query_gdelt_context", return_value=gdelt_events),
+        patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=gdelt_events),
     ):
         client.get("/api/briefs/123456789")
 
@@ -196,8 +196,8 @@ def test_cached_brief_available_after_streaming(client, monkeypatch):
     mock_llm.chat = _fake_chat
 
     with (
-        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=[]),
     ):
         client.get("/api/briefs/123456789")  # generate and cache
 
@@ -220,8 +220,8 @@ def test_cached_brief_served_on_second_request(client, monkeypatch):
     mock_llm.chat = _counting_chat
 
     with (
-        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=[]),
     ):
         client.get("/api/briefs/123456789")  # first — calls LLM
         client.get("/api/briefs/123456789")  # second — should use cache
@@ -237,8 +237,8 @@ def test_brief_with_no_gdelt_still_generates(client):
     mock_llm.chat = _fake_chat
 
     with (
-        patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm),
-        patch("src.api.routes.briefs.query_gdelt_context", return_value=[]),
+        patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm),
+        patch("pipeline.src.api.routes.briefs.query_gdelt_context", return_value=[]),
     ):
         resp = client.get("/api/briefs/123456789")
 
@@ -254,7 +254,7 @@ def test_dispatch_brief_streams_and_caches(client):
     mock_llm = MagicMock()
     mock_llm.chat = _fake_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm):
+    with patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm):
         # 1. Initially not cached
         resp = client.get("/api/briefs/123456789/dispatch/cached")
         assert resp.json()["available"] is False
@@ -285,7 +285,7 @@ def test_dispatch_brief_served_from_cache(client):
 
     mock_llm.chat = _counting_chat
 
-    with patch("src.api.routes.briefs.get_llm_client", return_value=mock_llm):
+    with patch("pipeline.src.api.routes.briefs.get_llm_client", return_value=mock_llm):
         client.get("/api/briefs/123456789/dispatch")  # call 1: LLM
         client.get("/api/briefs/123456789/dispatch")  # call 2: Cache
 

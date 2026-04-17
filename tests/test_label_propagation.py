@@ -2,9 +2,9 @@ import duckdb
 import pyarrow as pa
 import pytest
 
-from src.analysis.label_propagation import propagate_labels
-from src.graph.store import REL_SCHEMAS, write_tables
-from src.ingest.schema import init_schema
+from pipeline.src.analysis.label_propagation import propagate_labels
+from pipeline.src.graph.store import REL_SCHEMAS, write_tables
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture

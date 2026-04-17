@@ -14,14 +14,14 @@ import duckdb
 import polars as pl
 import pytest
 
-from src.score.anomaly import fit_isolation_forest
-from src.score.composite import (
+from pipeline.src.score.anomaly import fit_isolation_forest
+from pipeline.src.score.composite import (
     GeoEvent,
     _GeoCorridorBbox,
     apply_geopolitical_filter,
     load_geopolitical_filter,
 )
-from src.score.mpol_baseline import (
+from pipeline.src.score.mpol_baseline import (
     SERVICE_VESSEL_TYPES,
     compute_mpol_baseline,
     load_cleared_mmsis,

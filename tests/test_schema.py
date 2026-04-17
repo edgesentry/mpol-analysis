@@ -1,6 +1,6 @@
 import duckdb
 
-from src.ingest.schema import init_schema
+from pipeline.src.ingest.schema import init_schema
 
 
 def test_all_tables_created(tmp_db):

@@ -9,8 +9,8 @@ import duckdb
 import polars as pl
 import pytest
 
-from src.ingest.schema import init_schema
-from src.score.prelabel_evaluation import (
+from pipeline.src.ingest.schema import init_schema
+from pipeline.src.score.prelabel_evaluation import (
     PRE_LABEL_NEGATIVE,
     PRE_LABEL_POSITIVE,
     PRE_LABEL_UNCERTAIN,

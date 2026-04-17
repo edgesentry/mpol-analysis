@@ -50,8 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/.venv /app/.venv
 
 # Application source
-COPY src/ ./src/
-COPY scripts/ ./scripts/
+COPY pipeline/ ./pipeline/
 COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh

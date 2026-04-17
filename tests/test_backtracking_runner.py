@@ -4,9 +4,9 @@ import duckdb
 import pyarrow as pa
 import pytest
 
-from src.analysis.backtracking_runner import run_backtracking
-from src.graph.store import REL_SCHEMAS, write_tables
-from src.ingest.schema import init_schema
+from pipeline.src.analysis.backtracking_runner import run_backtracking
+from pipeline.src.graph.store import REL_SCHEMAS, write_tables
+from pipeline.src.ingest.schema import init_schema
 
 
 @pytest.fixture

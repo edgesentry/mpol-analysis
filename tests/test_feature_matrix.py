@@ -2,14 +2,14 @@ import duckdb
 import polars as pl
 import pyarrow as pa
 
-from src.features.build_matrix import (
+from pipeline.src.features.build_matrix import (
     CORE_COLUMNS,
     _compute_sts_hub_degree_from_lance,
     build_feature_matrix,
     validate_core_columns_non_null,
     write_vessel_features,
 )
-from src.graph.store import REL_SCHEMAS, write_tables
+from pipeline.src.graph.store import REL_SCHEMAS, write_tables
 
 
 def _seed_minimal_data(db_path: str) -> None:

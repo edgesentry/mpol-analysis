@@ -2,7 +2,7 @@ import json
 
 import polars as pl
 
-from src.score.backtest import run_backtest
+from pipeline.src.score.backtest import run_backtest
 
 
 def test_run_backtest_generates_report(tmp_path):

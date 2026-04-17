@@ -49,13 +49,13 @@ def client(watchlist_parquet, validation_json, monkeypatch, tmp_path):
     # Re-import after env vars are set so module-level constants pick them up
     import importlib
 
-    import src.api.routes.alerts as alerts_mod
-    import src.api.routes.vessels as vessels_mod
+    import pipeline.src.api.routes.alerts as alerts_mod
+    import pipeline.src.api.routes.vessels as vessels_mod
 
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
 
-    from src.api.main import create_app
+    from pipeline.src.api.main import create_app
 
     return TestClient(create_app())
 
@@ -128,11 +128,11 @@ def test_no_watchlist_returns_empty(tmp_path, monkeypatch):
 
     import importlib
 
-    import src.api.routes.vessels as vessels_mod
+    import pipeline.src.api.routes.vessels as vessels_mod
 
     importlib.reload(vessels_mod)
 
-    from src.api.main import create_app
+    from pipeline.src.api.main import create_app
 
     c = TestClient(create_app())
 
@@ -175,13 +175,13 @@ def client_with_causal(watchlist_parquet, validation_json, causal_effects_parque
 
     import importlib
 
-    import src.api.routes.alerts as alerts_mod
-    import src.api.routes.vessels as vessels_mod
+    import pipeline.src.api.routes.alerts as alerts_mod
+    import pipeline.src.api.routes.vessels as vessels_mod
 
     importlib.reload(vessels_mod)
     importlib.reload(alerts_mod)
 
-    from src.api.main import create_app
+    from pipeline.src.api.main import create_app
 
     return TestClient(create_app())
 

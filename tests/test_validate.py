@@ -3,12 +3,12 @@ import json
 import duckdb
 import polars as pl
 
-from src.score.validate import (
+from pipeline.src.score.validate import (
     compute_validation_metrics,
     label_watchlist_against_ofac,
     validate_watchlist,
 )
-from src.score.watchlist import write_candidate_watchlist
+from pipeline.src.score.watchlist import write_candidate_watchlist
 
 
 def _seed_validation_data(db_path: str) -> None:
