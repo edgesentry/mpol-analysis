@@ -60,7 +60,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
-        run: uv run python scripts/sync_r2.py pull-custom-feeds
+        run: uv run python pipeline/scripts/sync_r2.py pull-custom-feeds
 
       # Download real watchlists produced by a previous local pipeline run.
       # Without this step, the backtest has no watchlists to evaluate:
@@ -77,7 +77,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
-        run: uv run python scripts/sync_r2.py pull-watchlists
+        run: uv run python pipeline/scripts/sync_r2.py pull-watchlists
 
       # Run backtest against the pulled watchlists.
       # --skip-pipeline: watchlists are pre-pulled from R2 above; CI has no live
@@ -101,7 +101,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
         run: |
-          uv run python scripts/sync_r2.py push 2>&1 | tee /tmp/push.log
+          uv run python pipeline/scripts/sync_r2.py push 2>&1 | tee /tmp/push.log
           snapshot_id=$(grep -oP '\d{8}T\d{6}Z(?=\.zip pushed)' /tmp/push.log || echo "")
           snapshot_mb=$(grep -oP '[\d.]+(?= MB\.$)' /tmp/push.log | tail -1 || echo "")
           echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
@@ -189,7 +189,7 @@ jobs:
         run: |
           # Overwrites demo.zip with the latest pipeline outputs so developers can
           # run `pull-demo` (or fetch_demo_data.sh) without any credentials.
-          uv run python scripts/sync_r2.py push-demo
+          uv run python pipeline/scripts/sync_r2.py push-demo
 
       - name: Checkpoint DuckLake catalog and push to R2
         # Reads pipeline output Parquet files, writes them into a DuckLake catalog,
@@ -206,7 +206,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
         run: |
-          uv run python scripts/checkpoint_ducklake.py \
+          uv run python pipeline/scripts/checkpoint_ducklake.py \
             --data-dir data/processed \
             --push-public \
             --push-private \
@@ -222,12 +222,12 @@ jobs:
           # regenerates it (which happens on every data-publish run).
           # --data-dir points to data/processed where the backtest writes public_eval.duckdb
           # (default is ~/.arktrace/data which is not where the backtest outputs it).
-          uv run python scripts/sync_r2.py push-sanctions-db --force \
+          uv run python pipeline/scripts/sync_r2.py push-sanctions-db --force \
             --data-dir data/processed
 
       - name: Lead time validation (#268)
         run: |
-          uv run python scripts/validate_lead_time_ofac.py \
+          uv run python pipeline/scripts/validate_lead_time_ofac.py \
             --all-regions \
             --out data/processed/lead_time_report.json
 
@@ -243,7 +243,7 @@ jobs:
           SNAPSHOT_SIZE_MB: ${{ steps.push.outputs.snapshot_mb }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: uv run python scripts/notify_metrics.py
+        run: uv run python pipeline/scripts/notify_metrics.py
 
       - name: Upload artifacts (fallback — available even if R2 push fails)
         if: always()
