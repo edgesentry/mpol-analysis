@@ -397,7 +397,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 10
+TOTAL_STEPS = 11
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -756,8 +756,37 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
     return _ask_retry_skip("GDELT ingest") == "skip"
 
 
+def step_ducklake(p: RegionPreset, non_interactive: bool) -> bool:
+    """Build DuckLake catalog from pipeline outputs (Phase 1 gate validation)."""
+    _step(10, TOTAL_STEPS, "Building DuckLake catalog...")
+    db_dir = os.path.dirname(os.path.abspath(p.db_path))
+    result = _run(
+        [
+            sys.executable,
+            "scripts/checkpoint_ducklake.py",
+            "--data-dir",
+            db_dir,
+        ]
+    )
+    if result.returncode == 0:
+        n_parquet = sum(1 for l in result.stdout.splitlines() if "gate OK:" in l)
+        _ok(f"Phase 1 gate passed — {n_parquet} Parquet file(s) verified")
+        return True
+    _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "")
+    if non_interactive:
+        # DuckLake failure is non-blocking: the pipeline still produces the existing
+        # Parquet/DuckDB outputs.  Log the failure but do not abort.
+        print(
+            _dim(
+                "  [warn] DuckLake catalog build failed — existing Parquet outputs are unaffected."
+            )
+        )
+        return True
+    return _ask_retry_skip("DuckLake catalog") == "skip"
+
+
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(10, TOTAL_STEPS, "Launching dashboard...")
+    _step(11, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -899,6 +928,7 @@ def main() -> None:
         lambda p, ni: step_features(p, ni, seed_dummy),
         lambda p, ni: step_score(p, ni, geo_filter_path),
         lambda p, ni: step_gdelt(p, ni, gdelt_days),
+        step_ducklake,
         step_dashboard,
     ]
 

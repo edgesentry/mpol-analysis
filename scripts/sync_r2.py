@@ -76,6 +76,10 @@ Commands
   pull-custom-feeds   download all feed files from the private arktrace-private-capvista R2
                       bucket into _inputs/custom_feeds/ — same AWS_* credentials; skips
                       gracefully when absent (forks / local dev without access)
+  push-ducklake-public  upload DuckLake catalog.duckdb + data/ Parquet files to
+                      arktrace-public/ (overwrites on every run — no rotation)
+  push-ducklake-private upload DuckLake catalog.duckdb + private output files to
+                      arktrace-private-capvista/outputs/ (authenticated analysts only)
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -106,6 +110,8 @@ Examples
   uv run python scripts/sync_r2.py pull-reviews              # restore / merge reviews from R2
   uv run python scripts/sync_r2.py push-custom-feeds         # upload feeds to private bucket
   uv run python scripts/sync_r2.py pull-custom-feeds         # pull feeds from private bucket
+  uv run python scripts/sync_r2.py push-ducklake-public      # upload DuckLake catalog to public bucket
+  uv run python scripts/sync_r2.py push-ducklake-private     # upload private outputs to private bucket
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -164,6 +170,20 @@ _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from r
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 _DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
 _REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on every push-reviews
+
+# DuckLake catalog keys — public bucket (root) and private bucket (outputs/ prefix)
+# catalog.duckdb is a fixed-key file overwritten on every push-ducklake-* run.
+_DUCKLAKE_CATALOG_KEY = "catalog.duckdb"  # public: arktrace-public/catalog.duckdb
+_DUCKLAKE_DATA_PREFIX = "data/"  # public: arktrace-public/data/...
+_DUCKLAKE_PRIVATE_PREFIX = "outputs/"  # private: arktrace-private-capvista/outputs/
+
+# Private files that are also pushed to arktrace-private-capvista/outputs/
+# These are the full pipeline outputs available to authenticated Cap Vista reviewers.
+_PRIVATE_OUTPUT_FILES = [
+    "candidate_watchlist.parquet",
+    "causal_effects.parquet",
+    "validation_metrics.json",
+]
 
 # Private bucket for proprietary customer feeds (e.g. Cap Vista MPOL data).
 # Uses separate credentials so it is never confused with the public bucket.
@@ -1160,6 +1180,130 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_ducklake_public(args: argparse.Namespace) -> int:
+    """Upload DuckLake catalog.duckdb + data/ Parquet files to arktrace-public/.
+
+    Objects written:
+      arktrace-public/catalog.duckdb          ← DuckLake metadata catalog
+      arktrace-public/data/main/<table>/*.parquet  ← materialised Parquet files
+
+    Run ``scripts/checkpoint_ducklake.py`` first to materialise the catalog.
+    The catalog is overwritten on every push (no rotation).
+    """
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    catalog_dir = Path(args.catalog_dir)
+    catalog_file = catalog_dir / "catalog.duckdb"
+    parquet_dir = catalog_dir / "data"
+
+    if not catalog_file.exists():
+        print(
+            f"Error: {catalog_file} not found.  Run checkpoint_ducklake.py first:\n"
+            "  uv run python scripts/checkpoint_ducklake.py",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+
+    # Upload catalog.duckdb
+    catalog_r2 = f"{bucket}/{_DUCKLAKE_CATALOG_KEY}"
+    sz = catalog_file.stat().st_size
+    print(f"Uploading catalog.duckdb ({sz / 1024:.1f} KB) → {catalog_r2} ...")
+    _upload_file(fs, catalog_file, catalog_r2)
+    print("  ✓")
+
+    # Upload all Parquet files under data/
+    parquets = sorted(parquet_dir.rglob("*.parquet")) if parquet_dir.exists() else []
+    if not parquets:
+        print("[warn] No Parquet files found under data/ — CHECKPOINT may not have run.")
+    else:
+        total_bytes = 0
+        for p in parquets:
+            rel = p.relative_to(catalog_dir)
+            r2_path = f"{bucket}/{_DUCKLAKE_DATA_PREFIX}{rel}"
+            sz = p.stat().st_size
+            total_bytes += sz
+            print(f"  {rel}  ({sz / 1024:.1f} KB) → {r2_path} ...")
+            _upload_file(fs, p, r2_path)
+        print(f"Uploaded {len(parquets)} Parquet file(s) ({total_bytes / 1_048_576:.2f} MB)  ✓")
+
+    print(
+        f"\nDone. Public DuckLake catalog available at:\n"
+        f"  {_PUBLIC_BASE_URL}/{_DUCKLAKE_CATALOG_KEY}\n"
+        f"  {_PUBLIC_BASE_URL}/{_DUCKLAKE_DATA_PREFIX}..."
+    )
+    return 0
+
+
+def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
+    """Upload DuckLake catalog + private pipeline outputs to arktrace-private-capvista/outputs/.
+
+    Objects written:
+      arktrace-private-capvista/outputs/catalog.duckdb
+      arktrace-private-capvista/outputs/data/main/<table>/*.parquet
+      arktrace-private-capvista/outputs/candidate_watchlist.parquet
+      arktrace-private-capvista/outputs/causal_effects.parquet
+      arktrace-private-capvista/outputs/validation_metrics.json
+
+    Requires AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY with write access on the
+    private bucket.  Authenticated Cap Vista reviewers can download these files
+    after logging in via Cloudflare Access (#313).
+    """
+    catalog_dir = Path(args.catalog_dir)
+    data_dir = Path(args.data_dir)
+    catalog_file = catalog_dir / "catalog.duckdb"
+    parquet_dir = catalog_dir / "data"
+
+    if not catalog_file.exists():
+        print(
+            f"Error: {catalog_file} not found.  Run checkpoint_ducklake.py first:\n"
+            "  uv run python scripts/checkpoint_ducklake.py",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_DUCKLAKE_PRIVATE_PREFIX}"
+
+    # Upload DuckLake catalog
+    catalog_r2 = f"{prefix}{_DUCKLAKE_CATALOG_KEY}"
+    sz = catalog_file.stat().st_size
+    print(f"Uploading catalog.duckdb ({sz / 1024:.1f} KB) → {catalog_r2} ...")
+    _upload_file(fs, catalog_file, catalog_r2)
+    print("  ✓")
+
+    # Upload Parquet files from ducklake/data/
+    parquets = sorted(parquet_dir.rglob("*.parquet")) if parquet_dir.exists() else []
+    if parquets:
+        total_bytes = 0
+        for p in parquets:
+            rel = p.relative_to(catalog_dir)
+            r2_path = f"{prefix}{_DUCKLAKE_DATA_PREFIX}{rel}"
+            sz = p.stat().st_size
+            total_bytes += sz
+            print(f"  {rel}  ({sz / 1024:.1f} KB) → {r2_path} ...")
+            _upload_file(fs, p, r2_path)
+        print(f"Uploaded {len(parquets)} Parquet file(s) ({total_bytes / 1_048_576:.2f} MB)  ✓")
+
+    # Upload additional private output files (watchlist, causal effects, metrics)
+    for filename in _PRIVATE_OUTPUT_FILES:
+        local = data_dir / filename
+        if not local.exists():
+            print(f"  [skip] {filename} not found in {data_dir}")
+            continue
+        r2_path = f"{prefix}{filename}"
+        sz = local.stat().st_size
+        print(f"  {filename} ({sz / 1024:.1f} KB) → {r2_path} ...")
+        _upload_file(fs, local, r2_path)
+        print("  ✓")
+
+    print(
+        f"\nDone. Private DuckLake outputs available at:\n"
+        f"  {_PRIVATE_ENDPOINT}/{_DUCKLAKE_PRIVATE_PREFIX}  (authenticated access only)"
+    )
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -1380,6 +1524,51 @@ def main() -> int:
         help=f"Local directory to extract feeds into (default: {_default_feeds_dir})",
     )
 
+    _default_ducklake_catalog_dir = str(Path(_DEFAULT_DATA_DIR) / "ducklake")
+
+    push_ducklake_public_p = sub.add_parser(
+        "push-ducklake-public",
+        help=(
+            "Upload DuckLake catalog.duckdb + data/ Parquet files to arktrace-public/ "
+            "(run checkpoint_ducklake.py first)"
+        ),
+    )
+    push_ducklake_public_p.add_argument(
+        "--catalog-dir",
+        default=_default_ducklake_catalog_dir,
+        metavar="DIR",
+        help=(
+            "Directory containing catalog.duckdb and data/ "
+            f"(default: {_default_ducklake_catalog_dir})"
+        ),
+    )
+
+    push_ducklake_private_p = sub.add_parser(
+        "push-ducklake-private",
+        help=(
+            "Upload DuckLake catalog + private output files to "
+            "arktrace-private-capvista/outputs/ (requires credentials)"
+        ),
+    )
+    push_ducklake_private_p.add_argument(
+        "--catalog-dir",
+        default=_default_ducklake_catalog_dir,
+        metavar="DIR",
+        help=(
+            "Directory containing catalog.duckdb and data/ "
+            f"(default: {_default_ducklake_catalog_dir})"
+        ),
+    )
+    push_ducklake_private_p.add_argument(
+        "--data-dir",
+        default=_DEFAULT_DATA_DIR,
+        metavar="DIR",
+        help=(
+            "Pipeline data directory for additional private output files "
+            f"(default: {_DEFAULT_DATA_DIR})"
+        ),
+    )
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -1418,6 +1607,8 @@ def main() -> int:
         "pull-reviews": cmd_pull_reviews,
         "push-custom-feeds": cmd_push_custom_feeds,
         "pull-custom-feeds": cmd_pull_custom_feeds,
+        "push-ducklake-public": cmd_push_ducklake_public,
+        "push-ducklake-private": cmd_push_ducklake_private,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

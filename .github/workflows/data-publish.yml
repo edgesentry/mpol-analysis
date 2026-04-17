@@ -191,6 +191,27 @@ jobs:
           # run `pull-demo` (or fetch_demo_data.sh) without any credentials.
           uv run python scripts/sync_r2.py push-demo
 
+      - name: Checkpoint DuckLake catalog and push to R2
+        # Reads pipeline output Parquet files, writes them into a DuckLake catalog,
+        # checkpoints to materialise clean Parquet files, then pushes:
+        #   - arktrace-public/catalog.duckdb + data/...   (public, no-auth)
+        #   - arktrace-private-capvista/outputs/...        (authenticated Cap Vista)
+        # Runs continue-on-error so a DuckLake failure does not block the existing
+        # push step that already uploaded the snapshot zip.
+        # Phase 1 gate: if this step fails, check the logs before proceeding to
+        # Phase 2 browser code (see arktrace#302).
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: |
+          uv run python scripts/checkpoint_ducklake.py \
+            --data-dir data/processed \
+            --push-public \
+            --push-private \
+            --verbose
+
       - name: Push OpenSanctions DB to R2 (push-sanctions-db)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
