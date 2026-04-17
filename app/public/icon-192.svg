@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="24" fill="#1a1f2e"/>
+  <!-- Radar arcs -->
+  <circle cx="96" cy="96" r="70" fill="none" stroke="#93c5fd" stroke-width="1.5" opacity="0.3"/>
+  <circle cx="96" cy="96" r="48" fill="none" stroke="#93c5fd" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="96" cy="96" r="26" fill="none" stroke="#93c5fd" stroke-width="1.5" opacity="0.7"/>
+  <!-- Crosshairs -->
+  <line x1="96" y1="22" x2="96" y2="170" stroke="#93c5fd" stroke-width="1" opacity="0.3"/>
+  <line x1="22" y1="96" x2="170" y2="96" stroke="#93c5fd" stroke-width="1" opacity="0.3"/>
+  <!-- Vessel dot -->
+  <circle cx="96" cy="96" r="5" fill="#fc8181"/>
+  <!-- Alert dots -->
+  <circle cx="128" cy="68" r="4" fill="#f6ad55" opacity="0.9"/>
+  <circle cx="72" cy="118" r="3" fill="#68d391" opacity="0.9"/>
+  <circle cx="140" cy="108" r="3" fill="#fc8181" opacity="0.8"/>
+</svg>
