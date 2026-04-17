@@ -18,21 +18,10 @@
 
 import * as duckdb from "@duckdb/duckdb-wasm";
 
-// Load WASM and worker files from jsDelivr CDN to avoid bundling 30-40 MB
-// assets into the Cloudflare Pages deployment (25 MB per-file limit).
-// The browser caches these after the first load.
-const CDN = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/dist";
-
-const BUNDLES: duckdb.DuckDBBundles = {
-  mvp: {
-    mainModule: `${CDN}/duckdb-mvp.wasm`,
-    mainWorker: `${CDN}/duckdb-browser-mvp.worker.js`,
-  },
-  eh: {
-    mainModule: `${CDN}/duckdb-eh.wasm`,
-    mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
-  },
-};
+// Use DuckDB-WASM's built-in jsDelivr CDN bundle URLs to avoid bundling
+// 30-40 MB WASM files into the Cloudflare Pages deployment (25 MB/file limit).
+// Workers must be same-origin, so we wrap the CDN worker in a blob URL.
+const BUNDLES = duckdb.getJsDelivrBundles();
 
 let _db: duckdb.AsyncDuckDB | null = null;
 let _conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -45,7 +34,15 @@ export async function initDuckDB(): Promise<{
   if (_db && _conn) return { db: _db, conn: _conn };
 
   const bundle = await duckdb.selectBundle(BUNDLES);
-  const worker = new Worker(bundle.mainWorker!);
+  // Workers must be same-origin. Wrap the CDN worker URL in a blob so the
+  // browser treats it as same-origin, then importScripts fetches the real code.
+  const workerBlob = new Blob(
+    [`importScripts("${bundle.mainWorker!}");`],
+    { type: "text/javascript" }
+  );
+  const workerUrl = URL.createObjectURL(workerBlob);
+  const worker = new Worker(workerUrl);
+  URL.revokeObjectURL(workerUrl);
   const logger = new duckdb.VoidLogger();
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);

@@ -38,6 +38,7 @@ CORS_RULES = [
         "AllowedOrigins": [
             "https://arktrace.pages.dev",
             "https://*.arktrace.pages.dev",
+            "https://demo.arktrace.edgesentry.io",
             "http://localhost:5173",
             "http://localhost:4173",
         ],

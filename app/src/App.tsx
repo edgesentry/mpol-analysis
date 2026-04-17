@@ -26,6 +26,7 @@ export default function App() {
   const dbRef = useRef<AsyncDuckDB | null>(null);
   const connRef = useRef<AsyncDuckDBConnection | null>(null);
 
+  const [initError, setInitError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ phase: "idle" });
   const [vessels, setVessels] = useState<VesselRow[]>([]);
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
@@ -38,12 +39,15 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { db, conn } = await initDuckDB();
-      if (cancelled) return;
-      dbRef.current = db;
-      connRef.current = conn;
-      // Auto-sync on first mount
-      await doSync(db);
+      try {
+        const { db, conn } = await initDuckDB();
+        if (cancelled) return;
+        dbRef.current = db;
+        connRef.current = conn;
+        await doSync(db);
+      } catch (err) {
+        if (!cancelled) setInitError(String(err));
+      }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,6 +85,15 @@ export default function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minConfidence, selectedRegion]);
+
+  if (initError) {
+    return (
+      <div style={{ padding: "2rem", fontFamily: "ui-monospace,monospace", color: "#fc8181", background: "#0f1117", minHeight: "100vh" }}>
+        <strong>DuckDB init failed</strong>
+        <pre style={{ marginTop: "1rem", whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>{initError}</pre>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
