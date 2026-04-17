@@ -41,7 +41,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import duckdb  # noqa: E402
 
-from pipeline.src.features.build_matrix import build_feature_matrix, write_vessel_features  # noqa: E402
+from pipeline.src.features.build_matrix import (  # noqa: E402
+    build_feature_matrix,
+    write_vessel_features,
+)
 from pipeline.src.ingest.schema import init_schema  # noqa: E402
 from pipeline.src.score.composite import compute_composite_scores  # noqa: E402
 from pipeline.src.score.watchlist import write_candidate_watchlist  # noqa: E402

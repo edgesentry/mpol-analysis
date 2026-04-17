@@ -2,7 +2,10 @@
 
 import polars as pl
 
-from pipeline.scripts.run_public_backtest_batch import _build_labels_for_watchlist, _normalize_vessel_name
+from pipeline.scripts.run_public_backtest_batch import (
+    _build_labels_for_watchlist,
+    _normalize_vessel_name,
+)
 
 
 def _make_positives(rows: list[dict]) -> pl.DataFrame:
