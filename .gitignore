@@ -225,3 +225,4 @@ _outputs/
 data/*
 !data/demo/
 !data/demo/**
+.claude/worktrees/
