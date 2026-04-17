@@ -15,21 +15,13 @@ export default defineConfig({
     },
   },
 
-  // Tell Vite not to try to bundle the DuckDB WASM worker files — they must
-  // be served as separate files so the browser can instantiate them.
+  // WASM and worker files are loaded from CDN at runtime — exclude from
+  // pre-bundling and from the rollup output entirely.
   optimizeDeps: {
     exclude: ["@duckdb/duckdb-wasm"],
   },
 
-  // Needed so Vite does not inline WASM files as base64 in the bundle,
-  // which would break the SharedArrayBuffer threading model.
   build: {
     target: "es2020",
-    rollupOptions: {
-      // Keep WASM assets as separate files in the output
-      output: {
-        assetFileNames: "assets/[name]-[hash][extname]",
-      },
-    },
   },
 });

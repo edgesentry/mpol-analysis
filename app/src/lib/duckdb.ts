@@ -18,15 +18,20 @@
 
 import * as duckdb from "@duckdb/duckdb-wasm";
 
-// Vite ?url imports resolve to the correct asset path in both dev and prod build.
-import duckdb_wasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
-import mvp_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
-import duckdb_wasm_eh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
-import eh_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
+// Load WASM and worker files from jsDelivr CDN to avoid bundling 30-40 MB
+// assets into the Cloudflare Pages deployment (25 MB per-file limit).
+// The browser caches these after the first load.
+const CDN = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/dist";
 
 const BUNDLES: duckdb.DuckDBBundles = {
-  mvp: { mainModule: duckdb_wasm as string, mainWorker: mvp_worker as string },
-  eh: { mainModule: duckdb_wasm_eh as string, mainWorker: eh_worker as string },
+  mvp: {
+    mainModule: `${CDN}/duckdb-mvp.wasm`,
+    mainWorker: `${CDN}/duckdb-browser-mvp.worker.js`,
+  },
+  eh: {
+    mainModule: `${CDN}/duckdb-eh.wasm`,
+    mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
+  },
 };
 
 let _db: duckdb.AsyncDuckDB | null = null;
