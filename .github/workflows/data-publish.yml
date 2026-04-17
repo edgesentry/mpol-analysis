@@ -86,7 +86,7 @@ jobs:
       # --seed-dummy: still passed so the dummy MMSI filter logic is consistent.
       - name: Run backtest (skip pipeline, use pulled watchlists)
         run: |
-          uv run python scripts/run_public_backtest_batch.py \
+          uv run python pipeline/scripts/run_public_backtest_batch.py \
             --regions singapore,japan,europe,blacksea \
             --gdelt-days 14 \
             --seed-dummy \

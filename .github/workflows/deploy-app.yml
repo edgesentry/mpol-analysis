@@ -34,7 +34,15 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         working-directory: app
-        run: npx wrangler pages deploy dist --project-name=arktrace --branch=main --commit-dirty=true
+        run: |
+          # Strip non-ASCII characters from the commit subject to avoid Cloudflare
+          # API error 8000111 ("Invalid commit message, must be valid UTF-8").
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s' | LC_ALL=C tr -cd '[:print:]' | cut -c1-72)
+          npx wrangler pages deploy dist \
+            --project-name=arktrace \
+            --branch=main \
+            --commit-dirty=true \
+            --commit-message="${COMMIT_MSG}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
