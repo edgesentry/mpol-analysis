@@ -110,7 +110,10 @@ def test_chat_vessel_context_in_system_prompt(client):
     with (
         patch("pipeline.src.api.routes.chat.get_llm_client", return_value=mock_llm),
         patch("pipeline.src.api.routes.chat.query_gdelt_context", return_value=gdelt_events),
-        patch("pipeline.src.api.routes.chat._query_graph_ownership", return_value="Owner Corp (Panama)"),
+        patch(
+            "pipeline.src.api.routes.chat._query_graph_ownership",
+            return_value="Owner Corp (Panama)",
+        ),
     ):
         client.post("/api/chat", json={"message": "Explain risk.", "mmsi": "123456789"})
 

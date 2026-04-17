@@ -24,20 +24,44 @@ REGIONS = ["singapore", "japansea", "middleeast", "europe", "gulfofaden"]
 FLAGS = ["CN", "PA", "MH", "LR", "BS", "KM", "SG", "HK", "CY", "MT"]
 VESSEL_TYPES = ["Tanker", "Bulk Carrier", "Container", "General Cargo", "Ro-Ro"]
 NAMES = [
-    "PACIFIC GLORY", "OCEAN SPIRIT", "GOLDEN TRADE", "SEA FALCON",
-    "NORTHERN STAR", "BLUE HORIZON", "IRON MAIDEN", "SWIFT ARROW",
-    "DARK SHADOW", "SILVER MOON", "DAWN TRADER", "GHOST WIND",
-    "CORAL SEA", "NEPTUNE", "POSEIDON", "ARGO", "HERMES", "ATLAS",
-    "TITAN", "OLYMPUS", "PERSEUS", "ORION", "PHOENIX", "HYDRA",
-    "MEDUSA", "LEVIATHAN", "KRAKEN", "TRITON", "CALYPSO", "TETHYS",
+    "PACIFIC GLORY",
+    "OCEAN SPIRIT",
+    "GOLDEN TRADE",
+    "SEA FALCON",
+    "NORTHERN STAR",
+    "BLUE HORIZON",
+    "IRON MAIDEN",
+    "SWIFT ARROW",
+    "DARK SHADOW",
+    "SILVER MOON",
+    "DAWN TRADER",
+    "GHOST WIND",
+    "CORAL SEA",
+    "NEPTUNE",
+    "POSEIDON",
+    "ARGO",
+    "HERMES",
+    "ATLAS",
+    "TITAN",
+    "OLYMPUS",
+    "PERSEUS",
+    "ORION",
+    "PHOENIX",
+    "HYDRA",
+    "MEDUSA",
+    "LEVIATHAN",
+    "KRAKEN",
+    "TRITON",
+    "CALYPSO",
+    "TETHYS",
 ]
 
 # Rough lat/lon centres per region
 _REGION_CENTRES: dict[str, tuple[float, float]] = {
-    "singapore":  (1.3, 104.0),
-    "japansea":   (37.0, 135.0),
+    "singapore": (1.3, 104.0),
+    "japansea": (37.0, 135.0),
     "middleeast": (24.0, 58.0),
-    "europe":     (54.0, 10.0),
+    "europe": (54.0, 10.0),
     "gulfofaden": (12.0, 46.0),
 }
 

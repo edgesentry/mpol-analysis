@@ -696,7 +696,10 @@ def step_score(
     composite_cmd += ["--propagation-path", propagation_path]
 
     cmds = [
-        ([sys.executable, "-m", "pipeline.src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
+        (
+            [sys.executable, "-m", "pipeline.src.score.mpol_baseline", "--db", p.db_path],
+            "mpol_baseline",
+        ),
         ([sys.executable, "-m", "pipeline.src.score.anomaly", "--db", p.db_path], "anomaly"),
         (
             [
