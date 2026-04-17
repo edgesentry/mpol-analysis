@@ -1,0 +1,43 @@
+name: Deploy App to Cloudflare Pages
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "app/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build
+        working-directory: app
+        run: npm run build
+        env:
+          # In production the app fetches from R2, not local fixtures.
+          # Omitting VITE_MANIFEST_URL causes opfs.ts to use the R2 URL.
+          VITE_MANIFEST_URL: ""
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy app/dist --project-name=arktrace --commit-dirty=true
