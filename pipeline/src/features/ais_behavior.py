@@ -24,7 +24,10 @@ load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
 
-GAP_THRESHOLD_H = 6  # gaps longer than this (hours) are anomalous
+GAP_THRESHOLD_H = 10  # gaps longer than this (hours) are anomalous
+# Raised from 6h → 10h: Singapore/Malacca anchorage wait times are 8-12h
+# (normal commercial behaviour).  Genuine shadow-fleet dark periods are
+# 12-48h (STS transfer duration) so real evasion is still captured.
 JUMP_SPEED_KNOTS = 50.0  # implied speed above this = GPS spoofing
 LOITER_SPEED_KNOTS = 2.0  # SOG below this (outside port) = loitering
 H3_RESOLUTION = 8  # ~0.7 km cell edge ≈ 0.5 nm for STS detection

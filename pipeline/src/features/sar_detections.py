@@ -48,7 +48,8 @@ MATCH_RADIUS_KM: float = 5.0  # AIS broadcast within this radius = matched
 MATCH_WINDOW_MINUTES: int = 60  # and within this time window
 
 # Gap & attribution parameters
-GAP_THRESHOLD_H: float = 6.0  # gaps longer than this (hours) are considered dark periods
+GAP_THRESHOLD_H: float = 10.0  # gaps longer than this (hours) are considered dark periods
+# Raised from 6h → 10h: matches ais_behavior.py; Singapore anchorage waits are 8-12h normal.
 ATTRIBUTION_RADIUS_KM: float = 50.0  # last known position must be within this of detection
 
 
