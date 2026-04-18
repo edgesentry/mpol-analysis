@@ -3,6 +3,8 @@ import type { VesselRow, MetricsRow } from "../lib/duckdb";
 interface Props {
   vessels: VesselRow[];
   metrics: MetricsRow | null;
+  unreadAlerts?: number;
+  onBellClick?: () => void;
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {
@@ -27,7 +29,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function KpiBar({ vessels, metrics }: Props) {
+export default function KpiBar({ vessels, metrics, unreadAlerts = 0, onBellClick }: Props) {
   const total = vessels.length;
   const high = vessels.filter((v) => v.confidence >= 0.75).length;
   const avg =
@@ -66,6 +68,47 @@ export default function KpiBar({ vessels, metrics }: Props) {
           value={typeof auroc === "number" ? auroc.toFixed(4) : String(auroc)}
         />
       )}
+
+      {/* Bell icon — right-aligned */}
+      <button
+        onClick={onBellClick}
+        aria-label={`Alert history${unreadAlerts > 0 ? ` (${unreadAlerts} unread)` : ""}`}
+        style={{
+          marginLeft: "auto",
+          position: "relative",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "0.2rem 0.3rem",
+          color: unreadAlerts > 0 ? "#93c5fd" : "#4a5568",
+          fontSize: "1rem",
+          lineHeight: 1,
+          alignSelf: "center",
+        }}
+      >
+        🔔
+        {unreadAlerts > 0 && (
+          <span style={{
+            position: "absolute",
+            top: -2,
+            right: -4,
+            background: "#fc8181",
+            color: "#0f1117",
+            borderRadius: "50%",
+            fontSize: "0.5rem",
+            fontWeight: 700,
+            minWidth: 14,
+            height: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: "ui-monospace, monospace",
+            padding: "0 2px",
+          }}>
+            {unreadAlerts > 9 ? "9+" : unreadAlerts}
+          </span>
+        )}
+      </button>
     </div>
   );
 }
