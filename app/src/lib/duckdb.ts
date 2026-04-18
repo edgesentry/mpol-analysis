@@ -76,6 +76,7 @@ export interface VesselRow {
   last_lon: number | null;
   last_seen: string | null;
   region: string;
+  top_signals: string | null;
 }
 
 export interface MetricsRow {
@@ -101,12 +102,28 @@ async function watchlistHasImo(conn: duckdb.AsyncDuckDBConnection): Promise<bool
   return _watchlistHasImo;
 }
 
+/** Check whether `top_signals` column exists in watchlist.parquet (cached per session). */
+let _watchlistHasTopSignals: boolean | null = null;
+async function watchlistHasTopSignals(conn: duckdb.AsyncDuckDBConnection): Promise<boolean> {
+  if (_watchlistHasTopSignals !== null) return _watchlistHasTopSignals;
+  try {
+    await conn.query("SELECT top_signals FROM read_parquet('watchlist.parquet') LIMIT 0");
+    _watchlistHasTopSignals = true;
+  } catch {
+    _watchlistHasTopSignals = false;
+  }
+  return _watchlistHasTopSignals;
+}
+
 export async function queryWatchlist(
   conn: duckdb.AsyncDuckDBConnection,
   opts: { minConfidence?: number; region?: string } = {}
 ): Promise<VesselRow[]> {
   const { minConfidence = 0, region } = opts;
-  const hasImo = await watchlistHasImo(conn);
+  const [hasImo, hasTopSignals] = await Promise.all([
+    watchlistHasImo(conn),
+    watchlistHasTopSignals(conn),
+  ]);
 
   let sql = `
     SELECT
@@ -119,7 +136,8 @@ export async function queryWatchlist(
       last_lat,
       last_lon,
       CAST(last_seen AS VARCHAR) AS last_seen,
-      region
+      region,
+      ${hasTopSignals ? "CAST(top_signals AS VARCHAR) AS top_signals" : "NULL AS top_signals"}
     FROM read_parquet('watchlist.parquet')
     WHERE confidence >= ${minConfidence}
   `;

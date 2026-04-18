@@ -58,6 +58,104 @@ async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
   return (data?.choices?.[0]?.message?.content ?? "").trim();
 }
 
+// ── SHAP signal bar chart ────────────────────────────────────────────────────
+
+interface ShapSignal {
+  feature: string;
+  value: number | string | null;
+  contribution: number;
+}
+
+function parseSignals(raw: string | null | undefined): ShapSignal[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as ShapSignal[];
+  } catch {
+    return [];
+  }
+}
+
+function ShapBarChart({ raw }: { raw: string | null | undefined }) {
+  const signals = parseSignals(raw);
+  if (!signals.length) return null;
+  const maxContrib = Math.max(...signals.map((s) => s.contribution));
+
+  return (
+    <div style={{ marginTop: "0.75rem" }}>
+      <div
+        style={{
+          fontSize: "0.65rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "#4a5568",
+          marginBottom: "0.4rem",
+        }}
+      >
+        Top signals
+      </div>
+      {signals.map((s) => {
+        const pct = maxContrib > 0 ? (s.contribution / maxContrib) * 100 : 0;
+        const label = s.feature.replace(/_/g, " ");
+        const rawVal = s.value != null ? String(s.value) : "—";
+        return (
+          <div
+            key={s.feature}
+            title={`${s.feature}: ${rawVal}`}
+            style={{ marginBottom: "0.3rem" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span
+                style={{
+                  fontSize: "0.65rem",
+                  color: "#a0aec0",
+                  width: 130,
+                  flexShrink: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  background: "#1a1f2e",
+                  borderRadius: 2,
+                  height: 6,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    background: "#fc8181",
+                    height: "100%",
+                    borderRadius: 2,
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  fontSize: "0.65rem",
+                  color: "#718096",
+                  minWidth: 28,
+                  textAlign: "right",
+                  fontFamily: "ui-monospace,monospace",
+                }}
+              >
+                {(s.contribution * 100).toFixed(0)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const row = (label: string, value: string | number | null | undefined) => (
   <tr key={label}>
     <td
@@ -326,6 +424,9 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
           </div>
         )}
       </div>
+
+      {/* SHAP bar chart */}
+      <ShapBarChart raw={vessel.top_signals} />
 
       {/* Review panel */}
       {reviewOpen && conn && (
