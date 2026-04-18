@@ -13,3 +13,27 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #1a1f2e; }
 ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
+
+/* ── MapLibre vessel popup ───────────────────────────────────────────────── */
+.vessel-popup .maplibregl-popup-content {
+  background: #1a1f2e;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  color: #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+.vessel-popup .maplibregl-popup-tip {
+  border-top-color: #1a1f2e;
+  border-bottom-color: #1a1f2e;
+}
+.vessel-popup .maplibregl-popup-close-button {
+  color: #718096;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+}
+.vessel-popup .maplibregl-popup-close-button:hover {
+  color: #e2e8f0;
+  background: transparent;
+}

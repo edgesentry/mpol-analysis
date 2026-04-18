@@ -167,13 +167,17 @@ export default function VesselMap({ vessels, selectedMmsi, onSelect }: Props) {
     const vessel = vessels.find((v) => v.mmsi === selectedMmsi);
     if (!vessel || vessel.last_lat == null || vessel.last_lon == null) return;
 
+    const confColor = vessel.confidence >= 0.75 ? "#fc8181" : vessel.confidence >= 0.5 ? "#f6ad55" : "#68d391";
     const html = `
-      <div style="font-family:ui-monospace,monospace;font-size:0.78rem;color:#e2e8f0;padding:0.25rem 0;">
-        <strong>${vessel.vessel_name || vessel.mmsi}</strong><br/>
-        MMSI: ${vessel.mmsi}<br/>
-        Flag: ${vessel.flag || "—"} &nbsp; Type: ${vessel.vessel_type || "—"}<br/>
-        Confidence: <strong style="color:#fc8181">${vessel.confidence.toFixed(3)}</strong><br/>
-        Region: ${vessel.region || "—"}
+      <div style="font-family:ui-monospace,monospace;font-size:0.78rem;line-height:1.6;min-width:160px;">
+        <div style="font-weight:700;font-size:0.82rem;margin-bottom:0.2rem;">${vessel.vessel_name || vessel.mmsi}</div>
+        <div style="color:#a0aec0;font-size:0.68rem;margin-bottom:0.35rem;">MMSI ${vessel.mmsi}</div>
+        <table style="border-collapse:collapse;width:100%;">
+          <tr><td style="color:#718096;padding-right:0.5rem;font-size:0.68rem;white-space:nowrap;">Flag</td><td style="font-size:0.72rem;">${vessel.flag || "—"}</td></tr>
+          <tr><td style="color:#718096;padding-right:0.5rem;font-size:0.68rem;white-space:nowrap;">Type</td><td style="font-size:0.72rem;">${vessel.vessel_type || "—"}</td></tr>
+          <tr><td style="color:#718096;padding-right:0.5rem;font-size:0.68rem;white-space:nowrap;">Region</td><td style="font-size:0.72rem;">${vessel.region || "—"}</td></tr>
+          <tr><td style="color:#718096;padding-right:0.5rem;font-size:0.68rem;white-space:nowrap;">Confidence</td><td style="font-size:0.78rem;font-weight:700;color:${confColor};">${vessel.confidence.toFixed(3)}</td></tr>
+        </table>
       </div>
     `;
 
