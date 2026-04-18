@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { VesselRow } from "../lib/duckdb";
 import { tierColor, HANDOFF_STATES, handoffLabel } from "../lib/reviews";
 import type { DecisionTier, HandoffState } from "../lib/reviews";
@@ -74,14 +74,16 @@ export default function WatchlistTable({
   onHandoffFilterChange,
 }: Props) {
   const [search, setSearch] = useState("");
+  const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   const filtered = vessels.filter((v) => {
-    // Text search
+    // Text search — vessel_name, mmsi, imo, flag
     if (search) {
       const q = search.toLowerCase();
       const match =
         v.vessel_name?.toLowerCase().includes(q) ||
         v.mmsi?.includes(q) ||
+        v.imo?.toLowerCase().includes(q) ||
         v.flag?.toLowerCase().includes(q);
       if (!match) return false;
     }
@@ -93,6 +95,19 @@ export default function WatchlistTable({
     }
     return true;
   });
+
+  // Auto-select when search narrows to exactly one result
+  useEffect(() => {
+    if (search && filtered.length === 1 && filtered[0].mmsi !== selectedMmsi) {
+      onSelect(filtered[0].mmsi);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filtered.length]);
+
+  // Scroll selected row into view
+  useEffect(() => {
+    selectedRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedMmsi]);
 
   return (
     <div
@@ -108,7 +123,7 @@ export default function WatchlistTable({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search vessel / MMSI / flag…"
+          placeholder="Search name / MMSI / IMO / flag…"
           style={{
             width: "100%",
             background: "#0f1117",
@@ -186,25 +201,26 @@ export default function WatchlistTable({
           <tbody>
             {filtered.map((v) => {
               const rs = reviewStates?.get(v.mmsi);
+              const isSelected = selectedMmsi === v.mmsi;
               return (
                 <tr
                   key={v.mmsi}
+                  ref={isSelected ? selectedRowRef : null}
                   onClick={() => onSelect(v.mmsi)}
                   style={{
                     cursor: "pointer",
-                    background:
-                      selectedMmsi === v.mmsi ? "#1e3a5a" : "transparent",
+                    background: isSelected ? "#1e3a5a" : "transparent",
                     borderBottom: "1px solid #1a1f2e",
                     borderLeft: rs?.decision_tier
                       ? `3px solid ${tierColor(rs.decision_tier)}`
                       : "3px solid transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (selectedMmsi !== v.mmsi)
+                    if (!isSelected)
                       (e.currentTarget as HTMLElement).style.background = "#1e2a3a";
                   }}
                   onMouseLeave={(e) => {
-                    if (selectedMmsi !== v.mmsi)
+                    if (!isSelected)
                       (e.currentTarget as HTMLElement).style.background = "transparent";
                   }}
                 >

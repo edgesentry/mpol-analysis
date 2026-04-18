@@ -160,7 +160,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
-    { name = "fastapi" },
     { name = "h3" },
     { name = "httpx" },
     { name = "lance-graph" },
@@ -170,7 +169,6 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "scikit-learn" },
     { name = "shap" },
-    { name = "uvicorn" },
     { name = "websockets" },
 ]
 
@@ -193,7 +191,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.1" },
-    { name = "fastapi", specifier = ">=0.115" },
     { name = "h3", specifier = ">=3.7" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "lance-graph", specifier = ">=0.5.4" },
@@ -205,7 +202,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "shap", specifier = ">=0.46" },
-    { name = "uvicorn", specifier = ">=0.32" },
     { name = "websockets", specifier = ">=12.0" },
 ]
 provides-extras = ["dev"]

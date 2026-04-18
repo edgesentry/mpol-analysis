@@ -67,6 +67,7 @@ export async function registerParquet(
 
 export interface VesselRow {
   mmsi: string;
+  imo: string | null;
   vessel_name: string;
   flag: string;
   vessel_type: string;
@@ -87,15 +88,30 @@ export interface MetricsRow {
  * Expects `watchlist.parquet` to be registered in the DuckDB VFS beforehand
  * via `registerParquet`.
  */
+/** Check whether `imo` column exists in watchlist.parquet (cached per session). */
+let _watchlistHasImo: boolean | null = null;
+async function watchlistHasImo(conn: duckdb.AsyncDuckDBConnection): Promise<boolean> {
+  if (_watchlistHasImo !== null) return _watchlistHasImo;
+  try {
+    await conn.query("SELECT imo FROM read_parquet('watchlist.parquet') LIMIT 0");
+    _watchlistHasImo = true;
+  } catch {
+    _watchlistHasImo = false;
+  }
+  return _watchlistHasImo;
+}
+
 export async function queryWatchlist(
   conn: duckdb.AsyncDuckDBConnection,
   opts: { minConfidence?: number; region?: string } = {}
 ): Promise<VesselRow[]> {
   const { minConfidence = 0, region } = opts;
+  const hasImo = await watchlistHasImo(conn);
 
   let sql = `
     SELECT
       mmsi,
+      ${hasImo ? "imo," : "NULL AS imo,"}
       vessel_name,
       flag,
       vessel_type,
