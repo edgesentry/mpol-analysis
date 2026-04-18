@@ -13,9 +13,7 @@ dependencies = [
     "httpx>=0.27",
     "python-dotenv>=1.0",
     "h3>=3.7",
-    "fastapi>=0.115",
-    "uvicorn>=0.32",
-    "lancedb>=0.9",
+"lancedb>=0.9",
     "lance-graph>=0.5.4",
 ]
 
@@ -30,7 +28,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pipeline"]
+packages = ["pipeline", "scripts"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -74,6 +72,5 @@ module = [
     "pipeline.src.features.ownership_graph",
     "pipeline.src.features.identity",
     "pipeline.src.analysis.label_propagation",
-    "pipeline.src.api.routes.chat",
 ]
 ignore_errors = true

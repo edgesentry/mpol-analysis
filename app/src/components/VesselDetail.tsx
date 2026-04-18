@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from "react";
+import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
+import ReviewPanel from "./ReviewPanel";
 
 interface Props {
   vessel: VesselRow;
+  conn: AsyncDuckDBConnection | null;
   onClose: () => void;
+  onReviewSaved?: () => void;
 }
 
 // ── LLM brief fetcher ────────────────────────────────────────────────────────
@@ -87,7 +91,8 @@ function confidenceColor(c: number): string {
   return "#68d391";
 }
 
-export default function VesselDetail({ vessel, onClose }: Props) {
+export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: Props) {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [brief, setBrief] = useState<string>("");
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
   const abortRef = useRef<AbortController | null>(null);
@@ -162,22 +167,39 @@ export default function VesselDetail({ vessel, onClose }: Props) {
             MMSI {vessel.mmsi}
           </div>
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#4a5568",
-            cursor: "pointer",
-            fontSize: "1rem",
-            lineHeight: 1,
-            padding: "0 0.2rem",
-            flexShrink: 0,
-          }}
-          aria-label="Close detail panel"
-        >
-          ✕
-        </button>
+        <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+          <button
+            onClick={() => setReviewOpen((o) => !o)}
+            style={{
+              background: reviewOpen ? "#2b4a8a" : "none",
+              border: "1px solid #2d3748",
+              borderRadius: 4,
+              color: reviewOpen ? "#93c5fd" : "#718096",
+              cursor: "pointer",
+              fontSize: "0.68rem",
+              fontWeight: 600,
+              padding: "0.15rem 0.5rem",
+            }}
+            aria-label="Toggle review panel"
+          >
+            Review
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#4a5568",
+              cursor: "pointer",
+              fontSize: "1rem",
+              lineHeight: 1,
+              padding: "0 0.2rem",
+            }}
+            aria-label="Close detail panel"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Confidence badge */}
@@ -302,6 +324,22 @@ export default function VesselDetail({ vessel, onClose }: Props) {
           </div>
         )}
       </div>
+
+      {/* Review panel */}
+      {reviewOpen && conn && (
+        <ReviewPanel
+          vessel={vessel}
+          conn={conn}
+          onSaved={() => {
+            onReviewSaved?.();
+          }}
+        />
+      )}
+      {reviewOpen && !conn && (
+        <div style={{ padding: "0.5rem 1rem", fontSize: "0.72rem", color: "#4a5568", fontStyle: "italic" }}>
+          DuckDB not ready.
+        </div>
+      )}
     </div>
   );
 }

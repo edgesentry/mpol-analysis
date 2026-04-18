@@ -117,7 +117,7 @@ def _cache_present(db_path: Path, watchlist: Path) -> bool:
 def _remote_timestamp(fs, bucket: str) -> datetime | None:
     """Read the R2 ``latest`` pointer and return it as an aware UTC datetime."""
     try:
-        from pipeline.scripts.sync_r2 import _read_latest
+        from scripts.sync_r2 import _read_latest
 
         ts = _read_latest(fs, bucket)
         if not ts:
@@ -173,7 +173,7 @@ def _build_fs(bucket: str):
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
 
-    from pipeline.scripts.sync_r2 import _build_r2_fs
+    from scripts.sync_r2 import _build_r2_fs
 
     anon = not _r2_configured()
     return _build_r2_fs(anonymous=anon)
@@ -194,7 +194,7 @@ def maybe_pull() -> None:
 
     import os as _os
 
-    from pipeline.scripts.sync_r2 import _DEFAULT_BUCKET
+    from scripts.sync_r2 import _DEFAULT_BUCKET
 
     db_path = Path(_default_db_path())
     data_dir = db_path.parent
@@ -246,7 +246,7 @@ def maybe_pull() -> None:
 
 def _pull(region: str, db_path: Path, fs, bucket: str) -> None:
     """Invoke the sync_r2 pull logic directly (no subprocess)."""
-    from pipeline.scripts.sync_r2 import _pull_zip, _read_latest
+    from scripts.sync_r2 import _pull_zip, _read_latest
 
     data_dir = db_path.parent
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -267,7 +267,7 @@ def _pull(region: str, db_path: Path, fs, bucket: str) -> None:
     try:
         import argparse as _argparse
 
-        from pipeline.scripts.sync_r2 import cmd_pull_reviews
+        from scripts.sync_r2 import cmd_pull_reviews
 
         _review_args = _argparse.Namespace(db=str(db_path))
         rc = cmd_pull_reviews(_review_args)

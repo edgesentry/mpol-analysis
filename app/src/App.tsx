@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { initDuckDB, queryWatchlist, queryMetrics, queryRegions } from "./lib/duckdb";
+import { initReviewSchema } from "./lib/reviews";
 import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
@@ -44,6 +45,7 @@ export default function App() {
         if (cancelled) return;
         dbRef.current = db;
         connRef.current = conn;
+        await initReviewSchema(conn);
         await doSync(db);
       } catch (err) {
         if (!cancelled) setInitError(String(err));
@@ -180,7 +182,12 @@ export default function App() {
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);
             return v ? (
-              <VesselDetail vessel={v} onClose={() => setSelectedMmsi(null)} />
+              <VesselDetail
+                vessel={v}
+                conn={connRef.current}
+                onClose={() => setSelectedMmsi(null)}
+                onReviewSaved={() => refreshQuery()}
+              />
             ) : null;
           })()}
         </div>

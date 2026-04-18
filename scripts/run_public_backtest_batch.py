@@ -12,8 +12,8 @@ from typing import Any
 import duckdb
 import polars as pl
 
-from pipeline.scripts.prepare_public_sanctions_db import prepare_public_sanctions_db
 from pipeline.src.score.backtest import run_backtest
+from scripts.prepare_public_sanctions_db import prepare_public_sanctions_db
 
 # MMSIs of vessels seeded by run_pipeline.py --seed-dummy.
 # These are real OFAC vessels injected artificially into the pipeline DB to

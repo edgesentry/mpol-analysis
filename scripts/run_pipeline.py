@@ -397,7 +397,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 11
+TOTAL_STEPS = 10
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -788,34 +788,6 @@ def step_ducklake(p: RegionPreset, non_interactive: bool) -> bool:
     return _ask_retry_skip("DuckLake catalog") == "skip"
 
 
-def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(11, TOTAL_STEPS, "Launching dashboard...")
-    if non_interactive:
-        print(_dim("(skipped in non-interactive mode)"))
-        return True
-
-    env = {"WATCHLIST_OUTPUT_PATH": p.watchlist_path}
-    print()
-    print("      http://localhost:8000")
-    merged_env = {**os.environ, **env}
-    try:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "pipeline.src.api.main:app",
-                "--host",
-                "0.0.0.0",
-                "--port",
-                "8000",
-                "--reload",
-            ],
-            env=merged_env,
-        )
-    except KeyboardInterrupt:
-        print(_dim("Dashboard interrupted by user."))
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -932,7 +904,6 @@ def main() -> None:
         lambda p, ni: step_score(p, ni, geo_filter_path),
         lambda p, ni: step_gdelt(p, ni, gdelt_days),
         step_ducklake,
-        step_dashboard,
     ]
 
     for step_fn in steps:

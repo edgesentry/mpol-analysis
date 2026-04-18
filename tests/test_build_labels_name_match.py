@@ -2,7 +2,7 @@
 
 import polars as pl
 
-from pipeline.scripts.run_public_backtest_batch import (
+from scripts.run_public_backtest_batch import (
     _build_labels_for_watchlist,
     _normalize_vessel_name,
 )
