@@ -140,6 +140,8 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         background: "#0f1117",
         padding: "0.75rem 1rem",
         flexShrink: 0,
+        overflowY: "auto",
+        maxHeight: "65vh",
       }}
     >
       {/* Title row */}

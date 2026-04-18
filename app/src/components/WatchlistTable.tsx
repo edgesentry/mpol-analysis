@@ -1,10 +1,13 @@
 import { useState } from "react";
 import type { VesselRow } from "../lib/duckdb";
+import { tierColor } from "../lib/reviews";
+import type { DecisionTier, HandoffState } from "../lib/reviews";
 
 interface Props {
   vessels: VesselRow[];
   selectedMmsi: string | null;
   onSelect: (mmsi: string) => void;
+  reviewStates?: Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>;
 }
 
 function confidenceColor(c: number): string {
@@ -13,10 +16,58 @@ function confidenceColor(c: number): string {
   return "#68d391";
 }
 
+/** Compact pill shown in the vessel name cell. */
+function TierBadge({
+  tier,
+  handoffState,
+}: {
+  tier: DecisionTier | null;
+  handoffState: HandoffState;
+}) {
+  const color = tierColor(tier);
+  const label = tier ? tier.slice(0, 3).toUpperCase() : "—";
+  const showHandoff =
+    handoffState === "handoff_recommended" ||
+    handoffState === "handoff_accepted" ||
+    handoffState === "handoff_completed";
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", marginRight: "0.35rem", flexShrink: 0 }}>
+      <span
+        title={tier ?? "unreviewed"}
+        style={{
+          display: "inline-block",
+          padding: "0 0.3rem",
+          borderRadius: 3,
+          fontSize: "0.6rem",
+          fontWeight: 700,
+          fontFamily: "ui-monospace,monospace",
+          letterSpacing: "0.03em",
+          background: tier ? color + "22" : "#1a1f2e",
+          border: `1px solid ${tier ? color : "#2d3748"}`,
+          color: tier ? color : "#4a5568",
+          lineHeight: "1.5",
+        }}
+      >
+        {label}
+      </span>
+      {showHandoff && (
+        <span
+          title={handoffState.replace(/_/g, " ")}
+          style={{ fontSize: "0.6rem", color: "#93c5fd" }}
+        >
+          →
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function WatchlistTable({
   vessels,
   selectedMmsi,
   onSelect,
+  reviewStates,
 }: Props) {
   const [search, setSearch] = useState("");
 
@@ -96,69 +147,85 @@ export default function WatchlistTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((v) => (
-              <tr
-                key={v.mmsi}
-                onClick={() => onSelect(v.mmsi)}
-                style={{
-                  cursor: "pointer",
-                  background:
-                    selectedMmsi === v.mmsi ? "#1e3a5a" : "transparent",
-                  borderBottom: "1px solid #1a1f2e",
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedMmsi !== v.mmsi)
-                    (e.currentTarget as HTMLElement).style.background =
-                      "#1e2a3a";
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedMmsi !== v.mmsi)
-                    (e.currentTarget as HTMLElement).style.background =
-                      "transparent";
-                }}
-              >
-                <td
+            {filtered.map((v) => {
+              const rs = reviewStates?.get(v.mmsi);
+              return (
+                <tr
+                  key={v.mmsi}
+                  onClick={() => onSelect(v.mmsi)}
                   style={{
-                    padding: "0.35rem 0.5rem",
-                    maxWidth: 140,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                    background:
+                      selectedMmsi === v.mmsi ? "#1e3a5a" : "transparent",
+                    borderBottom: "1px solid #1a1f2e",
+                    borderLeft: rs?.decision_tier
+                      ? `3px solid ${tierColor(rs.decision_tier)}`
+                      : "3px solid transparent",
                   }}
-                  title={v.vessel_name}
-                >
-                  {v.vessel_name || v.mmsi}
-                </td>
-                <td style={{ padding: "0.35rem 0.5rem", color: "#a0aec0" }}>
-                  {v.flag || "—"}
-                </td>
-                <td
-                  style={{
-                    padding: "0.35rem 0.5rem",
-                    color: "#a0aec0",
-                    maxWidth: 80,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                  onMouseEnter={(e) => {
+                    if (selectedMmsi !== v.mmsi)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "#1e2a3a";
                   }}
-                  title={v.vessel_type}
-                >
-                  {v.vessel_type || "—"}
-                </td>
-                <td
-                  style={{
-                    padding: "0.35rem 0.5rem",
-                    fontWeight: 700,
-                    color: confidenceColor(v.confidence),
+                  onMouseLeave={(e) => {
+                    if (selectedMmsi !== v.mmsi)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "transparent";
                   }}
                 >
-                  {v.confidence.toFixed(3)}
-                </td>
-                <td style={{ padding: "0.35rem 0.5rem", color: "#718096" }}>
-                  {v.region || "—"}
-                </td>
-              </tr>
-            ))}
+                  <td
+                    style={{
+                      padding: "0.35rem 0.5rem",
+                      maxWidth: 140,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={v.vessel_name}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", maxWidth: "100%" }}>
+                      {reviewStates && (
+                        <TierBadge
+                          tier={rs?.decision_tier ?? null}
+                          handoffState={rs?.handoff_state ?? "queued_review"}
+                        />
+                      )}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {v.vessel_name || v.mmsi}
+                      </span>
+                    </span>
+                  </td>
+                  <td style={{ padding: "0.35rem 0.5rem", color: "#a0aec0" }}>
+                    {v.flag || "—"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "0.35rem 0.5rem",
+                      color: "#a0aec0",
+                      maxWidth: 80,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={v.vessel_type}
+                  >
+                    {v.vessel_type || "—"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "0.35rem 0.5rem",
+                      fontWeight: 700,
+                      color: confidenceColor(v.confidence),
+                    }}
+                  >
+                    {v.confidence.toFixed(3)}
+                  </td>
+                  <td style={{ padding: "0.35rem 0.5rem", color: "#718096" }}>
+                    {v.region || "—"}
+                  </td>
+                </tr>
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td
