@@ -449,6 +449,7 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         <DispatchModal
           vessel={vessel}
           brief={brief}
+          conn={conn}
           onClose={() => setDispatchOpen(false)}
         />
       )}
