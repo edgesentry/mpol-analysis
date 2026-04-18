@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
 import ReviewPanel from "./ReviewPanel";
+import DispatchModal from "./DispatchModal";
 
 interface Props {
   vessel: VesselRow;
@@ -191,6 +192,7 @@ function confidenceColor(c: number): string {
 
 export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: Props) {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const [brief, setBrief] = useState<string>("");
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
   const abortRef = useRef<AbortController | null>(null);
@@ -268,6 +270,22 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+          <button
+            onClick={() => setDispatchOpen(true)}
+            style={{
+              background: "none",
+              border: "1px solid #2d3748",
+              borderRadius: 4,
+              color: "#718096",
+              cursor: "pointer",
+              fontSize: "0.68rem",
+              fontWeight: 600,
+              padding: "0.15rem 0.5rem",
+            }}
+            aria-label="Open dispatch brief"
+          >
+            Dispatch
+          </button>
           <button
             onClick={() => setReviewOpen((o) => !o)}
             style={{
@@ -442,6 +460,16 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         <div style={{ padding: "0.5rem 1rem", fontSize: "0.72rem", color: "#4a5568", fontStyle: "italic" }}>
           DuckDB not ready.
         </div>
+      )}
+
+      {/* Dispatch modal — rendered outside the scrollable div via portal would be ideal,
+          but mounting here works since the parent sidebar is overflow:hidden */}
+      {dispatchOpen && (
+        <DispatchModal
+          vessel={vessel}
+          brief={brief}
+          onClose={() => setDispatchOpen(false)}
+        />
       )}
     </div>
   );
