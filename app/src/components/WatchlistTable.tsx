@@ -10,6 +10,7 @@ interface Props {
   reviewStates?: Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>;
   handoffFilter?: HandoffState | "all";
   onHandoffFilterChange?: (v: HandoffState | "all") => void;
+  onClaim?: (mmsi: string) => void;
 }
 
 function confidenceColor(c: number): string {
@@ -72,8 +73,10 @@ export default function WatchlistTable({
   reviewStates,
   handoffFilter = "all",
   onHandoffFilterChange,
+  onClaim,
 }: Props) {
   const [search, setSearch] = useState("");
+  const [hovered, setHovered] = useState<string | null>(null);
   const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   const filtered = vessels.filter((v) => {
@@ -218,10 +221,12 @@ export default function WatchlistTable({
                   onMouseEnter={(e) => {
                     if (!isSelected)
                       (e.currentTarget as HTMLElement).style.background = "#1e2a3a";
+                    setHovered(v.mmsi);
                   }}
                   onMouseLeave={(e) => {
                     if (!isSelected)
                       (e.currentTarget as HTMLElement).style.background = "transparent";
+                    setHovered(null);
                   }}
                 >
                   <td
@@ -271,8 +276,36 @@ export default function WatchlistTable({
                   >
                     {v.confidence.toFixed(3)}
                   </td>
-                  <td style={{ padding: "0.35rem 0.5rem", color: "#718096" }}>
-                    {v.region || "—"}
+                  <td style={{ padding: "0.35rem 0.5rem", color: "#718096", whiteSpace: "nowrap" }}>
+                    {onClaim && hovered === v.mmsi ? (
+                      (() => {
+                        const isClaimed = rs?.handoff_state === "in_review";
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isClaimed) onClaim(v.mmsi);
+                            }}
+                            disabled={isClaimed}
+                            style={{
+                              background: isClaimed ? "none" : "#1a3a5c",
+                              border: `1px solid ${isClaimed ? "#2d3748" : "#2b5a8a"}`,
+                              borderRadius: 3,
+                              color: isClaimed ? "#4a5568" : "#93c5fd",
+                              cursor: isClaimed ? "default" : "pointer",
+                              fontSize: "0.6rem",
+                              fontWeight: 600,
+                              padding: "0.1rem 0.4rem",
+                              fontFamily: "ui-monospace,monospace",
+                            }}
+                          >
+                            {isClaimed ? "claimed" : "claim"}
+                          </button>
+                        );
+                      })()
+                    ) : (
+                      v.region || "—"
+                    )}
                   </td>
                 </tr>
               );

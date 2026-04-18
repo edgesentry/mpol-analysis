@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { initDuckDB, queryWatchlist, queryMetrics, queryRegions } from "./lib/duckdb";
-import { initReviewSchema, getBulkReviewStates } from "./lib/reviews";
+import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
 import type { DecisionTier, HandoffState } from "./lib/reviews";
 import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
@@ -84,6 +84,35 @@ export default function App() {
     const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
     setReviewStates(states);
   }, [minConfidence, selectedRegion]);
+
+  const handleClaim = useCallback(async (mmsi: string) => {
+    const conn = connRef.current;
+    if (!conn) return;
+    // Optimistic update
+    setReviewStates((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(mmsi);
+      next.set(mmsi, {
+        decision_tier: existing?.decision_tier ?? null,
+        handoff_state: "in_review",
+      });
+      return next;
+    });
+    try {
+      await saveReview(conn, {
+        mmsi,
+        decision_tier: reviewStates.get(mmsi)?.decision_tier ?? null,
+        handoff_state: "in_review",
+        reviewer_id: "analyst",
+        rationale: "",
+        identifier_basis: "mmsi",
+        evidence: [],
+      });
+    } catch {
+      // Roll back on failure
+      await refreshQuery();
+    }
+  }, [reviewStates, refreshQuery]);
 
   // Re-query when filter changes (if data is already loaded)
   useEffect(() => {
@@ -186,6 +215,7 @@ export default function App() {
             reviewStates={reviewStates}
             handoffFilter={handoffFilter}
             onHandoffFilterChange={setHandoffFilter}
+            onClaim={handleClaim}
           />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);
