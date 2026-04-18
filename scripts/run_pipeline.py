@@ -788,8 +788,6 @@ def step_ducklake(p: RegionPreset, non_interactive: bool) -> bool:
     return _ask_retry_skip("DuckLake catalog") == "skip"
 
 
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------

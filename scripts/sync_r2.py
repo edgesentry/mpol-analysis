@@ -1064,10 +1064,7 @@ def cmd_pull_demo(args: argparse.Namespace) -> int:
         tmp_path.unlink(missing_ok=True)
 
     print(f"Done. {size_mb:.2f} MB downloaded.")
-    print(
-        "\nData synced. Open the dashboard:\n"
-        "  https://arktrace.edgesentry.io"
-    )
+    print("\nData synced. Open the dashboard:\n  https://arktrace.edgesentry.io")
     return 0
 
 
