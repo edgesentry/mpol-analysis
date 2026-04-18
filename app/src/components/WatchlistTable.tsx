@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { VesselRow } from "../lib/duckdb";
-import { tierColor } from "../lib/reviews";
+import { tierColor, HANDOFF_STATES, handoffLabel } from "../lib/reviews";
 import type { DecisionTier, HandoffState } from "../lib/reviews";
 
 interface Props {
@@ -8,6 +8,8 @@ interface Props {
   selectedMmsi: string | null;
   onSelect: (mmsi: string) => void;
   reviewStates?: Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>;
+  handoffFilter?: HandoffState | "all";
+  onHandoffFilterChange?: (v: HandoffState | "all") => void;
 }
 
 function confidenceColor(c: number): string {
@@ -68,17 +70,29 @@ export default function WatchlistTable({
   selectedMmsi,
   onSelect,
   reviewStates,
+  handoffFilter = "all",
+  onHandoffFilterChange,
 }: Props) {
   const [search, setSearch] = useState("");
 
-  const filtered = search
-    ? vessels.filter(
-        (v) =>
-          v.vessel_name?.toLowerCase().includes(search.toLowerCase()) ||
-          v.mmsi?.includes(search) ||
-          v.flag?.toLowerCase().includes(search.toLowerCase())
-      )
-    : vessels;
+  const filtered = vessels.filter((v) => {
+    // Text search
+    if (search) {
+      const q = search.toLowerCase();
+      const match =
+        v.vessel_name?.toLowerCase().includes(q) ||
+        v.mmsi?.includes(q) ||
+        v.flag?.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    // Handoff-state filter
+    if (handoffFilter !== "all") {
+      const rs = reviewStates?.get(v.mmsi);
+      const state = rs?.handoff_state ?? "queued_review";
+      if (state !== handoffFilter) return false;
+    }
+    return true;
+  });
 
   return (
     <div
@@ -89,8 +103,8 @@ export default function WatchlistTable({
         overflow: "hidden",
       }}
     >
-      {/* Search */}
-      <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid #2d3748" }}>
+      {/* Search + handoff filter */}
+      <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid #2d3748", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -104,8 +118,31 @@ export default function WatchlistTable({
             padding: "0.3rem 0.5rem",
             fontSize: "0.75rem",
             outline: "none",
+            boxSizing: "border-box",
           }}
         />
+        <select
+          value={handoffFilter}
+          onChange={(e) => onHandoffFilterChange?.(e.target.value as HandoffState | "all")}
+          style={{
+            width: "100%",
+            background: "#0f1117",
+            border: handoffFilter !== "all" ? "1px solid #93c5fd" : "1px solid #2d3748",
+            borderRadius: 4,
+            color: handoffFilter !== "all" ? "#93c5fd" : "#718096",
+            padding: "0.3rem 0.5rem",
+            fontSize: "0.72rem",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        >
+          <option value="all">All handoff states</option>
+          {HANDOFF_STATES.map((s) => (
+            <option key={s} value={s}>
+              {handoffLabel(s)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -164,13 +201,11 @@ export default function WatchlistTable({
                   }}
                   onMouseEnter={(e) => {
                     if (selectedMmsi !== v.mmsi)
-                      (e.currentTarget as HTMLElement).style.background =
-                        "#1e2a3a";
+                      (e.currentTarget as HTMLElement).style.background = "#1e2a3a";
                   }}
                   onMouseLeave={(e) => {
                     if (selectedMmsi !== v.mmsi)
-                      (e.currentTarget as HTMLElement).style.background =
-                        "transparent";
+                      (e.currentTarget as HTMLElement).style.background = "transparent";
                   }}
                 >
                   <td
@@ -236,7 +271,9 @@ export default function WatchlistTable({
                     color: "#4a5568",
                   }}
                 >
-                  {vessels.length === 0 ? "No data — sync from R2 first." : "No results."}
+                  {vessels.length === 0
+                    ? "No data — sync from R2 first."
+                    : "No results."}
                 </td>
               </tr>
             )}
@@ -254,6 +291,11 @@ export default function WatchlistTable({
         }}
       >
         {filtered.length} / {vessels.length} vessels
+        {handoffFilter !== "all" && (
+          <span style={{ color: "#93c5fd", marginLeft: "0.4rem" }}>
+            · {handoffLabel(handoffFilter as HandoffState)}
+          </span>
+        )}
       </div>
     </div>
   );

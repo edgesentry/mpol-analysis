@@ -37,6 +37,7 @@ export default function App() {
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [minConfidence, setMinConfidence] = useState(0.4);
   const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
+  const [handoffFilter, setHandoffFilter] = useState<HandoffState | "all">("all");
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -183,6 +184,8 @@ export default function App() {
             selectedMmsi={selectedMmsi}
             onSelect={setSelectedMmsi}
             reviewStates={reviewStates}
+            handoffFilter={handoffFilter}
+            onHandoffFilterChange={setHandoffFilter}
           />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);
