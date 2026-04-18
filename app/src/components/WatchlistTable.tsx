@@ -352,7 +352,7 @@ export default function WatchlistTable({
             </span>
           )}
         </span>
-        {filtered.length > 0 && (
+        {vessels.length > 0 && (
           <button
             onClick={() => {
               const payload = filtered.map((v) => ({
@@ -380,15 +380,16 @@ export default function WatchlistTable({
             }}
             style={{
               marginLeft: "auto",
-              background: "none",
-              border: "1px solid #2d3748",
+              background: "#1a1f2e",
+              border: "1px solid #4a5568",
               borderRadius: 3,
-              color: "#718096",
+              color: "#a0aec0",
               cursor: "pointer",
-              fontSize: "0.6rem",
+              fontSize: "0.65rem",
               fontWeight: 600,
-              padding: "0.1rem 0.4rem",
+              padding: "0.15rem 0.5rem",
               fontFamily: "ui-monospace,monospace",
+              flexShrink: 0,
             }}
           >
             export
