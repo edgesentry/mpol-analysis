@@ -4,6 +4,7 @@ import type { VesselRow } from "../lib/duckdb";
 import { queryCausalEffect } from "../lib/duckdb";
 import type { CausalEffectRow } from "../lib/duckdb";
 import { getCachedBrief, saveCachedBrief } from "../lib/briefCache";
+import { getAuditLog } from "../lib/reviews";
 import {
   formatLastSeen,
   confidenceTier,
@@ -187,6 +188,9 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
   const [causal, setCausal] = useState<CausalEffectRow | null | undefined>(undefined);
   const [shadowTooltip, setShadowTooltip] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [auditLog, setAuditLog] = useState<Awaited<ReturnType<typeof getAuditLog>>>([]);
+  const [expandedRationale, setExpandedRationale] = useState<Set<number>>(new Set());
   const abortRef = useRef<AbortController | null>(null);
 
   // Load brief: serve from cache if available, otherwise call LLM
@@ -261,6 +265,14 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
       setBriefStatus(isOffline ? "offline" : "error");
     }
   }
+
+  // Reload audit log when vessel changes or review panel saves
+  useEffect(() => {
+    if (!conn) return;
+    setAuditLog([]);
+    setExpandedRationale(new Set());
+    getAuditLog(conn, vessel.mmsi).then(setAuditLog).catch(() => {});
+  }, [conn, vessel.mmsi]);
 
   // Fetch causal ATT on vessel change
   useEffect(() => {
@@ -535,6 +547,8 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
           conn={conn}
           onSaved={() => {
             onReviewSaved?.();
+            // Refresh audit log after save
+            if (conn) getAuditLog(conn, vessel.mmsi).then(setAuditLog).catch(() => {});
           }}
         />
       )}
@@ -543,6 +557,97 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
           DuckDB not ready.
         </div>
       )}
+
+      {/* ── History / audit trail ────────────────────────────────────── */}
+      <div style={{ marginTop: "0.5rem", borderTop: "1px solid #2d3748", paddingTop: "0.5rem" }}>
+        <div
+          onClick={() => setHistoryOpen((o) => !o)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}
+        >
+          <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568" }}>
+            History
+            {auditLog.length > 0 && (
+              <span style={{ marginLeft: "0.4rem", color: "#718096" }}>({auditLog.length})</span>
+            )}
+          </div>
+          <span style={{ fontSize: "0.6rem", color: "#4a5568" }}>{historyOpen ? "▲" : "▼"}</span>
+        </div>
+
+        {historyOpen && (
+          <div style={{ marginTop: "0.4rem" }}>
+            {auditLog.length === 0 ? (
+              <div style={{ fontSize: "0.68rem", color: "#4a5568", fontStyle: "italic", padding: "0.35rem 0" }}>
+                No review history yet.
+              </div>
+            ) : (
+              auditLog.map((entry, idx) => {
+                const isExpanded = expandedRationale.has(idx);
+                const hasRationale = entry.rationale?.trim();
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      borderLeft: "2px solid #2d3748",
+                      paddingLeft: "0.6rem",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    {/* Timestamp + reviewer */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.15rem" }}>
+                      <span style={{ fontSize: "0.62rem", color: "#4a5568", fontFamily: "ui-monospace,monospace" }}>
+                        {new Date(entry.changed_at).toLocaleString("en-GB", {
+                          day: "numeric", month: "short", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </span>
+                      <span style={{ fontSize: "0.62rem", color: "#718096" }}>
+                        {entry.reviewer_id || "—"}
+                      </span>
+                    </div>
+                    {/* State transition */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.68rem", marginBottom: hasRationale ? "0.2rem" : 0 }}>
+                      {entry.from_state ? (
+                        <span style={{ color: "#4a5568" }}>{entry.from_state.replace(/_/g, " ")}</span>
+                      ) : (
+                        <span style={{ color: "#4a5568" }}>—</span>
+                      )}
+                      <span style={{ color: "#2d3748" }}>→</span>
+                      <span style={{ color: "#93c5fd", fontWeight: 600 }}>
+                        {entry.to_state.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    {/* Rationale */}
+                    {hasRationale && (
+                      <div style={{ fontSize: "0.65rem", color: "#718096", lineHeight: 1.4 }}>
+                        <span style={{
+                          display: isExpanded ? "block" : "-webkit-box",
+                          WebkitLineClamp: isExpanded ? undefined : 1,
+                          WebkitBoxOrient: isExpanded ? undefined : "vertical" as const,
+                          overflow: isExpanded ? "visible" : "hidden",
+                        }}>
+                          {entry.rationale}
+                        </span>
+                        {entry.rationale.length > 60 && (
+                          <button
+                            onClick={() => setExpandedRationale((s) => {
+                              const next = new Set(s);
+                              isExpanded ? next.delete(idx) : next.add(idx);
+                              return next;
+                            })}
+                            style={{ background: "none", border: "none", color: "#4a5568", cursor: "pointer", fontSize: "0.6rem", padding: 0, textDecoration: "underline" }}
+                          >
+                            {isExpanded ? "show less" : "show more"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Dispatch modal — rendered outside the scrollable div via portal would be ideal,
           but mounting here works since the parent sidebar is overflow:hidden */}
