@@ -10,7 +10,6 @@ import pytest
 
 from pipeline.src.features.ais_behavior import (
     GAP_THRESHOLD_H,
-    JUMP_SPEED_KNOTS,
     LOITER_SPEED_KNOTS,
     PORT_MOORED_STATUS,
     _haversine_km,
