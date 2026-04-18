@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
+import { getReview, tierColor, handoffLabel } from "../lib/reviews";
+import type { VesselReview } from "../lib/reviews";
 import {
   formatLastSeen,
   confidenceTier,
@@ -29,13 +32,21 @@ function parseSignals(raw: string | null | undefined): ShapSignal[] {
 interface Props {
   vessel: VesselRow;
   brief: string;
+  conn: AsyncDuckDBConnection | null;
   onClose: () => void;
 }
 
-export default function DispatchModal({ vessel, brief, onClose }: Props) {
+export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
   const signals = parseSignals(vessel.top_signals);
   const maxContrib = signals.length ? Math.max(...signals.map((s) => s.contribution)) : 1;
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const [review, setReview] = useState<VesselReview | null>(null);
+
+  // Fetch review record on open
+  useEffect(() => {
+    if (!conn) return;
+    getReview(conn, vessel.mmsi).then(setReview).catch(() => {});
+  }, [conn, vessel.mmsi]);
 
   // Focus close button on open; close on Escape; inject print stylesheet
   useEffect(() => {
@@ -98,6 +109,13 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
         contribution: s.contribution,
       })),
       analyst_brief: brief || null,
+      review: review ? {
+        decision_tier: review.decision_tier,
+        handoff_state: review.handoff_state,
+        reviewer_id: review.reviewer_id || null,
+        rationale: review.rationale || null,
+        updated_at: review.updated_at,
+      } : null,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -134,6 +152,14 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
       signals.length ? `## Top signals\n${signalLines}` : null,
       "",
       brief ? `## Analyst brief\n${brief}` : null,
+      "",
+      review ? [
+        `## Review decision`,
+        review.decision_tier ? `**Tier:** ${review.decision_tier}` : null,
+        `**Status:** ${handoffLabel(review.handoff_state)}`,
+        review.reviewer_id ? `**Reviewer:** ${review.reviewer_id}` : null,
+        review.rationale ? `**Rationale:** ${review.rationale}` : null,
+      ].filter(Boolean).join("\n") : null,
       "",
       `---`,
       `*Generated ${new Date().toISOString()}*`,
@@ -283,12 +309,53 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
 
           {/* Analyst brief */}
           {brief && (
-            <div>
+            <div style={{ marginBottom: "0.75rem" }}>
               <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568", marginBottom: "0.35rem" }}>
                 Analyst brief
               </div>
               <div style={{ fontSize: "0.75rem", color: "#cbd5e0", lineHeight: 1.6, padding: "0.5rem 0.7rem", background: "#1a1f2e", borderRadius: 4, border: "1px solid #2d3748", borderLeft: "3px solid #93c5fd" }}>
                 {brief}
+              </div>
+            </div>
+          )}
+
+          {/* Review decision */}
+          {review && (
+            <div>
+              <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568", marginBottom: "0.4rem" }}>
+                Review decision
+              </div>
+              <div style={{ background: "#1a1f2e", border: "1px solid #2d3748", borderRadius: 4, padding: "0.5rem 0.7rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: review.rationale ? "0.4rem" : 0 }}>
+                  {review.decision_tier && (
+                    <span style={{
+                      display: "inline-block",
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: 3,
+                      fontSize: "0.62rem",
+                      fontWeight: 700,
+                      fontFamily: "ui-monospace,monospace",
+                      background: tierColor(review.decision_tier) + "22",
+                      border: `1px solid ${tierColor(review.decision_tier)}`,
+                      color: tierColor(review.decision_tier),
+                    }}>
+                      {review.decision_tier.toUpperCase()}
+                    </span>
+                  )}
+                  <span style={{ fontSize: "0.72rem", color: "#a0aec0" }}>
+                    {handoffLabel(review.handoff_state)}
+                  </span>
+                  {review.reviewer_id && (
+                    <span style={{ fontSize: "0.65rem", color: "#4a5568", marginLeft: "auto" }}>
+                      {review.reviewer_id}
+                    </span>
+                  )}
+                </div>
+                {review.rationale && (
+                  <div style={{ fontSize: "0.72rem", color: "#cbd5e0", lineHeight: 1.5, borderTop: "1px solid #2d3748", paddingTop: "0.35rem", marginTop: "0.1rem" }}>
+                    {review.rationale}
+                  </div>
+                )}
               </div>
             </div>
           )}
