@@ -18,11 +18,14 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
+import { loadAlerts, diffAndAppend } from "./lib/alerts";
+import type { AlertEntry } from "./lib/alerts";
 import KpiBar from "./components/KpiBar";
 import WatchlistTable from "./components/WatchlistTable";
 import VesselDetail from "./components/VesselDetail";
 import VesselMap from "./components/VesselMap";
 import SyncStatusBar from "./components/SyncStatus";
+import AlertDrawer from "./components/AlertDrawer";
 
 export default function App() {
   const dbRef = useRef<AsyncDuckDB | null>(null);
@@ -38,6 +41,9 @@ export default function App() {
   const [minConfidence, setMinConfidence] = useState(0.4);
   const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
   const [handoffFilter, setHandoffFilter] = useState<HandoffState | "all">("all");
+  const [alerts, setAlerts] = useState<AlertEntry[]>(() => loadAlerts());
+  const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
+  const prevVesselsRef = useRef<VesselRow[]>([]);
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -78,6 +84,9 @@ export default function App() {
       queryMetrics(conn),
       queryRegions(conn),
     ]);
+    const updatedAlerts = diffAndAppend(prevVesselsRef.current, vs);
+    prevVesselsRef.current = vs;
+    setAlerts(updatedAlerts);
     setVessels(vs);
     setMetrics(m);
     setRegions(rs);
@@ -189,7 +198,12 @@ export default function App() {
       </header>
 
       {/* KPI bar */}
-      <KpiBar vessels={vessels} metrics={metrics} />
+      <KpiBar
+        vessels={vessels}
+        metrics={metrics}
+        unreadAlerts={alerts.filter((a) => !a.read).length}
+        onBellClick={() => setAlertDrawerOpen(true)}
+      />
 
       {/* Sync status */}
       <SyncStatusBar status={syncStatus} onSync={() => doSync()} />
@@ -245,6 +259,16 @@ export default function App() {
           onSelect={setSelectedMmsi}
         />
       </div>
+
+      {/* Alert drawer */}
+      {alertDrawerOpen && (
+        <AlertDrawer
+          alerts={alerts}
+          onClose={() => setAlertDrawerOpen(false)}
+          onSelectVessel={(mmsi) => setSelectedMmsi(mmsi)}
+          onAlertsChange={setAlerts}
+        />
+      )}
     </div>
   );
 }
