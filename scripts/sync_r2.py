@@ -594,9 +594,8 @@ def cmd_pull(args: argparse.Namespace) -> int:
     print(
         "  uv run python scripts/sync_r2.py pull-gdelt         # GDELT news data (analyst briefs)"
     )
-    print("\nStart the app:")
-    print(f"  DB_PATH={db_path} uv run uvicorn src.api.main:app --reload")
-    print("  open http://localhost:8000")
+    print("\nOpen the dashboard:")
+    print("  https://arktrace.edgesentry.io")
     return 0
 
 
@@ -1069,9 +1068,8 @@ def cmd_pull_demo(args: argparse.Namespace) -> int:
 
     print(f"Done. {size_mb:.2f} MB downloaded.")
     print(
-        "\nYou can now run the dashboard without a full pipeline:\n"
-        "  uv run uvicorn src.api.main:app --reload\n"
-        "  open http://localhost:8000"
+        "\nData synced. Open the dashboard:\n"
+        "  https://arktrace.edgesentry.io"
     )
     return 0
 

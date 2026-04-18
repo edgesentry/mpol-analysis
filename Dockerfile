@@ -1,13 +1,10 @@
 # syntax=docker/dockerfile:1
 #
-# Multi-stage build:
-#   builder  — installs Python deps (compiles Rust/lance-graph)
-#   runtime  — lean final image: Python app
+# Pipeline runner image — used by the `pipeline` docker-compose service to
+# run the data pipeline (run_pipeline.py) inside a container.
 #
-# LLM inference in Docker:
-#   Option A (recommended): set LLM_PROVIDER=anthropic + LLM_API_KEY
-#   Option B: mount a GGUF model volume and install llama-server on the host,
-#             or use native run_app.sh for Metal/CUDA GPU acceleration.
+# The dashboard is served by Cloudflare Pages (app/); this image is for
+# pipeline execution only.
 
 # ── builder: Python deps (Rust/maturin for lance-graph) ───────────────────────
 FROM python:3.12-slim AS builder
@@ -49,20 +46,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Python virtualenv from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Application source
+# Application source and scripts
 COPY pipeline/ ./pipeline/
-COPY docker/entrypoint.sh /entrypoint.sh
-
-RUN chmod +x /entrypoint.sh
+COPY scripts/ ./scripts/
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
 # Data dir inside the container — override with ARKTRACE_DATA_DIR
 ENV ARKTRACE_DATA_DIR=/root/.arktrace/data
-
-# Model volume mount point — mount a GGUF model here to enable analyst briefs
-VOLUME ["/models"]
-
-EXPOSE 8000
-
-ENTRYPOINT ["/entrypoint.sh"]

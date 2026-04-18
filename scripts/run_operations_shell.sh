@@ -66,7 +66,7 @@ run_cmd() {
 
 print_watchlist_summary() {
   local watchlist_path="$1"
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/print_watchlist_summary.py "$watchlist_path")
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_watchlist_summary.py "$watchlist_path")
 }
 
 run_full_screening() {
@@ -93,7 +93,7 @@ run_full_screening() {
     seed_dummy="true"
   fi
 
-  local cmd=(uv run python pipeline/scripts/run_pipeline.py --region "$region" --non-interactive)
+  local cmd=(uv run python scripts/run_pipeline.py --region "$region" --non-interactive)
   if [[ "$stream_duration" =~ ^[0-9]+$ ]] && (( stream_duration > 0 )); then
     cmd+=(--stream-duration "$stream_duration")
   fi
@@ -130,13 +130,13 @@ run_review_feedback() {
   local output_path
   output_path="$(prompt "Output report path" "data/processed/review_feedback_evaluation.json")"
 
-  if ! run_cmd uv run python pipeline/scripts/run_review_feedback_evaluation.py --db "$db_path" --output "$output_path"; then
+  if ! run_cmd uv run python scripts/run_review_feedback_evaluation.py --db "$db_path" --output "$output_path"; then
     echo "Result: FAILED"
     return
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/print_review_feedback_report.py --report "$abs_output")
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_review_feedback_report.py --report "$abs_output")
 }
 
 run_backtesting_public_batch() {
@@ -151,26 +151,26 @@ run_backtesting_public_batch() {
     strict_flag=(--strict-known-cases)
   fi
 
-  if ! run_cmd uv run python pipeline/scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]+"${strict_flag[@]}"}"; then
+  if ! run_cmd uv run python scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]+"${strict_flag[@]}"}"; then
     echo "Result: FAILED"
     return
   fi
 
   local summary_path="$PROJECT_ROOT/data/processed/backtest_public_integration_summary.json"
   local report_path="$PROJECT_ROOT/data/processed/backtest_report_public_integration.json"
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/print_backtest_report.py \
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtest_report.py \
       --summary "$summary_path" --report "$report_path")
 }
 
 seed_demo_causal_effects() {
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/seed_demo_causal_effects.py)
+  (cd "$PROJECT_ROOT" && uv run python scripts/seed_demo_causal_effects.py)
 }
 
 run_demo_smoke() {
   echo
   echo "[5] Demo/Smoke"
 
-  local cmd=(uv run python pipeline/scripts/use_demo_watchlist.py)
+  local cmd=(uv run python scripts/use_demo_watchlist.py)
   if prompt_yes_no "Backup existing candidate_watchlist.parquet" "true"; then
     cmd+=(--backup)
   fi
@@ -191,7 +191,7 @@ run_demo_smoke() {
 
   echo
   echo "── Seeding SAR demo signals (unmatched_sar_detections_30d in SHAP panel) ──────"
-  if ! run_cmd uv run python pipeline/scripts/seed_demo_sar.py; then
+  if ! run_cmd uv run python scripts/seed_demo_sar.py; then
     echo "Warning: SAR seeding failed — SAR SHAP screenshot (05_sar_shap.png) will not render"
   fi
 }
@@ -209,7 +209,7 @@ run_backtracking() {
   local md_output_path
   md_output_path="$(prompt "Markdown summary output path" "data/processed/backtracking_report.md")"
 
-  local cmd=(uv run python pipeline/scripts/run_backtracking.py
+  local cmd=(uv run python scripts/run_backtracking.py
     --db "$db_path"
     --output "$output_path"
     --md-output "$md_output_path"
@@ -224,7 +224,7 @@ run_backtracking() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/print_backtracking_report.py --report "$abs_output")
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtracking_report.py --report "$abs_output")
 }
 
 run_prepare_sanctions_db() {
@@ -244,7 +244,7 @@ run_prepare_sanctions_db() {
     force_reload_flag=(--force-reload)
   fi
 
-  if ! run_cmd uv run python pipeline/scripts/prepare_public_sanctions_db.py \
+  if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py \
       --db "$db_path" "${force_download_flag[@]+"${force_download_flag[@]}"}" "${force_reload_flag[@]+"${force_reload_flag[@]}"}"; then
     echo "Result: FAILED"
     return
@@ -265,7 +265,7 @@ run_build_sanctions_demo() {
   local max_rows
   max_rows="$(prompt "Max rows per entity type" "300")"
 
-  if ! run_cmd uv run python pipeline/scripts/build_public_sanctions_demo_sample.py \
+  if ! run_cmd uv run python scripts/build_public_sanctions_demo_sample.py \
       --source-db "$source_db" \
       --demo-db "$demo_db" \
       --max-rows "$max_rows"; then
@@ -325,7 +325,7 @@ run_prelabel_evaluation() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  (cd "$PROJECT_ROOT" && uv run python pipeline/scripts/print_prelabel_report.py --report "$abs_output")
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_prelabel_report.py --report "$abs_output")
 }
 
 run_causal_analysis() {
@@ -340,14 +340,14 @@ run_causal_analysis() {
   echo
   echo "── Drift Monitor ──────────────────────────────────────────────────────────────"
   if ! (cd "$PROJECT_ROOT" && uv run python src/analysis/monitor.py --db "$db_path" --json \
-      2>/dev/null | uv run python pipeline/scripts/print_monitor_summary.py); then
+      2>/dev/null | uv run python scripts/print_monitor_summary.py); then
     echo "Result: FAILED (drift monitor)"
     return
   fi
 
   echo
   echo "── Unknown-Unknown Causal Reasoner ────────────────────────────────────────────"
-  (cd "$PROJECT_ROOT" && run_cmd uv run python pipeline/scripts/run_causal_reasoner.py \
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/run_causal_reasoner.py \
       --db "$db_path" --top-n "$top_n")
 }
 
@@ -367,7 +367,7 @@ run_sar_feature_smoke() {
   local vessel_lon
   vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
 
-  (cd "$PROJECT_ROOT" && run_cmd uv run python pipeline/scripts/smoke_sar_feature.py \
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/smoke_sar_feature.py \
       --db "$db_path" --gap-hours "$gap_hours" --lat "$vessel_lat" --lon "$vessel_lon")
   local rc=$?
   if [[ $rc -ne 0 ]]; then
@@ -406,10 +406,10 @@ run_sar_feature_smoke() {
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
   echo "  1. Start the app:  docker compose up dashboard"
-  echo "  2. Open: http://localhost:8000"
+  echo "  2. Open: https://arktrace.edgesentry.io"
   echo "  3. Click vessel 123456789 on the map → detail panel → Signals tab"
   echo "     Look for: 'Unmatched Sar Detections 30D  3 detections'"
-  echo "  4. Open: http://localhost:8000/api/vessels/123456789/dispatch-brief"
+  echo "  4. Open: https://arktrace.edgesentry.io/123456789/dispatch-brief"
   echo "     Check 'signals' array for unmatched_sar_detections_30d"
 }
 
@@ -525,9 +525,9 @@ print(f'Exported {df.height} rows to $sample_path')
   print_watchlist_summary "$watchlist_path"
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
-  echo "  1. Start the app:  uv run uvicorn pipeline.src.api.main:app --reload"
-  echo "  2. Open: http://localhost:8000 — new vessels from your file appear on the map"
-  echo "  3. API:  curl http://localhost:8000/api/vessels"
+  echo "  1. Start the app:  open https://arktrace.edgesentry.io"
+  echo "  2. Open: https://arktrace.edgesentry.io — new vessels from your file appear on the map"
+  echo "  3. API:  curl https://arktrace.edgesentry.io"
 }
 
 run_precision_verification() {
@@ -762,9 +762,9 @@ run_ingest_custom_feeds() {
   print_watchlist_summary "$watchlist_path"
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
-  echo "  1. Start the app:  uv run uvicorn pipeline.src.api.main:app --reload"
-  echo "  2. Open: http://localhost:8000"
-  echo "  3. API:  curl http://localhost:8000/api/vessels"
+  echo "  1. Start the app:  open https://arktrace.edgesentry.io"
+  echo "  2. Open: https://arktrace.edgesentry.io"
+  echo "  3. API:  curl https://arktrace.edgesentry.io"
 }
 
 run_ingest_eo_csv() {
@@ -813,10 +813,10 @@ run_ingest_eo_csv() {
   print_watchlist_summary "$watchlist_path"
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
-  echo "  1. Start the app:  uv run uvicorn pipeline.src.api.main:app --reload"
-  echo "  2. Open: http://localhost:8000 → Review tab → click a vessel"
+  echo "  1. Start the app:  open https://arktrace.edgesentry.io"
+  echo "  2. Open: https://arktrace.edgesentry.io → Review tab → click a vessel"
   echo "     Look for: 'Eo Dark Count 30D'  and  'Eo Ais Mismatch Ratio'"
-  echo "  3. API:  curl http://localhost:8000/api/vessels/<mmsi>/signals"
+  echo "  3. API:  curl https://arktrace.edgesentry.io/<mmsi>/signals"
 }
 
 run_eo_feature_smoke() {
@@ -835,7 +835,7 @@ run_eo_feature_smoke() {
   local vessel_lon
   vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
 
-  (cd "$PROJECT_ROOT" && run_cmd uv run python pipeline/scripts/smoke_eo_feature.py \
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/smoke_eo_feature.py \
       --db "$db_path" --gap-hours "$gap_hours" --lat "$vessel_lat" --lon "$vessel_lon")
   local rc=$?
   if [[ $rc -ne 0 ]]; then
@@ -874,10 +874,10 @@ run_eo_feature_smoke() {
   echo
   echo "── To verify in the dashboard ────────────────────────────────────────────────"
   echo "  1. Start the app:  docker compose up dashboard"
-  echo "  2. Open: http://localhost:8000 → Review tab → vessel 123456789"
+  echo "  2. Open: https://arktrace.edgesentry.io → Review tab → vessel 123456789"
   echo "     Look for: 'Eo Dark Count 30D  2 dark detections'"
   echo "              'Eo Ais Mismatch Ratio  67% dark'"
-  echo "  3. API:  curl http://localhost:8000/api/vessels/123456789/signals"
+  echo "  3. API:  curl https://arktrace.edgesentry.io/123456789/signals"
 }
 
 run_seed_dev_data() {
@@ -887,7 +887,7 @@ run_seed_dev_data() {
   local db_path
   db_path="$(prompt "DuckDB path to also seed (leave blank to update watchlist parquet only)" "data/processed/mpol.duckdb")"
 
-  local cmd=(uv run python pipeline/scripts/seed_dev_watchlist.py)
+  local cmd=(uv run python scripts/seed_dev_watchlist.py)
   if [[ -n "$db_path" ]]; then
     cmd+=(--db "$db_path")
   fi
@@ -1414,7 +1414,7 @@ run_predemo_checklist() {
   echo
   echo "━━ Step 1/5 — Refresh public sanctions DB ────────────────────────────────────"
   echo
-  if ! run_cmd uv run python pipeline/scripts/prepare_public_sanctions_db.py --db "$eval_db"; then
+  if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py --db "$eval_db"; then
     echo "  ❌ FAILED — sanctions refresh failed. Aborting checklist."
     overall_ok=false
   else
@@ -1471,7 +1471,7 @@ PYEOF
   echo "━━ Step 3/5 — Full screening pipeline ───────────────────────────────────────"
   echo "  (rebuilds vessel_features and composite scores from current DB state)"
   echo
-  if ! run_cmd uv run python pipeline/scripts/run_pipeline.py \
+  if ! run_cmd uv run python scripts/run_pipeline.py \
       --region "$region" \
       --non-interactive; then
     echo "  ❌ FAILED — pipeline failed. Check output above."
@@ -1501,7 +1501,7 @@ PYEOF
   echo
   if [[ ! -f "$PROJECT_ROOT/$eval_db" ]]; then
     echo "  ⚠️  $eval_db not found — skipping P@50 check."
-    echo "     Re-run step 1 or pull from R2: uv run python pipeline/scripts/sync_r2.py pull-sanctions-db"
+    echo "     Re-run step 1 or pull from R2: uv run python scripts/sync_r2.py pull-sanctions-db"
   else
     local watchlist_path
     case "$region" in
@@ -1583,8 +1583,8 @@ PYEOF
   fi
   echo
   echo "  To view the dashboard:"
-  echo "    uv run uvicorn pipeline.src.api.main:app --reload"
-  echo "    open http://localhost:8000"
+  echo "    open https://arktrace.edgesentry.io"
+  echo "    open https://arktrace.edgesentry.io"
   echo
   echo "  Capture screenshot of:"
   echo "    • Ranked watchlist table (top-50 vessels with confidence scores)"

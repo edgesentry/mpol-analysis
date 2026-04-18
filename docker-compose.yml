@@ -1,30 +1,4 @@
 services:
-  dashboard:
-    build: .
-    image: ghcr.io/edgesentry/arktrace:latest
-    container_name: arktrace-dashboard
-    ports:
-      - "${PORT:-8000}:8000"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      ARKTRACE_REGION: ${ARKTRACE_REGION:-singapore}
-      AUTO_PULL: ${AUTO_PULL:-1}
-      # LLM — uncomment one block to enable analyst briefs:
-      #
-      # Option A: local model (mount a GGUF file into /models)
-      # LLM_MODEL: Qwen2.5-7B-Instruct-Q4_K_M.gguf
-      #
-      # Option B: Anthropic API
-      # LLM_PROVIDER: anthropic
-      # LLM_API_KEY: sk-ant-...
-      # LLM_MODEL: claude-haiku-4-5-20251001
-    volumes:
-      - arktrace-data:/root/.arktrace/data
-      # Uncomment and set MODEL_DIR to enable local GGUF model inference:
-      # - ${MODEL_DIR:?set MODEL_DIR to your models directory}:/models:ro
-
   pipeline:
     build: .
     image: ghcr.io/edgesentry/arktrace:latest
@@ -39,7 +13,7 @@ services:
       - pipeline
     entrypoint: []
     command: >
-      python pipeline/scripts/run_pipeline.py
+      python scripts/run_pipeline.py
       --region ${PIPELINE_REGION:-singapore}
       --non-interactive
       --seed-dummy

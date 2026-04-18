@@ -48,6 +48,5 @@ unzip -o -q "${TMP}" -d "${DATA_DIR}"
 
 echo "Done. Demo data ready in ${DATA_DIR}."
 echo ""
-echo "Start the dashboard:"
-echo "  uv run uvicorn pipeline.src.api.main:app --reload"
-echo "  open http://localhost:8000"
+echo "Open the dashboard:"
+echo "  https://arktrace.edgesentry.io"
