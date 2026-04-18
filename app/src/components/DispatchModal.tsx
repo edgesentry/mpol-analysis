@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { VesselRow } from "../lib/duckdb";
 
 interface ShapSignal {
@@ -34,12 +35,42 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
   const maxContrib = signals.length ? Math.max(...signals.map((s) => s.contribution)) : 1;
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
-  // Focus close button on open; close on Escape
+  // Focus close button on open; close on Escape; inject print stylesheet
   useEffect(() => {
     closeRef.current?.focus();
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    const style = document.createElement("style");
+    style.id = "__dispatch-print-style";
+    style.textContent = `
+      @media print {
+        body > *:not(#dispatch-print-root) { display: none !important; }
+        #dispatch-print-root {
+          position: static !important;
+          transform: none !important;
+          width: 100% !important;
+          max-height: none !important;
+          background: white !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 2rem !important;
+          font-family: system-ui, sans-serif !important;
+          color: black !important;
+        }
+        #dispatch-print-root * {
+          color: black !important;
+          background: transparent !important;
+          border-color: #ccc !important;
+        }
+        #dispatch-print-footer { display: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      document.getElementById("__dispatch-print-style")?.remove();
+    };
   }, [onClose]);
 
   // ── Export JSON ────────────────────────────────────────────────────────────
@@ -101,7 +132,7 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
     navigator.clipboard.writeText(md).catch(() => {/* ignore */});
   }
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -116,6 +147,7 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
 
       {/* Modal */}
       <div
+        id="dispatch-print-root"
         role="dialog"
         aria-modal="true"
         aria-label="Dispatch brief"
@@ -275,8 +307,9 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
           )}
         </div>
 
-        {/* Footer actions */}
+        {/* Footer actions — hidden in print */}
         <div
+          id="dispatch-print-footer"
           style={{
             display: "flex",
             gap: "0.5rem",
@@ -316,7 +349,12 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
             Copy brief
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={() => {
+              const prev = document.title;
+              document.title = `Patrol Dispatch — ${vessel.vessel_name || vessel.mmsi} (${vessel.mmsi})`;
+              window.print();
+              document.title = prev;
+            }}
             style={{
               background: "none",
               border: "1px solid #2d3748",
@@ -347,6 +385,7 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
