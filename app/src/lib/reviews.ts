@@ -30,6 +30,8 @@ export type HandoffState =
   | "handoff_completed"
   | "closed";
 
+export type OutcomeValue = "Confirmed" | "Cleared" | "Inconclusive";
+
 export interface EvidenceRef {
   id: string;
   mmsi: string;
@@ -46,6 +48,9 @@ export interface VesselReview {
   reviewer_id: string;
   rationale: string;
   identifier_basis: string;
+  outcome: OutcomeValue | null;
+  outcome_notes: string | null;
+  officer_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +84,15 @@ export async function initReviewSchema(
       created_at       TIMESTAMP DEFAULT now()
     )
   `);
+
+  // Migrate: add outcome columns to existing tables (no-op if already present)
+  for (const col of [
+    "ALTER TABLE vessel_reviews ADD COLUMN IF NOT EXISTS outcome TEXT",
+    "ALTER TABLE vessel_reviews ADD COLUMN IF NOT EXISTS outcome_notes TEXT",
+    "ALTER TABLE vessel_reviews ADD COLUMN IF NOT EXISTS officer_id TEXT",
+  ]) {
+    try { await conn.query(col); } catch { /* column already exists */ }
+  }
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS vessel_reviews_audit (
@@ -219,6 +233,53 @@ export async function saveReview(
         '${esc(ev.url)}',
         '${esc(ev.publication_date)}',
         '${esc(ev.credibility)}'
+      )
+    `);
+  }
+}
+
+export interface SaveOutcomeInput {
+  mmsi: string;
+  outcome: OutcomeValue;
+  outcome_notes: string;
+  officer_id: string;
+}
+
+/** Log patrol outcome for a handoff_completed vessel and transition to closed. */
+export async function saveOutcome(
+  conn: AsyncDuckDBConnection,
+  input: SaveOutcomeInput
+): Promise<void> {
+  const existing = await getReview(conn, input.mmsi);
+  const fromState = existing?.handoff_state ?? null;
+
+  await conn.query(`
+    INSERT INTO vessel_reviews_audit (mmsi, reviewer_id, from_state, to_state, rationale)
+    VALUES (
+      '${esc(input.mmsi)}',
+      '${esc(input.officer_id)}',
+      ${fromState ? `'${esc(fromState)}'` : "NULL"},
+      'closed',
+      '${esc(`Outcome: ${input.outcome}. ${input.outcome_notes}`)}'
+    )
+  `);
+
+  if (existing) {
+    await conn.query(`
+      UPDATE vessel_reviews SET
+        outcome        = '${esc(input.outcome)}',
+        outcome_notes  = '${esc(input.outcome_notes)}',
+        officer_id     = '${esc(input.officer_id)}',
+        handoff_state  = 'closed',
+        updated_at     = now()
+      WHERE mmsi = '${esc(input.mmsi)}'
+    `);
+  } else {
+    await conn.query(`
+      INSERT INTO vessel_reviews (mmsi, handoff_state, reviewer_id, rationale, identifier_basis, outcome, outcome_notes, officer_id)
+      VALUES (
+        '${esc(input.mmsi)}', 'closed', '${esc(input.officer_id)}', '', 'MMSI',
+        '${esc(input.outcome)}', '${esc(input.outcome_notes)}', '${esc(input.officer_id)}'
       )
     `);
   }

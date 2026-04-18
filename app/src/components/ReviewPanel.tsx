@@ -5,6 +5,7 @@ import {
   getReview,
   getEvidence,
   saveReview,
+  saveOutcome,
   tierColor,
   handoffLabel,
   validateTransition,
@@ -12,6 +13,7 @@ import {
   HANDOFF_STATES,
   type DecisionTier,
   type HandoffState,
+  type OutcomeValue,
   type EvidenceRef,
 } from "../lib/reviews";
 
@@ -71,6 +73,14 @@ export default function ReviewPanel({ vessel, conn, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Outcome form state (visible only when handoff_state === 'handoff_completed')
+  const [outcome, setOutcome] = useState<OutcomeValue>("Confirmed");
+  const [outcomeNotes, setOutcomeNotes] = useState("");
+  const [officerId, setOfficerId] = useState(getReviewerId());
+  const [outcomeError, setOutcomeError] = useState<string | null>(null);
+  const [outcomeSuccess, setOutcomeSuccess] = useState(false);
+  const [savingOutcome, setSavingOutcome] = useState(false);
+
   // Form state
   const [tier, setTier] = useState<DecisionTier | "">("");
   const [handoffState, setHandoffState] = useState<HandoffState>("queued_review");
@@ -118,7 +128,35 @@ export default function ReviewPanel({ vessel, conn, onSaved }: Props) {
     load();
     setError(null);
     setSuccess(false);
+    setOutcomeError(null);
+    setOutcomeSuccess(false);
+    setOutcomeNotes("");
   }, [load]);
+
+  const handleLogOutcome = async () => {
+    setOutcomeError(null);
+    if (!outcomeNotes.trim()) {
+      setOutcomeError("Outcome notes are required before logging.");
+      return;
+    }
+    setSavingOutcome(true);
+    try {
+      await saveOutcome(conn, {
+        mmsi: vessel.mmsi,
+        outcome,
+        outcome_notes: outcomeNotes,
+        officer_id: officerId,
+      });
+      setHandoffState("closed");
+      setOutcomeSuccess(true);
+      setTimeout(() => setOutcomeSuccess(false), 2500);
+      onSaved?.();
+    } catch (err) {
+      setOutcomeError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSavingOutcome(false);
+    }
+  };
 
   const addEvidence = () =>
     setEvidence((ev) => [
@@ -425,6 +463,116 @@ export default function ReviewPanel({ vessel, conn, onSaved }: Props) {
       >
         {saving ? "Saving…" : "Save review"}
       </button>
+
+      {/* ── Patrol outcome (handoff_completed only) ─────────────────────── */}
+      {handoffState === "handoff_completed" && (
+        <div style={{ marginTop: "0.85rem", borderTop: "1px solid #2d3748", paddingTop: "0.75rem" }}>
+          <div style={{
+            fontSize: "0.65rem",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "#f6ad55",
+            marginBottom: "0.6rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f6ad55", display: "inline-block" }} />
+            Patrol outcome
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", marginBottom: "0.6rem" }}>
+            <div>
+              {label("Outcome")}
+              <select
+                value={outcome}
+                onChange={(e) => setOutcome(e.target.value as OutcomeValue)}
+                style={{
+                  ...selectStyle,
+                  color: outcome === "Confirmed" ? "#fc8181" : outcome === "Cleared" ? "#68d391" : "#718096",
+                  borderColor: outcome === "Confirmed" ? "#fc8181" : outcome === "Cleared" ? "#68d391" : "#2d3748",
+                }}
+              >
+                <option value="Confirmed">Confirmed</option>
+                <option value="Cleared">Cleared</option>
+                <option value="Inconclusive">Inconclusive</option>
+              </select>
+            </div>
+            <div>
+              {label("Officer ID")}
+              <input
+                value={officerId}
+                onChange={(e) => setOfficerId(e.target.value)}
+                style={inputStyle}
+                placeholder="officer-id"
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "0.6rem" }}>
+            {label("Outcome notes (required)")}
+            <textarea
+              value={outcomeNotes}
+              onChange={(e) => setOutcomeNotes(e.target.value)}
+              rows={3}
+              placeholder="Describe the patrol findings and result…"
+              style={{
+                ...inputStyle,
+                resize: "vertical",
+                minHeight: "3.5rem",
+                fontFamily: "inherit",
+                lineHeight: 1.5,
+                borderColor: !outcomeNotes.trim() && outcomeError ? "#fc8181" : "#2d3748",
+              }}
+            />
+          </div>
+
+          {outcomeError && (
+            <div style={{
+              fontSize: "0.72rem",
+              color: "#f6ad55",
+              background: "#1a1209",
+              border: "1px solid #744210",
+              borderRadius: 4,
+              padding: "0.3rem 0.5rem",
+              marginBottom: "0.5rem",
+            }}>
+              {outcomeError}
+            </div>
+          )}
+          {outcomeSuccess && (
+            <div style={{
+              fontSize: "0.72rem",
+              color: "#68d391",
+              background: "#0a1f0f",
+              border: "1px solid #276749",
+              borderRadius: 4,
+              padding: "0.3rem 0.5rem",
+              marginBottom: "0.5rem",
+            }}>
+              Outcome logged — vessel closed.
+            </div>
+          )}
+
+          <button
+            onClick={handleLogOutcome}
+            disabled={savingOutcome}
+            style={{
+              width: "100%",
+              background: savingOutcome ? "#2d3748" : "#1a2a0a",
+              border: "1px solid #4a6a1a",
+              borderRadius: 4,
+              color: savingOutcome ? "#718096" : "#a0d060",
+              cursor: savingOutcome ? "not-allowed" : "pointer",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              padding: "0.4rem",
+            }}
+          >
+            {savingOutcome ? "Logging…" : "Log outcome → close case"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
