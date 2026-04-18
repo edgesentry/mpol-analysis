@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { VesselRow } from "../lib/duckdb";
 import { tierColor, HANDOFF_STATES, handoffLabel } from "../lib/reviews";
 import type { DecisionTier, HandoffState } from "../lib/reviews";
@@ -14,13 +15,14 @@ interface Props {
   exportRegion?: string;
 }
 
+const ROW_HEIGHT = 30; // px — keep in sync with row padding
+
 function confidenceColor(c: number): string {
   if (c >= 0.75) return "#fc8181";
   if (c >= 0.5) return "#f6ad55";
   return "#68d391";
 }
 
-/** Compact pill shown in the vessel name cell. */
 function TierBadge({
   tier,
   handoffState,
@@ -56,12 +58,7 @@ function TierBadge({
         {label}
       </span>
       {showHandoff && (
-        <span
-          title={handoffState.replace(/_/g, " ")}
-          style={{ fontSize: "0.6rem", color: "#93c5fd" }}
-        >
-          →
-        </span>
+        <span title={handoffState.replace(/_/g, " ")} style={{ fontSize: "0.6rem", color: "#93c5fd" }}>→</span>
       )}
     </span>
   );
@@ -79,10 +76,9 @@ export default function WatchlistTable({
 }: Props) {
   const [search, setSearch] = useState("");
   const [hovered, setHovered] = useState<string | null>(null);
-  const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = vessels.filter((v) => {
-    // Text search — vessel_name, mmsi, imo, flag
     if (search) {
       const q = search.toLowerCase();
       const match =
@@ -92,13 +88,18 @@ export default function WatchlistTable({
         v.flag?.toLowerCase().includes(q);
       if (!match) return false;
     }
-    // Handoff-state filter
     if (handoffFilter !== "all") {
-      const rs = reviewStates?.get(v.mmsi);
-      const state = rs?.handoff_state ?? "queued_review";
+      const state = reviewStates?.get(v.mmsi)?.handoff_state ?? "queued_review";
       if (state !== handoffFilter) return false;
     }
     return true;
+  });
+
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
   });
 
   // Auto-select when search narrows to exactly one result
@@ -111,18 +112,35 @@ export default function WatchlistTable({
 
   // Scroll selected row into view
   useEffect(() => {
-    selectedRowRef.current?.scrollIntoView({ block: "nearest" });
+    if (!selectedMmsi) return;
+    const idx = filtered.findIndex((v) => v.mmsi === selectedMmsi);
+    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: "auto" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMmsi]);
 
+  // Keyboard navigation: ↑ / ↓ move selection within filtered list
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const idx = filtered.findIndex((v) => v.mmsi === selectedMmsi);
+    const next =
+      e.key === "ArrowDown"
+        ? Math.min(idx + 1, filtered.length - 1)
+        : Math.max(idx - 1, 0);
+    if (filtered[next]) {
+      onSelect(filtered[next].mmsi);
+      virtualizer.scrollToIndex(next, { align: "auto" });
+    }
+  }
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Search + handoff filter */}
       <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid #2d3748", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
         <input
@@ -158,31 +176,21 @@ export default function WatchlistTable({
         >
           <option value="all">All handoff states</option>
           {HANDOFF_STATES.map((s) => (
-            <option key={s} value={s}>
-              {handoffLabel(s)}
-            </option>
+            <option key={s} value={s}>{handoffLabel(s)}</option>
           ))}
         </select>
       </div>
 
-      {/* Table */}
-      <div style={{ overflowY: "auto", flex: 1 }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: "0.72rem",
-          }}
-        >
+      {/* Virtual table */}
+      <div
+        ref={scrollRef}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        style={{ overflowY: "auto", flex: 1, outline: "none" }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
           <thead>
-            <tr
-              style={{
-                background: "#1a1f2e",
-                position: "sticky",
-                top: 0,
-                zIndex: 1,
-              }}
-            >
+            <tr style={{ background: "#1a1f2e", position: "sticky", top: 0, zIndex: 1 }}>
               {["Vessel", "Flag", "Type", "Conf", "Region"].map((h) => (
                 <th
                   key={h}
@@ -204,15 +212,22 @@ export default function WatchlistTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((v) => {
+            {/* Spacer — rows above viewport */}
+            {paddingTop > 0 && (
+              <tr><td colSpan={5} style={{ height: paddingTop, padding: 0, border: "none" }} /></tr>
+            )}
+
+            {virtualItems.map((vRow) => {
+              const v = filtered[vRow.index];
               const rs = reviewStates?.get(v.mmsi);
               const isSelected = selectedMmsi === v.mmsi;
               return (
                 <tr
                   key={v.mmsi}
-                  ref={isSelected ? selectedRowRef : null}
+                  data-index={vRow.index}
                   onClick={() => onSelect(v.mmsi)}
                   style={{
+                    height: ROW_HEIGHT,
                     cursor: "pointer",
                     background: isSelected ? "#1e3a5a" : "transparent",
                     borderBottom: "1px solid #1a1f2e",
@@ -221,24 +236,16 @@ export default function WatchlistTable({
                       : "3px solid transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected)
-                      (e.currentTarget as HTMLElement).style.background = "#1e2a3a";
+                    if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#1e2a3a";
                     setHovered(v.mmsi);
                   }}
                   onMouseLeave={(e) => {
-                    if (!isSelected)
-                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                    if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent";
                     setHovered(null);
                   }}
                 >
                   <td
-                    style={{
-                      padding: "0.35rem 0.5rem",
-                      maxWidth: 140,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+                    style={{ padding: "0.35rem 0.5rem", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     title={v.vessel_name}
                   >
                     <span style={{ display: "inline-flex", alignItems: "center", maxWidth: "100%" }}>
@@ -253,29 +260,14 @@ export default function WatchlistTable({
                       </span>
                     </span>
                   </td>
-                  <td style={{ padding: "0.35rem 0.5rem", color: "#a0aec0" }}>
-                    {v.flag || "—"}
-                  </td>
+                  <td style={{ padding: "0.35rem 0.5rem", color: "#a0aec0" }}>{v.flag || "—"}</td>
                   <td
-                    style={{
-                      padding: "0.35rem 0.5rem",
-                      color: "#a0aec0",
-                      maxWidth: 80,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+                    style={{ padding: "0.35rem 0.5rem", color: "#a0aec0", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     title={v.vessel_type}
                   >
                     {v.vessel_type || "—"}
                   </td>
-                  <td
-                    style={{
-                      padding: "0.35rem 0.5rem",
-                      fontWeight: 700,
-                      color: confidenceColor(v.confidence),
-                    }}
-                  >
+                  <td style={{ padding: "0.35rem 0.5rem", fontWeight: 700, color: confidenceColor(v.confidence) }}>
                     {v.confidence.toFixed(3)}
                   </td>
                   <td style={{ padding: "0.35rem 0.5rem", color: "#718096", whiteSpace: "nowrap" }}>
@@ -284,10 +276,7 @@ export default function WatchlistTable({
                         const isClaimed = rs?.handoff_state === "in_review";
                         return (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!isClaimed) onClaim(v.mmsi);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); if (!isClaimed) onClaim(v.mmsi); }}
                             disabled={isClaimed}
                             style={{
                               background: isClaimed ? "none" : "#1a3a5c",
@@ -312,19 +301,16 @@ export default function WatchlistTable({
                 </tr>
               );
             })}
+
+            {/* Spacer — rows below viewport */}
+            {paddingBottom > 0 && (
+              <tr><td colSpan={5} style={{ height: paddingBottom, padding: 0, border: "none" }} /></tr>
+            )}
+
             {filtered.length === 0 && (
               <tr>
-                <td
-                  colSpan={5}
-                  style={{
-                    padding: "2rem",
-                    textAlign: "center",
-                    color: "#4a5568",
-                  }}
-                >
-                  {vessels.length === 0
-                    ? "No data — sync from R2 first."
-                    : "No results."}
+                <td colSpan={5} style={{ padding: "2rem", textAlign: "center", color: "#4a5568" }}>
+                  {vessels.length === 0 ? "No data — sync from R2 first." : "No results."}
                 </td>
               </tr>
             )}
@@ -332,18 +318,17 @@ export default function WatchlistTable({
         </table>
       </div>
 
-      <div
-        style={{
-          padding: "0.35rem 0.75rem",
-          fontSize: "0.65rem",
-          color: "#4a5568",
-          borderTop: "1px solid #2d3748",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}
-      >
+      {/* Footer */}
+      <div style={{
+        padding: "0.35rem 0.75rem",
+        fontSize: "0.65rem",
+        color: "#4a5568",
+        borderTop: "1px solid #2d3748",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+      }}>
         <span>
           {filtered.length} / {vessels.length} vessels
           {handoffFilter !== "all" && (
@@ -369,12 +354,11 @@ export default function WatchlistTable({
                 top_signals: v.top_signals ? JSON.parse(v.top_signals) : [],
               }));
               const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-              const filename = `watchlist_${exportRegion}_${ts}.json`;
               const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
               a.href = url;
-              a.download = filename;
+              a.download = `watchlist_${exportRegion}_${ts}.json`;
               a.click();
               URL.revokeObjectURL(url);
             }}
