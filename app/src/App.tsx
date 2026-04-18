@@ -12,7 +12,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { initDuckDB, queryWatchlist, queryMetrics, queryRegions } from "./lib/duckdb";
-import { initReviewSchema } from "./lib/reviews";
+import { initReviewSchema, getBulkReviewStates } from "./lib/reviews";
+import type { DecisionTier, HandoffState } from "./lib/reviews";
 import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
@@ -35,6 +36,7 @@ export default function App() {
   const [selectedRegion, setSelectedRegion] = useState<string>("all");
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [minConfidence, setMinConfidence] = useState(0.4);
+  const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -78,6 +80,8 @@ export default function App() {
     setVessels(vs);
     setMetrics(m);
     setRegions(rs);
+    const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
+    setReviewStates(states);
   }, [minConfidence, selectedRegion]);
 
   // Re-query when filter changes (if data is already loaded)
@@ -178,6 +182,7 @@ export default function App() {
             vessels={vessels}
             selectedMmsi={selectedMmsi}
             onSelect={setSelectedMmsi}
+            reviewStates={reviewStates}
           />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);
@@ -186,7 +191,14 @@ export default function App() {
                 vessel={v}
                 conn={connRef.current}
                 onClose={() => setSelectedMmsi(null)}
-                onReviewSaved={() => refreshQuery()}
+                onReviewSaved={async () => {
+                  await refreshQuery();
+                  const conn = connRef.current;
+                  if (conn) {
+                    const states = await getBulkReviewStates(conn, vessels.map((v) => v.mmsi));
+                    setReviewStates(states);
+                  }
+                }}
               />
             ) : null;
           })()}
