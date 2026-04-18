@@ -216,6 +216,7 @@ export default function App() {
             handoffFilter={handoffFilter}
             onHandoffFilterChange={setHandoffFilter}
             onClaim={handleClaim}
+            exportRegion={selectedRegion}
           />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);

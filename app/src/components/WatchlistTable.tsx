@@ -11,6 +11,7 @@ interface Props {
   handoffFilter?: HandoffState | "all";
   onHandoffFilterChange?: (v: HandoffState | "all") => void;
   onClaim?: (mmsi: string) => void;
+  exportRegion?: string;
 }
 
 function confidenceColor(c: number): string {
@@ -74,6 +75,7 @@ export default function WatchlistTable({
   handoffFilter = "all",
   onHandoffFilterChange,
   onClaim,
+  exportRegion = "all",
 }: Props) {
   const [search, setSearch] = useState("");
   const [hovered, setHovered] = useState<string | null>(null);
@@ -337,13 +339,60 @@ export default function WatchlistTable({
           color: "#4a5568",
           borderTop: "1px solid #2d3748",
           flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
         }}
       >
-        {filtered.length} / {vessels.length} vessels
-        {handoffFilter !== "all" && (
-          <span style={{ color: "#93c5fd", marginLeft: "0.4rem" }}>
-            · {handoffLabel(handoffFilter as HandoffState)}
-          </span>
+        <span>
+          {filtered.length} / {vessels.length} vessels
+          {handoffFilter !== "all" && (
+            <span style={{ color: "#93c5fd", marginLeft: "0.4rem" }}>
+              · {handoffLabel(handoffFilter as HandoffState)}
+            </span>
+          )}
+        </span>
+        {filtered.length > 0 && (
+          <button
+            onClick={() => {
+              const payload = filtered.map((v) => ({
+                mmsi: v.mmsi,
+                imo: v.imo ?? null,
+                vessel_name: v.vessel_name || null,
+                flag: v.flag || null,
+                vessel_type: v.vessel_type || null,
+                confidence: v.confidence,
+                region: v.region || null,
+                last_lat: v.last_lat ?? null,
+                last_lon: v.last_lon ?? null,
+                last_seen: v.last_seen ?? null,
+                top_signals: v.top_signals ? JSON.parse(v.top_signals) : [],
+              }));
+              const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+              const filename = `watchlist_${exportRegion}_${ts}.json`;
+              const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "1px solid #2d3748",
+              borderRadius: 3,
+              color: "#718096",
+              cursor: "pointer",
+              fontSize: "0.6rem",
+              fontWeight: 600,
+              padding: "0.1rem 0.4rem",
+              fontFamily: "ui-monospace,monospace",
+            }}
+          >
+            export
+          </button>
         )}
       </div>
     </div>
