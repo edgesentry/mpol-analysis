@@ -27,6 +27,7 @@ import VesselDetail from "./components/VesselDetail";
 import VesselMap from "./components/VesselMap";
 import SyncStatusBar from "./components/SyncStatus";
 import AlertDrawer from "./components/AlertDrawer";
+import RegionPicker, { getStoredRegions, formatRegionLabel, DEFAULT_REGIONS } from "./components/RegionPicker";
 
 export default function App() {
   const dbRef = useRef<AsyncDuckDB | null>(null);
@@ -36,8 +37,15 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ phase: "idle" });
   const [vessels, setVessels] = useState<VesselRow[]>([]);
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
-  const [regions, setRegions] = useState<string[]>([]);
-  const [selectedRegion, setSelectedRegion] = useState<string>("all");
+  const [, setRegions] = useState<string[]>([]);
+  // Persist region list in localStorage; default to Singapore on first visit.
+  const [selectedRegions, setSelectedRegions] = useState<string[]>(
+    () => getStoredRegions() ?? DEFAULT_REGIONS
+  );
+  // Show region picker overlay on first visit (no stored preference yet).
+  const [showRegionPicker, setShowRegionPicker] = useState<boolean>(
+    () => getStoredRegions() === null
+  );
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [minConfidence, setMinConfidence] = useState(0.4);
   const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
@@ -58,7 +66,10 @@ export default function App() {
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
-        await doSync(db);
+        // Skip auto-sync if the region picker is waiting for user input.
+        if (!showRegionPicker) {
+          await doSync(db);
+        }
       } catch (err) {
         if (!cancelled) setInitError(String(err));
       }
@@ -67,23 +78,27 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doSync = useCallback(async (db?: AsyncDuckDB) => {
+  const doSync = useCallback(async (db?: AsyncDuckDB, regions?: string[]) => {
     const target = db ?? dbRef.current;
     if (!target) return;
+    const activeRegions = regions ?? selectedRegions;
+    // Pass region list so syncAndLoad can filter region-tagged manifest files.
+    // Currently manifest files have no region tags (combined dataset), so this
+    // is a no-op until the pipeline adds them.
+    const regionFilter = activeRegions.length > 0 ? activeRegions : undefined;
     setSyncStatus({ phase: "fetching_manifest" });
-    const loaded = await syncAndLoad(target, setSyncStatus);
+    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter);
     if (loaded > 0 && connRef.current) {
       await refreshQuery();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedRegions]);
 
   const refreshQuery = useCallback(async () => {
     const conn = connRef.current;
     if (!conn) return;
-    const region = selectedRegion === "all" ? undefined : selectedRegion;
     const [vs, m, rs, sh] = await Promise.all([
-      queryWatchlist(conn, { minConfidence, region }),
+      queryWatchlist(conn, { minConfidence, regions: selectedRegions.length > 0 ? selectedRegions : undefined }),
       queryMetrics(conn),
       queryRegions(conn),
       queryScoreHistoryBulk(conn),
@@ -97,7 +112,7 @@ export default function App() {
     setRegions(rs);
     const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
     setReviewStates(states);
-  }, [minConfidence, selectedRegion]);
+  }, [minConfidence, selectedRegions]);
 
   const handleClaim = useCallback(async (mmsi: string) => {
     const conn = connRef.current;
@@ -134,7 +149,7 @@ export default function App() {
       refreshQuery();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minConfidence, selectedRegion]);
+  }, [minConfidence, selectedRegions]);
 
   if (initError) {
     return (
@@ -163,24 +178,26 @@ export default function App() {
           MPOL Watchlist
         </h1>
 
-        {/* Region selector */}
-        <select
-          value={selectedRegion}
-          onChange={(e) => setSelectedRegion(e.target.value)}
+        {/* Region selector — shows active regions; click to edit */}
+        <button
+          onClick={() => setShowRegionPicker(true)}
+          title="Change regions"
           style={{
             background: "#0f1117",
             border: "1px solid #2d3748",
             color: "#e2e8f0",
-            padding: "0.25rem 0.5rem",
+            padding: "0.25rem 0.6rem",
             borderRadius: 4,
             fontSize: "0.78rem",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.35rem",
           }}
         >
-          <option value="all">All regions</option>
-          {regions.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
+          {formatRegionLabel(selectedRegions)}
+          <span style={{ color: "#4a5568", fontSize: "0.65rem" }}>▾</span>
+        </button>
 
         {/* Confidence filter */}
         <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#a0aec0" }}>
@@ -235,7 +252,7 @@ export default function App() {
             handoffFilter={handoffFilter}
             onHandoffFilterChange={setHandoffFilter}
             onClaim={handleClaim}
-            exportRegion={selectedRegion}
+            exportRegion={selectedRegions.join("_") || "all"}
             scoreHistory={scoreHistory}
           />
           {selectedMmsi && (() => {
@@ -273,6 +290,24 @@ export default function App() {
           onClose={() => setAlertDrawerOpen(false)}
           onSelectVessel={(mmsi) => setSelectedMmsi(mmsi)}
           onAlertsChange={setAlerts}
+        />
+      )}
+
+      {/* Region picker — shown on first visit or when user clicks the header button */}
+      {showRegionPicker && (
+        <RegionPicker
+          initial={selectedRegions}
+          onConfirm={(regions) => {
+            setSelectedRegions(regions);
+            setShowRegionPicker(false);
+            // Re-sync only if this is the first load (no data yet)
+            if (syncStatus.phase === "idle") {
+              doSync(undefined, regions);
+            } else {
+              refreshQuery();
+            }
+          }}
+          onCancel={syncStatus.phase !== "idle" ? () => setShowRegionPicker(false) : undefined}
         />
       )}
     </div>
