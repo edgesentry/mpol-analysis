@@ -159,6 +159,31 @@ jobs:
               df.write_parquet(dst_c)
               print("  causal_effects.parquet ← empty schema (no full pipeline in CI)")
 
+          # score_history.parquet — 30-day rolling confidence history per vessel
+          dst_sh = demo_dir / "score_history.parquet"
+          if not dst_sh.exists():
+              import random
+              from datetime import date, timedelta
+              watchlist_path = demo_dir / "candidate_watchlist.parquet"
+              if watchlist_path.exists():
+                  wl = pl.read_parquet(watchlist_path, columns=["mmsi", "confidence"])
+                  rng = random.Random(42)
+                  anchor = date.today()
+                  days = 30
+                  rows = []
+                  for mmsi, base_conf in zip(wl["mmsi"].to_list(), wl["confidence"].to_list()):
+                      conf = float(base_conf)
+                      for d in range(days):
+                          score_date = (anchor - timedelta(days=days - 1 - d)).isoformat()
+                          conf = max(0.1, min(0.99, conf + rng.uniform(-0.04, 0.04)))
+                          rows.append({"mmsi": mmsi, "score_date": score_date, "confidence": round(conf, 4)})
+                  sh = pl.DataFrame(rows).with_columns(pl.col("confidence").cast(pl.Float32))
+                  sh.write_parquet(dst_sh)
+                  print(f"  score_history.parquet ← generated ({len(sh)} rows)")
+              else:
+                  pl.DataFrame(schema={"mmsi": pl.Utf8, "score_date": pl.Utf8, "confidence": pl.Float32}).write_parquet(dst_sh)
+                  print("  score_history.parquet ← empty schema (no watchlist)")
+
           # validation_metrics.json — derive from backtest report if missing
           dst_m = demo_dir / "validation_metrics.json"
           if not dst_m.exists():

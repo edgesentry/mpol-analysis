@@ -1321,7 +1321,8 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
         print(
             f"Uploading private ducklake_manifest.json ({len(private_manifest_bytes)} B) → {manifest_r2} ..."
         )
-        fs.pipe(manifest_r2, private_manifest_bytes)
+        with fs.open_output_stream(manifest_r2) as dst:
+            dst.write(private_manifest_bytes)
         print("  ✓")
     else:
         print("[warn] ducklake_manifest.json not found — private browser OPFS sync will not work.")
