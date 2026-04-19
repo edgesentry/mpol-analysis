@@ -75,18 +75,48 @@ def fetch_gfw_detections(
     end_dt = datetime.now(UTC)
     start_dt = end_dt - timedelta(days=days)
 
+    # The 4Wings /report endpoint requires POST with a GeoJSON body for the
+    # region; passing region as a query param returns 422.
+    # spatial-resolution and temporal-resolution are required query params.
     params = {
         # public-global-presence:latest covers all vessel types (fishing + cargo +
         # tankers) and is accessible with a standard free GFW API token.
         # public-global-fishing-vessels:latest requires a research-tier account.
         "datasets[0]": "public-global-presence:latest",
         "date-range": f"{start_dt.strftime('%Y-%m-%d')},{end_dt.strftime('%Y-%m-%d')}",
-        "region": f"{lon_min},{lat_min},{lon_max},{lat_max}",
+        "spatial-resolution": "low",
+        "temporal-resolution": "monthly",
+        "group-by": "vesselId",
         "format": "json",
     }
-    headers = {"Authorization": f"Bearer {api_token}"}
+    # Bounding box as a GeoJSON polygon (closed ring: 5 points)
+    body = {
+        "region": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [lon_min, lat_min],
+                    [lon_max, lat_min],
+                    [lon_max, lat_max],
+                    [lon_min, lat_max],
+                    [lon_min, lat_min],
+                ]],
+            },
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+    }
 
-    resp = httpx.get(f"{GFW_API_BASE}/4wings/report", params=params, headers=headers, timeout=60)
+    resp = httpx.post(
+        f"{GFW_API_BASE}/4wings/report",
+        params=params,
+        json=body,
+        headers=headers,
+        timeout=60,
+    )
     if resp.status_code in (401, 403):
         raise PermissionError(
             f"GFW API returned {resp.status_code}: token lacks access to "
