@@ -1302,9 +1302,34 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
         _upload_file(fs, local, r2_path)
         print("  ✓")
 
+    # Generate and upload private ducklake_manifest.json — rewrites the public
+    # manifest URLs to point at the private bucket so the browser OPFS sync can
+    # discover private files when the user is authenticated.
+    public_manifest_file = catalog_dir / "ducklake_manifest.json"
+    if public_manifest_file.exists():
+        import json as _json
+
+        private_base = f"{_PRIVATE_ENDPOINT}/{_DUCKLAKE_PRIVATE_PREFIX.rstrip('/')}"
+        public_base = "https://arktrace-public.edgesentry.io"
+        manifest_data = _json.loads(public_manifest_file.read_text())
+        for entry in manifest_data.get("files", []):
+            entry["url"] = entry["url"].replace(public_base, private_base)
+            entry["key"] = f"{_DUCKLAKE_PRIVATE_PREFIX}{entry['key']}"
+        manifest_data["base_url"] = private_base
+        private_manifest_bytes = _json.dumps(manifest_data, indent=2).encode()
+        manifest_r2 = f"{prefix}ducklake_manifest.json"
+        print(
+            f"Uploading private ducklake_manifest.json ({len(private_manifest_bytes)} B) → {manifest_r2} ..."
+        )
+        fs.pipe(manifest_r2, private_manifest_bytes)
+        print("  ✓")
+    else:
+        print("[warn] ducklake_manifest.json not found — private browser OPFS sync will not work.")
+
     print(
         f"\nDone. Private DuckLake outputs available at:\n"
-        f"  {_PRIVATE_ENDPOINT}/{_DUCKLAKE_PRIVATE_PREFIX}  (authenticated access only)"
+        f"  {_PRIVATE_ENDPOINT}/{_DUCKLAKE_PRIVATE_PREFIX}  (authenticated access only)\n"
+        f"  Manifest: {_PRIVATE_ENDPOINT}/{_DUCKLAKE_PRIVATE_PREFIX}ducklake_manifest.json"
     )
     return 0
 
