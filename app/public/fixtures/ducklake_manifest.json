@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-04-19T00:00:00Z",
+  "generated_at": "2026-04-19T12:18:09Z",
   "base_url": "/fixtures",
   "files": [
     {
       "key": "fixtures/watchlist.parquet",
       "url": "/fixtures/watchlist.parquet",
-      "size_bytes": 11081,
+      "size_bytes": 7836,
       "table": "watchlist",
       "register_as": "watchlist.parquet"
     },
@@ -19,14 +19,14 @@
     {
       "key": "fixtures/causal_effects.parquet",
       "url": "/fixtures/causal_effects.parquet",
-      "size_bytes": 6554,
+      "size_bytes": 5650,
       "table": "causal_effects",
       "register_as": "causal_effects.parquet"
     },
     {
       "key": "fixtures/score_history.parquet",
       "url": "/fixtures/score_history.parquet",
-      "size_bytes": 19206,
+      "size_bytes": 13594,
       "table": "score_history",
       "register_as": "score_history.parquet"
     }

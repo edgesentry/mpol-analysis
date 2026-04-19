@@ -7,9 +7,10 @@ Parquet files, then optionally calls ``sync_r2.py`` to push to both R2 buckets.
 Tables written to the catalog
 ------------------------------
   watchlist         — combined candidate watchlist from all regions (adds ``region`` col)
-  causal_effects    — C3 causal model outputs (regime-level ATT estimates)
+  causal_effects    — C3 causal model outputs (per-vessel ATT estimates with mmsi)
   validation_metrics — pipeline evaluation metrics (P@50, AUROC, R@200 …)
   composite_scores  — full composite risk scores for all vessels
+  score_history     — 30-day rolling daily confidence scores (mmsi, score_date, confidence)
 
 Phase 1 gate
 ------------
@@ -41,6 +42,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -197,6 +199,55 @@ def _build_validation_metrics_table(json_path: Path) -> pl.DataFrame | None:
     return pl.DataFrame([flat])
 
 
+def _build_score_history_table(data_dir: Path) -> pl.DataFrame | None:
+    """Append today's composite scores to the rolling score_history.parquet.
+
+    Reads composite_scores.parquet, extracts (mmsi, confidence), tags with
+    today's date, merges with any existing score_history.parquet, then trims
+    to the last 30 days.  Writes the updated file back to data_dir so the
+    history accumulates across daily pipeline runs.
+
+    Returns the merged DataFrame, or None if composite_scores.parquet is absent.
+    """
+    comp_path = data_dir / "composite_scores.parquet"
+    if not comp_path.exists():
+        return None
+
+    today = date.today().isoformat()
+    try:
+        today_df = (
+            pl.read_parquet(comp_path, columns=["mmsi", "confidence"])
+            .with_columns(pl.lit(today).alias("score_date"))
+            .select(["mmsi", "score_date", "confidence"])
+        )
+    except Exception as exc:
+        print(f"  [warn] Could not read {comp_path}: {exc}", file=sys.stderr)
+        return None
+
+    history_path = data_dir / "score_history.parquet"
+    if history_path.exists():
+        try:
+            existing = pl.read_parquet(history_path)
+            # Drop today's rows so re-runs are idempotent
+            existing = existing.filter(pl.col("score_date") != today)
+            combined = pl.concat([existing, today_df], how="diagonal_relaxed")
+        except Exception as exc:
+            print(f"  [warn] Could not read existing {history_path}: {exc}", file=sys.stderr)
+            combined = today_df
+    else:
+        combined = today_df
+
+    cutoff = (date.today() - timedelta(days=30)).isoformat()
+    combined = combined.filter(pl.col("score_date") >= cutoff).sort(["mmsi", "score_date"])
+
+    try:
+        combined.write_parquet(history_path)
+    except Exception as exc:
+        print(f"  [warn] Could not persist {history_path}: {exc}", file=sys.stderr)
+
+    return combined
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint gate validation
 # ---------------------------------------------------------------------------
@@ -258,6 +309,9 @@ def run(
     print(f"Causal effects     : {len(causal_paths)} file(s)")
     print(f"Composite scores   : {'yes' if comp_path else 'no'}")
     print(f"Validation metrics : {'yes' if metrics_path else 'no'}")
+    print(
+        f"Score history      : {'yes (will append today)' if comp_path else 'no (needs composite_scores)'}"
+    )
     print()
 
     if dry_run:
@@ -312,6 +366,14 @@ def run(
             tables_written.append("validation_metrics")
     else:
         print("[skip] No validation_metrics.json found.")
+
+    score_history_df = _build_score_history_table(data_dir)
+    if score_history_df is not None:
+        print(f"Writing score_history ({len(score_history_df)} rows) → lake.score_history ...")
+        write_table(score_history_df, "score_history", cat, dat)
+        tables_written.append("score_history")
+    else:
+        print("[skip] No composite_scores.parquet — score_history table not written.")
 
     if not tables_written:
         print(
@@ -379,6 +441,7 @@ def run(
         "causal_effects": "causal_effects.parquet",
         "composite_scores": "composite_scores.parquet",
         "validation_metrics": "validation_metrics.parquet",
+        "score_history": "score_history.parquet",
     }
     _PUBLIC_BASE_URL = "https://arktrace-public.edgesentry.io"
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import random
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -55,6 +56,8 @@ NAMES = [
     "CALYPSO",
     "TETHYS",
 ]
+
+_REGIMES = ["OFAC Iran", "OFAC Russia", "UN DPRK"]
 
 # Rough lat/lon centres per region
 _REGION_CENTRES: dict[str, tuple[float, float]] = {
@@ -109,22 +112,70 @@ def make_validation_metrics() -> pl.DataFrame:
     )
 
 
+def make_causal_effects(watchlist: pl.DataFrame, seed: int = 42) -> pl.DataFrame:
+    """Per-vessel ATT estimates — ~90% of watchlist vessels get a regime assignment."""
+    rng = random.Random(seed)
+    rows = []
+    for mmsi in watchlist["mmsi"].to_list():
+        if rng.random() > 0.1:  # 90% coverage
+            att = round(rng.uniform(-0.1, 0.65), 3)
+            half_width = round(rng.uniform(0.05, 0.15), 3)
+            p = round(rng.uniform(0.001, 0.5), 4)
+            rows.append(
+                {
+                    "mmsi": mmsi,
+                    "regime": rng.choice(_REGIMES),
+                    "att_estimate": att,
+                    "att_ci_lower": round(att - half_width, 3),
+                    "att_ci_upper": round(att + half_width, 3),
+                    "p_value": p,
+                    "is_significant": p < 0.05,
+                }
+            )
+    return pl.DataFrame(rows)
+
+
+def make_score_history(watchlist: pl.DataFrame, days: int = 30, seed: int = 42) -> pl.DataFrame:
+    """30-day daily confidence history for every watchlist vessel."""
+    rng = random.Random(seed)
+    anchor_date = date(2026, 4, 17)
+    rows = []
+    for mmsi, base_conf in zip(watchlist["mmsi"].to_list(), watchlist["confidence"].to_list()):
+        conf = float(base_conf)
+        for d in range(days):
+            score_date = (anchor_date - timedelta(days=days - 1 - d)).isoformat()
+            conf = max(0.1, min(0.99, conf + rng.uniform(-0.04, 0.04)))
+            rows.append({"mmsi": mmsi, "score_date": score_date, "confidence": round(conf, 4)})
+    return pl.DataFrame(rows).with_columns(pl.col("confidence").cast(pl.Float32))
+
+
 def main() -> int:
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     watchlist = make_watchlist()
     wl_path = _OUT_DIR / "watchlist.parquet"
     watchlist.write_parquet(wl_path)
-    print(f"  watchlist.parquet        {len(watchlist)} rows  ({wl_path.stat().st_size} bytes)")
+    print(f"  watchlist.parquet          {len(watchlist)} rows  ({wl_path.stat().st_size} bytes)")
 
     metrics = make_validation_metrics()
     vm_path = _OUT_DIR / "validation_metrics.parquet"
     metrics.write_parquet(vm_path)
     print(f"  validation_metrics.parquet {len(metrics)} rows  ({vm_path.stat().st_size} bytes)")
 
-    # Build manifest pointing to Vite-served /fixtures/ paths
+    causal = make_causal_effects(watchlist)
+    ce_path = _OUT_DIR / "causal_effects.parquet"
+    causal.write_parquet(ce_path)
+    print(f"  causal_effects.parquet     {len(causal)} rows  ({ce_path.stat().st_size} bytes)")
+
+    history = make_score_history(watchlist)
+    sh_path = _OUT_DIR / "score_history.parquet"
+    history.write_parquet(sh_path)
+    print(f"  score_history.parquet      {len(history)} rows  ({sh_path.stat().st_size} bytes)")
+
+    from datetime import UTC, datetime
+
     manifest = {
-        "generated_at": "2026-04-17T00:00:00Z",
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "base_url": "/fixtures",
         "files": [
             {
@@ -141,11 +192,25 @@ def main() -> int:
                 "table": "validation_metrics",
                 "register_as": "validation_metrics.parquet",
             },
+            {
+                "key": "fixtures/causal_effects.parquet",
+                "url": "/fixtures/causal_effects.parquet",
+                "size_bytes": ce_path.stat().st_size,
+                "table": "causal_effects",
+                "register_as": "causal_effects.parquet",
+            },
+            {
+                "key": "fixtures/score_history.parquet",
+                "url": "/fixtures/score_history.parquet",
+                "size_bytes": sh_path.stat().st_size,
+                "table": "score_history",
+                "register_as": "score_history.parquet",
+            },
         ],
     }
     manifest_path = _OUT_DIR / "ducklake_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
-    print(f"  ducklake_manifest.json   ({manifest_path.stat().st_size} bytes)")
+    print(f"  ducklake_manifest.json     ({manifest_path.stat().st_size} bytes)")
     print()
     print(f"Fixtures written to {_OUT_DIR}")
     print("Set VITE_MANIFEST_URL=/fixtures/ducklake_manifest.json in app/.env.development")

@@ -199,6 +199,7 @@ _DEMO_FILES = [
     "candidate_watchlist.parquet",
     "composite_scores.parquet",
     "causal_effects.parquet",
+    "score_history.parquet",
     "validation_metrics.json",
 ]
 
