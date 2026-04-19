@@ -89,17 +89,26 @@ def fetch_gfw_detections(
         "group-by": "VESSEL_ID",
         "format": "JSON",
     }
-    # Bounding box as a GeoJSON Polygon geometry (no Feature wrapper)
+    # Bounding box as a GeoJSON FeatureCollection (format required by GFW v3)
     body = {
-        "region": {
-            "type": "Polygon",
-            "coordinates": [[
-                [lon_min, lat_min],
-                [lon_max, lat_min],
-                [lon_max, lat_max],
-                [lon_min, lat_max],
-                [lon_min, lat_min],
-            ]],
+        "geojson": {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [lon_min, lat_min],
+                            [lon_max, lat_min],
+                            [lon_max, lat_max],
+                            [lon_min, lat_max],
+                            [lon_min, lat_min],
+                        ]],
+                    },
+                }
+            ],
         }
     }
     headers = {
