@@ -305,8 +305,6 @@ def run(
     comp_path = _find_composite_scores(data_dir)
     metrics_path = _find_validation_metrics(data_dir)
 
-    score_history_path = data_dir / "score_history.parquet"
-
     print(f"Watchlists found   : {len(watchlists)} ({', '.join(watchlists) or 'none'})")
     print(f"Causal effects     : {len(causal_paths)} file(s)")
     print(f"Composite scores   : {'yes' if comp_path else 'no'}")
