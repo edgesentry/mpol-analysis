@@ -121,7 +121,7 @@ def fetch_gfw_detections(
         params=params,
         json=body,
         headers=headers,
-        timeout=60,
+        timeout=180,
     )
     if resp.status_code in (401, 403):
         raise PermissionError(
