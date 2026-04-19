@@ -123,7 +123,10 @@ def fetch_gfw_detections(
             f"public-global-presence:latest. Check your token at "
             f"https://globalfishingwatch.org/our-apis/tokens"
         )
-    resp.raise_for_status()
+    if not resp.is_success:
+        raise RuntimeError(
+            f"GFW API {resp.status_code}: {resp.text[:500]}"
+        )
     data = resp.json()
 
     detections = []
