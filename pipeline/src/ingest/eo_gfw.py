@@ -75,16 +75,69 @@ def fetch_gfw_detections(
     end_dt = datetime.now(UTC)
     start_dt = end_dt - timedelta(days=days)
 
+    # The 4Wings /report endpoint requires POST with a GeoJSON body for the
+    # region; passing region as a query param returns 422.
+    # spatial-resolution and temporal-resolution are required query params.
     params = {
-        "datasets[0]": "public-global-fishing-vessels:latest",
+        # public-global-presence:latest covers all vessel types (fishing + cargo +
+        # tankers) and is accessible with a standard free GFW API token.
+        # public-global-fishing-vessels:latest requires a research-tier account.
+        "datasets[0]": "public-global-presence:latest",
         "date-range": f"{start_dt.strftime('%Y-%m-%d')},{end_dt.strftime('%Y-%m-%d')}",
-        "region": f"{lon_min},{lat_min},{lon_max},{lat_max}",
-        "format": "json",
+        "spatial-resolution": "LOW",
+        "temporal-resolution": "MONTHLY",
+        "group-by": "VESSEL_ID",
+        "format": "JSON",
     }
-    headers = {"Authorization": f"Bearer {api_token}"}
+    # Bounding box as a GeoJSON FeatureCollection (format required by GFW v3)
+    body = {
+        "geojson": {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [lon_min, lat_min],
+                                [lon_max, lat_min],
+                                [lon_max, lat_max],
+                                [lon_min, lat_max],
+                                [lon_min, lat_min],
+                            ]
+                        ],
+                    },
+                }
+            ],
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+    }
 
-    resp = httpx.get(f"{GFW_API_BASE}/4wings/report", params=params, headers=headers, timeout=60)
-    resp.raise_for_status()
+    resp = httpx.post(
+        f"{GFW_API_BASE}/4wings/report",
+        params=params,
+        json=body,
+        headers=headers,
+        timeout=180,
+    )
+    if resp.status_code in (401, 403):
+        raise PermissionError(
+            f"GFW API returned {resp.status_code}: token lacks access to "
+            f"public-global-presence:latest. Check your token at "
+            f"https://globalfishingwatch.org/our-apis/tokens"
+        )
+    if resp.status_code == 429:
+        raise PermissionError(
+            "GFW API 429: another report is already running for this token — "
+            "wait a few minutes and retry"
+        )
+    if not resp.is_success:
+        raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
     data = resp.json()
 
     detections = []

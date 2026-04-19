@@ -397,7 +397,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 10
+TOTAL_STEPS = 11
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -553,8 +553,48 @@ def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
         return _ask_retry_skip("custom_feeds") == "skip"
 
 
+def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
+    """Ingest GFW EO vessel-presence detections (dark vessels) into eo_detections.
+
+    Skipped automatically when GFW_API_TOKEN is not set — the feature layer
+    will then produce zero EO features, which is correct for offline runs.
+    """
+    import os
+
+    _step(6, TOTAL_STEPS, "Ingesting GFW EO detections...")
+    from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
+
+    token = os.getenv("GFW_API_TOKEN", "")
+    if not token:
+        _ok("GFW_API_TOKEN not set — skipping EO ingest (set token to enable)")
+        return True
+
+    try:
+        # RegionPreset.bbox = [lat_min, lon_min, lat_max, lon_max]
+        # fetch_gfw_detections expects (lon_min, lat_min, lon_max, lat_max)
+        lat_min, lon_min, lat_max, lon_max = p.bbox
+        gfw_bbox = (lon_min, lat_min, lon_max, lat_max)
+        records = fetch_gfw_detections(bbox=gfw_bbox, days=30, api_token=token)
+        n = ingest_eo_records(records, db_path=p.db_path)
+        _ok(f"{n} EO detections ingested from GFW API")
+        return True
+    except PermissionError as exc:
+        _ok(f"Skipping EO ingest — {exc}")
+        return True
+    except Exception as exc:
+        # Treat network timeouts as a soft skip so the pipeline continues.
+        exc_str = str(exc)
+        if "timed out" in exc_str.lower() or "timeout" in exc_str.lower():
+            _ok("Skipping EO ingest — GFW API timed out (will retry on next run)")
+            return True
+        _fail(exc_str)
+        if non_interactive:
+            return False
+        return _ask_retry_skip("eo_ingest") == "skip"
+
+
 def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(6, TOTAL_STEPS, "Building ownership graph...")
+    _step(8, TOTAL_STEPS, "Building ownership graph...")
     # vessel_registry builds Lance datasets from DuckDB vessel_meta
     reg = _run([sys.executable, "-m", "pipeline.src.ingest.vessel_registry", "--db", p.db_path])
     if reg.returncode != 0:
@@ -576,7 +616,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
-    _step(7, TOTAL_STEPS, "Computing features...")
+    _step(9, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         (
@@ -661,7 +701,7 @@ def step_score(
     non_interactive: bool,
     geo_filter_path: str | None = None,
 ) -> bool:
-    _step(8, TOTAL_STEPS, "Scoring...")
+    _step(10, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
 
     # C3: calibrate graph_risk_score weight before composite scoring
@@ -747,7 +787,7 @@ def step_score(
 
 
 def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
-    _step(9, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    _step(10, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "pipeline.src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
         count_line = next((l for l in result.stdout.splitlines() if "total" in l.lower()), "")
@@ -761,7 +801,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
 
 def step_ducklake(p: RegionPreset, non_interactive: bool) -> bool:
     """Build DuckLake catalog from pipeline outputs (Phase 1 gate validation)."""
-    _step(10, TOTAL_STEPS, "Building DuckLake catalog...")
+    _step(11, TOTAL_STEPS, "Building DuckLake catalog...")
     db_dir = os.path.dirname(os.path.abspath(p.db_path))
     result = _run(
         [
@@ -897,6 +937,7 @@ def main() -> None:
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
         step_custom_feeds,
+        step_eo_ingest,
         step_ownership_graph,
         lambda p, ni: step_features(p, ni, seed_dummy),
         lambda p, ni: step_score(p, ni, geo_filter_path),
