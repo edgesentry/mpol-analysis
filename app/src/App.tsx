@@ -27,6 +27,7 @@ import VesselDetail from "./components/VesselDetail";
 import VesselMap from "./components/VesselMap";
 import SyncStatusBar from "./components/SyncStatus";
 import AlertDrawer from "./components/AlertDrawer";
+import RegionPicker, { getStoredRegion, setStoredRegion, KNOWN_REGIONS, DEFAULT_REGION } from "./components/RegionPicker";
 
 export default function App() {
   const dbRef = useRef<AsyncDuckDB | null>(null);
@@ -37,7 +38,14 @@ export default function App() {
   const [vessels, setVessels] = useState<VesselRow[]>([]);
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
   const [regions, setRegions] = useState<string[]>([]);
-  const [selectedRegion, setSelectedRegion] = useState<string>("all");
+  // Persist region choice in localStorage; default to Singapore on first visit.
+  const [selectedRegion, setSelectedRegion] = useState<string>(
+    () => getStoredRegion() ?? DEFAULT_REGION
+  );
+  // Show region picker overlay on first visit (no stored preference yet).
+  const [showRegionPicker, setShowRegionPicker] = useState<boolean>(
+    () => getStoredRegion() === null
+  );
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [minConfidence, setMinConfidence] = useState(0.4);
   const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
@@ -58,7 +66,10 @@ export default function App() {
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
-        await doSync(db);
+        // Skip auto-sync if the region picker is waiting for user input.
+        if (!showRegionPicker) {
+          await doSync(db);
+        }
       } catch (err) {
         if (!cancelled) setInitError(String(err));
       }
@@ -67,16 +78,21 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doSync = useCallback(async (db?: AsyncDuckDB) => {
+  const doSync = useCallback(async (db?: AsyncDuckDB, region?: string) => {
     const target = db ?? dbRef.current;
     if (!target) return;
+    const activeRegion = region ?? selectedRegion;
+    // Pass region as a single-element list so syncAndLoad can filter
+    // region-tagged manifest files.  Currently manifest files have no region
+    // tags (combined dataset), so this is a no-op until the pipeline adds them.
+    const regionFilter = activeRegion !== "all" ? [activeRegion] : undefined;
     setSyncStatus({ phase: "fetching_manifest" });
-    const loaded = await syncAndLoad(target, setSyncStatus);
+    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter);
     if (loaded > 0 && connRef.current) {
       await refreshQuery();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedRegion]);
 
   const refreshQuery = useCallback(async () => {
     const conn = connRef.current;
@@ -166,7 +182,11 @@ export default function App() {
         {/* Region selector */}
         <select
           value={selectedRegion}
-          onChange={(e) => setSelectedRegion(e.target.value)}
+          onChange={(e) => {
+            const r = e.target.value;
+            setStoredRegion(r === "all" ? "all" : r);
+            setSelectedRegion(r);
+          }}
           style={{
             background: "#0f1117",
             border: "1px solid #2d3748",
@@ -177,9 +197,16 @@ export default function App() {
           }}
         >
           <option value="all">All regions</option>
-          {regions.map((r) => (
-            <option key={r} value={r}>{r}</option>
+          {/* Show known regions even before data loads so users can switch */}
+          {KNOWN_REGIONS.map((r) => (
+            <option key={r.id} value={r.id}>{r.label}</option>
           ))}
+          {/* Also include any regions from live data not in the known list */}
+          {regions
+            .filter((r) => !KNOWN_REGIONS.some((k) => k.id === r))
+            .map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
         </select>
 
         {/* Confidence filter */}
@@ -273,6 +300,17 @@ export default function App() {
           onClose={() => setAlertDrawerOpen(false)}
           onSelectVessel={(mmsi) => setSelectedMmsi(mmsi)}
           onAlertsChange={setAlerts}
+        />
+      )}
+
+      {/* Region picker — shown on first visit before any data is downloaded */}
+      {showRegionPicker && (
+        <RegionPicker
+          onConfirm={(region) => {
+            setSelectedRegion(region);
+            setShowRegionPicker(false);
+            doSync(undefined, region);
+          }}
         />
       )}
     </div>

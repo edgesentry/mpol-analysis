@@ -31,6 +31,12 @@ export interface ManifestFile {
   size_bytes: number;
   /** DuckDB-WASM registration name, e.g. "watchlist.parquet" */
   register_as: string;
+  /**
+   * Optional region tag, e.g. "singapore".  When present, `syncAndLoad` can
+   * filter downloads to only the requested regions.  Absent on combined files
+   * that contain all regions — those are always downloaded.
+   */
+  region?: string;
 }
 
 export interface Manifest {
@@ -106,13 +112,19 @@ export async function fetchManifest(): Promise<Manifest> {
 /**
  * Sync R2 Parquet files into OPFS, then register them with DuckDB-WASM.
  *
- * @param db      Initialised DuckDB-WASM instance.
- * @param onStatus Called on every status change so the UI can show progress.
+ * @param db        Initialised DuckDB-WASM instance.
+ * @param onStatus  Called on every status change so the UI can show progress.
+ * @param regions   Optional list of regions to download.  Files tagged with a
+ *                  `region` field in the manifest are skipped unless their
+ *                  region appears in this list.  Files with no region tag
+ *                  (combined multi-region files) are always downloaded.
+ *                  Pass `undefined` (default) to download everything.
  * @returns Number of files loaded into DuckDB.
  */
 export async function syncAndLoad(
   db: AsyncDuckDB,
-  onStatus: (s: SyncStatus) => void
+  onStatus: (s: SyncStatus) => void,
+  regions?: string[]
 ): Promise<number> {
   // ── 1. Fetch manifest ───────────────────────────────────────────────────
   onStatus({ phase: "fetching_manifest" });
@@ -140,8 +152,14 @@ export async function syncAndLoad(
   }
 
   // ── 2. Download missing / stale files ───────────────────────────────────
+  // Filter by region: skip files tagged for a different region than requested.
+  // Files with no region tag are always included (they contain all regions).
+  const wantedFiles = regions
+    ? manifest.files.filter((f) => !f.region || regions.includes(f.region))
+    : manifest.files;
+
   const toDownload: ManifestFile[] = [];
-  for (const f of manifest.files) {
+  for (const f of wantedFiles) {
     const cached = await opfsFileSize(f.register_as);
     if (cached === f.size_bytes) continue; // already fresh
     toDownload.push(f);
@@ -166,10 +184,10 @@ export async function syncAndLoad(
     done++;
   }
 
-  // ── 3. Load all manifest files into DuckDB-WASM from OPFS ───────────────
+  // ── 3. Load all wanted files into DuckDB-WASM from OPFS ────────────────
   onStatus({ phase: "loading" });
   let loaded = 0;
-  for (const f of manifest.files) {
+  for (const f of wantedFiles) {
     const buf = await opfsReadBuffer(f.register_as);
     if (!buf) continue;
     await registerParquet(db, f.register_as, buf);
