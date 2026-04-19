@@ -309,7 +309,9 @@ def run(
     print(f"Causal effects     : {len(causal_paths)} file(s)")
     print(f"Composite scores   : {'yes' if comp_path else 'no'}")
     print(f"Validation metrics : {'yes' if metrics_path else 'no'}")
-    print(f"Score history      : {'yes (will append today)' if comp_path else 'no (needs composite_scores)'}")
+    print(
+        f"Score history      : {'yes (will append today)' if comp_path else 'no (needs composite_scores)'}"
+    )
     print()
 
     if dry_run:
@@ -367,9 +369,7 @@ def run(
 
     score_history_df = _build_score_history_table(data_dir)
     if score_history_df is not None:
-        print(
-            f"Writing score_history ({len(score_history_df)} rows) → lake.score_history ..."
-        )
+        print(f"Writing score_history ({len(score_history_df)} rows) → lake.score_history ...")
         write_table(score_history_df, "score_history", cat, dat)
         tables_written.append("score_history")
     else:

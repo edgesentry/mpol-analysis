@@ -135,16 +135,12 @@ def make_causal_effects(watchlist: pl.DataFrame, seed: int = 42) -> pl.DataFrame
     return pl.DataFrame(rows)
 
 
-def make_score_history(
-    watchlist: pl.DataFrame, days: int = 30, seed: int = 42
-) -> pl.DataFrame:
+def make_score_history(watchlist: pl.DataFrame, days: int = 30, seed: int = 42) -> pl.DataFrame:
     """30-day daily confidence history for every watchlist vessel."""
     rng = random.Random(seed)
     anchor_date = date(2026, 4, 17)
     rows = []
-    for mmsi, base_conf in zip(
-        watchlist["mmsi"].to_list(), watchlist["confidence"].to_list()
-    ):
+    for mmsi, base_conf in zip(watchlist["mmsi"].to_list(), watchlist["confidence"].to_list()):
         conf = float(base_conf)
         for d in range(days):
             score_date = (anchor_date - timedelta(days=days - 1 - d)).isoformat()
