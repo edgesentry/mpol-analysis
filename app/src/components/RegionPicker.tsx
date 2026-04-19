@@ -1,6 +1,6 @@
 /**
  * RegionPicker — full-screen overlay shown on first install (empty OPFS).
- * User picks which region to download; defaults to Singapore.
+ * User picks one or more regions to download; defaults to Singapore.
  * Choice is persisted to localStorage and not shown again unless reset.
  */
 
@@ -21,40 +21,72 @@ export const KNOWN_REGIONS = [
 
 export type RegionId = (typeof KNOWN_REGIONS)[number]["id"];
 
-export const STORAGE_KEY = "arktrace.region";
-export const DEFAULT_REGION: RegionId = "singapore";
+export const STORAGE_KEY = "arktrace.regions";
+export const DEFAULT_REGIONS: RegionId[] = ["singapore"];
 
-/** Read persisted region preference, or null if not yet chosen. */
-export function getStoredRegion(): string | null {
+/** Read persisted region list, or null if not yet chosen. */
+export function getStoredRegions(): string[] | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
   } catch {
     return null;
   }
 }
 
-/** Persist region preference. */
-export function setStoredRegion(region: string): void {
+/** Persist region list. */
+export function setStoredRegions(regions: string[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, region);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(regions));
   } catch {
     // localStorage unavailable — ignore
   }
 }
 
-interface Props {
-  onConfirm: (region: string) => void;
+/** Format a region list for display in the header (max 2 names then "+N"). */
+export function formatRegionLabel(regions: string[]): string {
+  if (regions.length === 0) return "No region";
+  const names = regions.map(
+    (id) => KNOWN_REGIONS.find((r) => r.id === id)?.label ?? id
+  );
+  if (names.length <= 2) return names.join(", ");
+  return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
 }
 
-export default function RegionPicker({ onConfirm }: Props) {
-  const [selected, setSelected] = useState<string>(DEFAULT_REGION);
+interface Props {
+  initial?: string[];
+  onConfirm: (regions: string[]) => void;
+  onCancel?: () => void;
+}
+
+export default function RegionPicker({ initial, onConfirm, onCancel }: Props) {
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(initial ?? DEFAULT_REGIONS)
+  );
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Keep at least one region selected
+        if (next.size > 1) next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const selectedList = Array.from(selected);
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "#0f1117",
+        background: "rgba(15,17,23,0.92)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -67,7 +99,7 @@ export default function RegionPicker({ onConfirm }: Props) {
           border: "1px solid #2d3748",
           borderRadius: 8,
           padding: "2rem",
-          width: 400,
+          width: 420,
           maxWidth: "90vw",
         }}
       >
@@ -79,7 +111,7 @@ export default function RegionPicker({ onConfirm }: Props) {
             marginBottom: "0.25rem",
           }}
         >
-          Select region
+          Select regions
         </h2>
         <p
           style={{
@@ -88,7 +120,7 @@ export default function RegionPicker({ onConfirm }: Props) {
             marginBottom: "1.25rem",
           }}
         >
-          Choose which region to download. You can change this later.
+          Choose one or more regions to download. You can change this later.
         </p>
 
         <div
@@ -99,45 +131,82 @@ export default function RegionPicker({ onConfirm }: Props) {
             marginBottom: "1.5rem",
           }}
         >
-          {KNOWN_REGIONS.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => setSelected(r.id)}
-              style={{
-                padding: "0.5rem 0.75rem",
-                borderRadius: 4,
-                border: `1px solid ${selected === r.id ? "#3b82f6" : "#2d3748"}`,
-                background: selected === r.id ? "#1e3a5f" : "#0f1117",
-                color: selected === r.id ? "#93c5fd" : "#a0aec0",
-                fontSize: "0.75rem",
-                cursor: "pointer",
-                textAlign: "left",
-              }}
-            >
-              {r.label}
-            </button>
-          ))}
+          {KNOWN_REGIONS.map((r) => {
+            const active = selected.has(r.id);
+            return (
+              <button
+                key={r.id}
+                onClick={() => toggle(r.id)}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 4,
+                  border: `1px solid ${active ? "#3b82f6" : "#2d3748"}`,
+                  background: active ? "#1e3a5f" : "#0f1117",
+                  color: active ? "#93c5fd" : "#a0aec0",
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 2,
+                    border: `1px solid ${active ? "#3b82f6" : "#4a5568"}`,
+                    background: active ? "#3b82f6" : "transparent",
+                    flexShrink: 0,
+                  }}
+                />
+                {r.label}
+              </button>
+            );
+          })}
         </div>
 
-        <button
-          onClick={() => {
-            setStoredRegion(selected);
-            onConfirm(selected);
-          }}
-          style={{
-            width: "100%",
-            padding: "0.6rem",
-            borderRadius: 4,
-            border: "none",
-            background: "#3b82f6",
-            color: "#fff",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Download {KNOWN_REGIONS.find((r) => r.id === selected)?.label ?? selected}
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              style={{
+                flex: 1,
+                padding: "0.6rem",
+                borderRadius: 4,
+                border: "1px solid #2d3748",
+                background: "transparent",
+                color: "#a0aec0",
+                fontSize: "0.85rem",
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setStoredRegions(selectedList);
+              onConfirm(selectedList);
+            }}
+            style={{
+              flex: 2,
+              padding: "0.6rem",
+              borderRadius: 4,
+              border: "none",
+              background: "#3b82f6",
+              color: "#fff",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Download {selectedList.length === 1
+              ? (KNOWN_REGIONS.find((r) => r.id === selectedList[0])?.label ?? selectedList[0])
+              : `${selectedList.length} regions`}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -117,9 +117,9 @@ async function watchlistHasTopSignals(conn: duckdb.AsyncDuckDBConnection): Promi
 
 export async function queryWatchlist(
   conn: duckdb.AsyncDuckDBConnection,
-  opts: { minConfidence?: number; region?: string } = {}
+  opts: { minConfidence?: number; regions?: string[] } = {}
 ): Promise<VesselRow[]> {
-  const { minConfidence = 0, region } = opts;
+  const { minConfidence = 0, regions } = opts;
   const [hasImo, hasTopSignals] = await Promise.all([
     watchlistHasImo(conn),
     watchlistHasTopSignals(conn),
@@ -141,8 +141,9 @@ export async function queryWatchlist(
     FROM read_parquet('watchlist.parquet')
     WHERE confidence >= ${minConfidence}
   `;
-  if (region) {
-    sql += ` AND region = '${region.replace(/'/g, "''")}'`;
+  if (regions && regions.length > 0) {
+    const list = regions.map((r) => `'${r.replace(/'/g, "''")}'`).join(", ");
+    sql += ` AND region IN (${list})`;
   }
   sql += " ORDER BY confidence DESC LIMIT 500";
 
