@@ -27,13 +27,49 @@ The default model is `bartowski/Qwen2.5-7B-Instruct-GGUF` (Q4_K_M quantisation),
 
 ### One-time installation
 
-```bash
-# macOS (Homebrew) — recommended
-brew install llama.cpp
+**macOS**
 
-# Other platforms — see full install guide:
-# https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md
+```bash
+brew install llama.cpp caddy
 ```
+
+**Linux (Debian / Ubuntu)**
+
+```bash
+# llama.cpp — download the pre-built binary for your arch
+# https://github.com/ggml-org/llama.cpp/releases/latest
+# e.g. llama-<tag>-bin-ubuntu-x64.zip → unzip, add to PATH
+
+# Caddy
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy
+```
+
+**Linux (Fedora / RHEL)**
+
+```bash
+sudo dnf install caddy
+```
+
+**Windows**
+
+```powershell
+# llama.cpp — download the pre-built binary:
+# https://github.com/ggml-org/llama.cpp/releases/latest
+# e.g. llama-<tag>-bin-win-avx2-x64.zip → unzip, add folder to PATH
+
+# Caddy (winget)
+winget install Caddy.Caddy
+
+# or Chocolatey
+choco install caddy
+```
+
+Caddy is required for Safari support — `run_llama.sh` starts it automatically as an HTTPS proxy on `:8443`. On first run it adds its local CA to the system trust store (macOS Keychain / Windows Certificate Store); Linux users may need to accept the cert manually in the browser on first visit.
 
 ### Start everything
 

@@ -26,12 +26,12 @@ interface Props {
 // ── LLM brief fetcher ────────────────────────────────────────────────────────
 
 // VITE_LLM_ENDPOINT can be set in Cloudflare Pages environment variables to
-// point at a remote HTTPS inference endpoint.  Falls back to local llama-server
-// for development.  Chrome allows http://localhost from HTTPS pages; Safari and
-// Firefox do not — on those browsers the fetch throws and "offline" is shown.
+// point at a remote HTTPS inference endpoint.  Falls back to the Caddy HTTPS
+// proxy started by run_llama.sh (:8443 → :8080).  Using HTTPS for both Chrome
+// and Safari avoids mixed-content issues entirely.
 const LLM_ENDPOINT =
-  import.meta.env.VITE_LLM_ENDPOINT ?? "http://localhost:8080/v1/chat/completions";
-const LLM_TIMEOUT_MS = 10_000;
+  import.meta.env.VITE_LLM_ENDPOINT ?? "https://localhost:8443/v1/chat/completions";
+const LLM_TIMEOUT_MS = 45_000;
 
 type BriefStatus = "idle" | "loading" | "cached" | "ready" | "offline" | "error";
 
@@ -60,10 +60,9 @@ function buildPrompt(v: VesselRow): string {
 }
 
 async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
-  // Note: Chrome exempts http://localhost from mixed-content blocking (HTTPS
-  // page → HTTP localhost is allowed).  Safari and Firefox do not.  We let the
-  // fetch run unconditionally; browsers that block it will throw a network
-  // error which the caller's catch block handles uniformly as "offline".
+  // Default endpoint is https://localhost:8443 (Caddy proxy) so both Chrome
+  // and Safari avoid mixed-content issues.  Network errors fall through to
+  // the caller's "offline" handler.
   const res = await fetch(LLM_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

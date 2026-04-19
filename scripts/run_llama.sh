@@ -7,10 +7,14 @@
 # The SPA calls: http://localhost:8080/v1/chat/completions
 #
 # Prerequisites (one-time):
-#   macOS:          brew install llama.cpp
-#   Linux / WSL2:   Download pre-built binary from:
+#   macOS:          brew install llama.cpp caddy
+#   Linux / WSL2:   llama.cpp — download pre-built binary from:
 #                   https://github.com/ggml-org/llama.cpp/releases/latest
-#                   e.g. llama-<tag>-bin-ubuntu-x64.zip  →  unzip, add to PATH
+#                   caddy — see docs/local-llm-setup.md (apt/dnf packages)
+#   Windows:        llama.cpp — download pre-built binary from:
+#                   https://github.com/ggml-org/llama.cpp/releases/latest
+#                   e.g. llama-<tag>-bin-win-avx2-x64.zip  →  unzip, add to PATH
+#                   caddy — winget install Caddy.Caddy
 #
 # Usage:
 #   bash scripts/run_llama.sh
@@ -120,6 +124,35 @@ for i in $(seq 1 30); do
       exit 1
     fi
     echo "   ✅ llama-server ready → http://localhost:${PORT}/v1"
+
+    # ── Caddy HTTPS proxy ─────────────────────────────────────────────────────
+    # The SPA defaults to https://localhost:8443 so Safari (which blocks
+    # HTTPS→HTTP) and Chrome both work without any VITE_LLM_ENDPOINT override.
+    # Caddy adds its local CA to the macOS keychain on first run; Safari will
+    # prompt once to accept the cert — after that it's seamless.
+    HTTPS_PORT=$((PORT + 363))   # 8080 → 8443
+    CADDY_PID=""
+    if command -v caddy &>/dev/null; then
+      caddy reverse-proxy \
+        --from "localhost:${HTTPS_PORT}" \
+        --to   "localhost:${PORT}" \
+        > /tmp/caddy-llama.log 2>&1 &
+      CADDY_PID=$!
+      sleep 1
+      if kill -0 "${CADDY_PID}" 2>/dev/null; then
+        echo "   ✅ Caddy HTTPS proxy   → https://localhost:${HTTPS_PORT}/v1"
+        echo "      (Safari: accept the Caddy local-CA cert on first visit)"
+      else
+        echo "   ❌ Caddy failed to start — local LLM will be offline in Safari"
+        echo "      Check /tmp/caddy-llama.log for details"
+        echo "      Install: brew install caddy"
+        CADDY_PID=""
+      fi
+    else
+      echo "   ❌ caddy not found — local LLM will be offline in Safari"
+      echo "      Install: brew install caddy"
+    fi
+
     break
   fi
   sleep 2
@@ -135,6 +168,7 @@ _cleanup() {
   echo ""
   echo "Shutting down llama-server…"
   kill "${LLM_PID}" 2>/dev/null || true
+  [[ -n "${CADDY_PID}" ]] && kill "${CADDY_PID}" 2>/dev/null || true
   echo "Done."
 }
 trap '_cleanup' EXIT INT TERM
