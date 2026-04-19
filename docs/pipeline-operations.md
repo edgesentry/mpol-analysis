@@ -71,7 +71,7 @@ The preset weights are starting points. The pipeline auto-calibrates `w_graph` o
 
 ## Pipeline steps
 
-The pipeline runs 10 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
+The pipeline runs 11 steps in sequence. Each step prints a status line; in interactive mode, failed steps prompt retry or skip.
 
 | # | Step | Key modules |
 |---|---|---|
@@ -80,11 +80,12 @@ The pipeline runs 10 steps in sequence. Each step prints a status line; in inter
 | 3 | Live AIS streaming | `src/ingest/ais_stream.py` |
 | 4 | Sanctions loading | `src/ingest/sanctions.py` |
 | 5 | Custom feed drop-ins | `src/ingest/custom_feeds.py` |
-| 6 | Ownership graph | `src/ingest/vessel_registry.py` (→ Lance Graph) + `src/features/ownership_graph.py` |
-| 7 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
-| 8 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
-| 9 | GDELT ingestion | `src/ingest/gdelt.py` |
-| 10 | Dashboard | `src/api/main.py` (uvicorn) |
+| 6 | GFW EO dark-vessel ingest | `src/ingest/eo_gfw.py` (requires `GFW_API_TOKEN`; skipped gracefully if unset or quota exceeded) |
+| 7 | Ownership graph | `src/ingest/vessel_registry.py` (→ Lance Graph) + `src/features/ownership_graph.py` |
+| 8 | Feature engineering | `src/features/ais_behavior.py` + `identity.py` + `trade_mismatch.py` + `build_matrix.py` |
+| 9 | Scoring | `src/score/causal_sanction.py` + `mpol_baseline.py` + `anomaly.py` + `composite.py` + `watchlist.py` |
+| 10 | GDELT ingestion | `src/ingest/gdelt.py` |
+| 11 | DuckLake catalog checkpoint | `scripts/checkpoint_ducklake.py` |
 
 ---
 
@@ -339,11 +340,11 @@ SQL
 **Step 3 (AIS stream) — 0 rows inserted**
 Check `AISSTREAM_API_KEY` in `.env` and verify the bounding box covers an area with vessel traffic.
 
-**Step 5 (Ownership graph) — vessel_registry fails**
+**Step 7 (Ownership graph) — vessel_registry fails**
 Run `uv run python src/ingest/vessel_registry.py --db <db_path>` to rebuild the Lance Graph datasets manually. Alternatively, pass `--skip-graph` to `build_matrix.py` to run without graph features (graph features default to safe values).
 
-**Step 7 (Scoring) — composite returns empty DataFrame**
-`vessel_features` is empty. Re-run step 6 (feature engineering) and confirm `build_matrix.py` completed without errors.
+**Step 9 (Scoring) — composite returns empty DataFrame**
+`vessel_features` is empty. Re-run step 8 (feature engineering) and confirm `build_matrix.py` completed without errors.
 
 **Dashboard shows no vessels**
 Confirm `WATCHLIST_OUTPUT_PATH` points to the correct parquet file and that it contains rows (`polars.read_parquet(path).height > 0`).

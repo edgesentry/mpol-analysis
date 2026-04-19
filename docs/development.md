@@ -51,26 +51,26 @@ uv run python scripts/run_pipeline.py --region singapore --non-interactive
 uv run python scripts/run_pipeline.py --region japan --non-interactive
 ```
 
-Available regions: `singapore`, `japan`, `middleeast`, `europe`, `gulf`. See [`regional-playbooks.md`](regional-playbooks.md) for per-region parameter details.
+Available regions: `singapore`, `japan`, `middleeast`, `europe`, `persiangulf`, `gulfofguinea`, `gulfofaden`, `gulfofmexico`, `blacksea`. See [`regional-playbooks.md`](regional-playbooks.md) for per-region parameter details.
 
 Alternatively, run each step manually:
 
 ```bash
-uv run python src/ingest/schema.py             # initialise DuckDB schema
-uv run python src/ingest/marine_cadastre.py    # load historical AIS
-uv run python src/ingest/sanctions.py          # load sanctions entities
-uv run python src/ingest/vessel_registry.py    # load Equasis + ITU MMSI → Lance Graph
-uv run python src/ingest/eo_gfw.py --bbox 95,1,110,6 --days 30  # EO detections (requires GFW_API_TOKEN in .env)
-uv run python src/ingest/eo_gfw.py --csv data/raw/eo_detections_sample.csv  # EO detections via local CSV (no token needed)
-uv run python src/features/ais_behavior.py     # compute AIS behavioral features
-uv run python src/features/identity.py         # identity volatility features (Lance Graph)
-uv run python src/features/ownership_graph.py  # Lance Graph ownership features
-uv run python src/features/trade_mismatch.py   # trade flow mismatch features
-uv run python src/score/mpol_baseline.py       # HDBSCAN baseline
-uv run python src/score/anomaly.py             # Isolation Forest scoring
-uv run python src/score/causal_sanction.py     # C3: DiD causal model → calibrated w_graph
-uv run python src/score/composite.py           # composite score + SHAP (pass --w-graph from above)
-uv run python src/score/watchlist.py           # output candidate_watchlist.parquet
+uv run python -m pipeline.src.ingest.schema             # initialise DuckDB schema
+uv run python -m pipeline.src.ingest.marine_cadastre    # load historical AIS
+uv run python -m pipeline.src.ingest.sanctions          # load sanctions entities
+uv run python -m pipeline.src.ingest.vessel_registry    # load Equasis + ITU MMSI → Lance Graph
+uv run python -m pipeline.src.ingest.eo_gfw --bbox 95,1,110,6 --days 30  # EO detections (requires GFW_API_TOKEN in .env)
+uv run python -m pipeline.src.ingest.eo_gfw --csv data/raw/eo_detections_sample.csv  # EO detections via local CSV (no token needed)
+uv run python -m pipeline.src.features.ais_behavior     # compute AIS behavioral features
+uv run python -m pipeline.src.features.identity         # identity volatility features (Lance Graph)
+uv run python -m pipeline.src.features.ownership_graph  # Lance Graph ownership features
+uv run python -m pipeline.src.features.trade_mismatch   # trade flow mismatch features
+uv run python -m pipeline.src.score.mpol_baseline       # HDBSCAN baseline
+uv run python -m pipeline.src.score.anomaly             # Isolation Forest scoring
+uv run python -m pipeline.src.score.causal_sanction     # C3: DiD causal model → calibrated w_graph
+uv run python -m pipeline.src.score.composite           # composite score + SHAP (pass --w-graph from above)
+uv run python -m pipeline.src.score.watchlist           # output candidate_watchlist.parquet
 ```
 
 ### Run the dashboard
@@ -103,7 +103,14 @@ See [`backtracking-runbook.md`](backtracking-runbook.md) for full options and ou
 ### Run tests
 
 ```bash
+# Python — pipeline unit and integration tests
 uv run pytest tests/
+
+# Frontend — Vitest unit tests (jsdom environment)
+cd app && npm test
+
+# Frontend — ESLint static analysis
+cd app && npx eslint src/
 ```
 
 ## Coding Conventions

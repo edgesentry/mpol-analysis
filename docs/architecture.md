@@ -248,7 +248,7 @@ Computed with Polars over a rolling 30-day window per MMSI.
 
 | Feature | Definition | Shadow fleet signal |
 |---|---|---|
-| `ais_gap_count_30d` | Gaps > 6h in AIS signal while in open sea | STS transfer or deliberate dark period |
+| `ais_gap_count_30d` | Gaps > 10h in AIS signal while in open sea | STS transfer or deliberate dark period (10h threshold avoids normal 8–12h anchorage waits) |
 | `ais_gap_max_hours` | Longest single gap | Severity indicator |
 | `position_jump_count` | Consecutive positions implying > 50 knots | GPS spoofing |
 | `sts_candidate_count` | Co-located drift events (2 vessels within 0.5nm, both drifting, at sea) | Illicit STS transfer |

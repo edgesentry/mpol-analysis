@@ -45,6 +45,7 @@ nav:
   - Operations:
     - Pipeline Catalog (Operations View): pipeline-catalog.md
     - Pipeline Operations: pipeline-operations.md
+    - Custom Feed Integration: custom-feeds.md
     - Regional Playbooks: regional-playbooks.md
     - Backtesting Validation: backtesting-validation.md
     - Pre-Label Governance: prelabel-governance.md

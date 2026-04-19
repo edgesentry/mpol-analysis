@@ -1,6 +1,6 @@
 # Feature Engineering
 
-The arktrace pipeline computes 21 features across five families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
+The arktrace pipeline computes 22 features across five families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
 
 ## Feature families
 
@@ -10,8 +10,8 @@ The arktrace pipeline computes 21 features across five families for every vessel
 | Identity Volatility | `identity.py` | 5 | Lance Graph + DuckDB |
 | Ownership Graph | `ownership_graph.py` | 5 | Lance Graph (Polars joins) |
 | Trade Flow Mismatch | `trade_mismatch.py` | 2 | DuckDB + Comtrade API |
-| EO Fusion | `eo_fusion.py` | 2 | DuckDB (GFW API / CSV) |
-| **Total** | | **21** | |
+| EO Fusion | `eo_fusion.py` | 4 | DuckDB (GFW API via `eo_gfw.py` / CSV) |
+| **Total** | | **22** | |
 
 ---
 
@@ -21,9 +21,9 @@ Source: `ais_positions` table, computed over a rolling window (default 30 days, 
 
 ### `ais_gap_count_30d`
 
-Count of AIS transmission gaps longer than the configured threshold (default 6 hours) in the last 30 days.
+Count of AIS transmission gaps longer than the configured threshold (default 10 hours) in the last 30 days.
 
-**Shadow fleet signal:** Deliberate AIS switch-off is the primary evasion technique for sanctioned tankers. A gap of 6+ hours during transit is operationally unusual for a compliant vessel and strongly correlated with dark-transfer events.
+**Shadow fleet signal:** Deliberate AIS switch-off is the primary evasion technique for sanctioned tankers. The threshold is set to 10h because Singapore/Malacca anchorage wait times of 8–12h are normal commercial behaviour; genuine shadow-fleet dark periods for STS transfers are 12–48h and are still captured reliably.
 
 **Implementation:** The Polars lazy pipeline computes the time delta between consecutive position rows for each MMSI. Gaps are counted and summed per vessel over the rolling window.
 

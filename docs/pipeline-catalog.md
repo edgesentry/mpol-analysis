@@ -25,7 +25,7 @@ For implementation-level commands and flags, see [Pipeline Operations](pipeline-
 
 | Pipeline Type | Primary Purpose | Typical Run Timing | Expected Result |
 |---|---|---|---|
-| Full Screening (9-step) | Generate ranked shadow-fleet candidates from raw/public data | Initial setup, regional refresh, periodic baseline run | Updated watchlist and supporting artifacts for analyst triage |
+| Full Screening (11-step) | Generate ranked shadow-fleet candidates from raw/public data | Initial setup, regional refresh, periodic baseline run | Updated watchlist and supporting artifacts for analyst triage |
 | Continuous Monitoring (Streaming) | Keep vessel risk ranking fresh with live AIS and alerting | Persistent operations mode (minutes-level cadence) | Near-real-time watchlist updates and threshold-based alerts |
 | Historical Backtesting Validation | Validate ranking quality on historical evidence-backed windows | Before model/weight changes, pre-release, governance reviews | Reproducible metrics + threshold recommendations |
 | Review-Feedback Evaluation | Learn from human review outcomes and detect quality drift | Weekly/monthly quality cycle, after enough reviews accumulate | Tier-aware and ops-aware quality report with regression checks |
@@ -274,7 +274,7 @@ pipeline locally.
 ### Pipeline Steps
 
 1. Pull custom feeds from `arktrace-private-capvista` → `_inputs/custom_feeds/` (`continue-on-error`).
-2. Run `run_public_backtest_batch.py` for all 5 regions in seed mode — custom feeds are ingested at step 5 of the 9-step pipeline.
+2. Run `run_public_backtest_batch.py` for all 5 regions in seed mode — custom feeds are ingested at step 5 of the 11-step pipeline.
 3. `sync_r2.py push --keep 1` — zip all region artifacts, upload to `arktrace-public`, delete previous generation.
 4. `sync_r2.py push-demo` — overwrite `demo.zip` (lightweight bundle for quick developer setup).
 5. `sync_r2.py push-sanctions-db --force` — upload `public_eval.duckdb`.
