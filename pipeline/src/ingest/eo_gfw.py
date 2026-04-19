@@ -86,7 +86,7 @@ def fetch_gfw_detections(
         "date-range": f"{start_dt.strftime('%Y-%m-%d')},{end_dt.strftime('%Y-%m-%d')}",
         "spatial-resolution": "LOW",
         "temporal-resolution": "MONTHLY",
-        "group-by": "vesselId",
+        "group-by": "VESSEL_ID",
         "format": "json",
     }
     # Bounding box as a GeoJSON polygon (closed ring: 5 points)
