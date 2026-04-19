@@ -86,6 +86,8 @@ _FEED_SIGNATURES: list[tuple[set[str], str]] = [
     ({"mmsi", "lat", "lon"}, "ais"),
     # MarineCadastre uppercase variant
     ({"MMSI", "LAT", "LON"}, "ais"),
+    # Spire Maritime: latitude/longitude instead of lat/lon
+    ({"mmsi", "latitude", "longitude"}, "ais"),
 ]
 
 _FILENAME_HINTS: dict[str, str] = {
@@ -139,6 +141,13 @@ def _ingest_sar(csv_path: Path, db_path: str) -> int:
 
     # Normalise column names to lowercase
     df = df.rename({c: c.lower() for c in df.columns})
+
+    # Apply optional columnmap sidecar (e.g. ICEYE provider-specific column names)
+    # Format: {"our_col": "their_col"} — maps provider column names to our schema
+    col_map = _load_column_map(csv_path)
+    if col_map:
+        provider_to_ours = {v.lower(): k for k, v in col_map.items()}
+        df = df.rename({c: provider_to_ours[c] for c in df.columns if c in provider_to_ours})
 
     # Parse detected_at
     if df["detected_at"].dtype == pl.Utf8:
