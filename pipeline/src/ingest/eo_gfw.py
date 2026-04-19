@@ -129,6 +129,11 @@ def fetch_gfw_detections(
             f"public-global-presence:latest. Check your token at "
             f"https://globalfishingwatch.org/our-apis/tokens"
         )
+    if resp.status_code == 429:
+        raise PermissionError(
+            "GFW API 429: another report is already running for this token — "
+            "wait a few minutes and retry"
+        )
     if not resp.is_success:
         raise RuntimeError(
             f"GFW API {resp.status_code}: {resp.text[:500]}"
