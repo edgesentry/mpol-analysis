@@ -19,6 +19,8 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
+import { getToken, clearToken, isPrivateModeEnabled } from "./lib/auth";
+import LoginGate from "./components/LoginGate";
 import { loadAlerts, diffAndAppend } from "./lib/alerts";
 import type { AlertEntry } from "./lib/alerts";
 import KpiBar from "./components/KpiBar";
@@ -54,6 +56,9 @@ export default function App() {
   const [alerts, setAlerts] = useState<AlertEntry[]>(() => loadAlerts());
   const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
   const prevVesselsRef = useRef<VesselRow[]>([]);
+  const [authToken, setAuthToken] = useState<string | null>(() => getToken());
+  const privateMode = isPrivateModeEnabled();
+  const [showLogin, setShowLogin] = useState<boolean>(() => privateMode && !getToken());
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -82,12 +87,9 @@ export default function App() {
     const target = db ?? dbRef.current;
     if (!target) return;
     const activeRegions = regions ?? selectedRegions;
-    // Pass region list so syncAndLoad can filter region-tagged manifest files.
-    // Currently manifest files have no region tags (combined dataset), so this
-    // is a no-op until the pipeline adds them.
     const regionFilter = activeRegions.length > 0 ? activeRegions : undefined;
     setSyncStatus({ phase: "fetching_manifest" });
-    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter);
+    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, authToken ?? undefined);
     if (loaded > 0 && connRef.current) {
       await refreshQuery();
     }
@@ -217,6 +219,41 @@ export default function App() {
         <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "#4a5568" }}>
           DuckDB-WASM · OPFS · R2
         </span>
+
+        {privateMode && (
+          authToken ? (
+            <button
+              onClick={() => { clearToken(); setAuthToken(null); setShowLogin(true); }}
+              title="Sign out"
+              style={{
+                background: "transparent",
+                border: "1px solid #2d3748",
+                color: "#a0aec0",
+                padding: "0.25rem 0.6rem",
+                borderRadius: 4,
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              Private · Sign out
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowLogin(true)}
+              style={{
+                background: "transparent",
+                border: "1px solid #3b82f6",
+                color: "#93c5fd",
+                padding: "0.25rem 0.6rem",
+                borderRadius: 4,
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              Sign in
+            </button>
+          )
+        )}
       </header>
 
       {/* KPI bar */}
@@ -290,6 +327,18 @@ export default function App() {
           onClose={() => setAlertDrawerOpen(false)}
           onSelectVessel={(mmsi) => setSelectedMmsi(mmsi)}
           onAlertsChange={setAlerts}
+        />
+      )}
+
+      {/* Private data login gate */}
+      {showLogin && privateMode && (
+        <LoginGate
+          onLogin={() => {
+            const token = getToken();
+            setAuthToken(token);
+            setShowLogin(false);
+            if (dbRef.current) doSync(dbRef.current);
+          }}
         />
       )}
 

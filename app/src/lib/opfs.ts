@@ -22,6 +22,9 @@ export const R2_BASE_URL = "https://arktrace-public.edgesentry.io";
 // In dev, VITE_MANIFEST_URL can point to local fixture files served by Vite.
 const MANIFEST_URL =
   import.meta.env.VITE_MANIFEST_URL ?? `${R2_BASE_URL}/ducklake_manifest.json`;
+// Private manifest URL — set in production to enable token-gated private data.
+const PRIVATE_MANIFEST_URL: string | undefined =
+  import.meta.env.VITE_PRIVATE_MANIFEST_URL;
 
 // Default TTL: 7 days. Override with VITE_CACHE_TTL_DAYS env var.
 const CACHE_TTL_MS =
@@ -134,12 +137,12 @@ export function isStale(
 // Manifest fetch
 // ---------------------------------------------------------------------------
 
-export async function fetchManifest(): Promise<Manifest> {
-  const resp = await fetch(MANIFEST_URL, { cache: "no-store" });
+export async function fetchManifest(authToken?: string): Promise<Manifest> {
+  const url = authToken && PRIVATE_MANIFEST_URL ? PRIVATE_MANIFEST_URL : MANIFEST_URL;
+  const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  const resp = await fetch(url, { cache: "no-store", headers });
   if (!resp.ok) {
-    throw new Error(
-      `Failed to fetch manifest (${resp.status}): ${MANIFEST_URL}`
-    );
+    throw new Error(`Failed to fetch manifest (${resp.status}): ${url}`);
   }
   return resp.json() as Promise<Manifest>;
 }
@@ -163,13 +166,14 @@ export async function fetchManifest(): Promise<Manifest> {
 export async function syncAndLoad(
   db: AsyncDuckDB,
   onStatus: (s: SyncStatus) => void,
-  regions?: string[]
+  regions?: string[],
+  authToken?: string
 ): Promise<number> {
   // ── 1. Fetch manifest ───────────────────────────────────────────────────
   onStatus({ phase: "fetching_manifest" });
   let manifest: Manifest;
   try {
-    manifest = await fetchManifest();
+    manifest = await fetchManifest(authToken);
   } catch {
     // No network — try OPFS cache first, then bundled fixtures
     onStatus({ phase: "loading" });
@@ -217,7 +221,8 @@ export async function syncAndLoad(
       current: f.register_as,
     });
     try {
-      const resp = await fetch(f.url);
+      const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const resp = await fetch(f.url, { headers });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buf = await resp.arrayBuffer();
       await opfsWriteBuffer(f.register_as, buf);
