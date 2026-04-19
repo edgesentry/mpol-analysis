@@ -1,0 +1,9 @@
+{
+  "detection_id": "object_id",
+  "detected_at": "acquisition_datetime",
+  "lat": "latitude_dd",
+  "lon": "longitude_dd",
+  "length_m": "vessel_length_m",
+  "source_scene": "scene_id",
+  "confidence": "detection_confidence"
+}
