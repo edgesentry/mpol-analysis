@@ -239,7 +239,17 @@ export default function App() {
             </button>
           ) : (
             <button
-              onClick={loginWithCFAccess}
+              onClick={() => {
+                const popup = loginWithCFAccess();
+                if (!popup) return;
+                const timer = setInterval(async () => {
+                  if (popup.closed) {
+                    clearInterval(timer);
+                    const authed = await checkPrivateAuth();
+                    setPrivateAuth(authed);
+                  }
+                }, 500);
+              }}
               style={{
                 background: "transparent",
                 border: "1px solid #3b82f6",

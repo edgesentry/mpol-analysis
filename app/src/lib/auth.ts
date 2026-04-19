@@ -21,10 +21,15 @@ export async function checkPrivateAuth(): Promise<boolean> {
   }
 }
 
-/** Redirect to Cloudflare Access login, returning to the current page after. */
-export function loginWithCFAccess(): void {
+/**
+ * Open Cloudflare Access login in a popup. CF Access sets its cookie on the
+ * Worker domain; once the popup closes, the caller should re-check auth.
+ * redirect_url must stay on the same domain as the Access application.
+ */
+export function loginWithCFAccess(): Window | null {
   const origin = new URL(PRIVATE_MANIFEST_URL!).origin;
-  window.location.href = `${origin}/cdn-cgi/access/login?redirect_url=${encodeURIComponent(window.location.href)}`;
+  const loginUrl = `${origin}/cdn-cgi/access/login?redirect_url=${encodeURIComponent(origin + "/")}`;
+  return window.open(loginUrl, "cf-access-login", "width=520,height=620,noopener");
 }
 
 /** Redirect to Cloudflare Access logout. */
