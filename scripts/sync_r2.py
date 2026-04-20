@@ -996,6 +996,33 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:  # noqa: ARG001
     Called automatically by the pipeline API (POST /api/reviews/merge) which is
     triggered by the CF Queue consumer Worker after each user push.
     """
+    import fcntl
+    import json as _json
+
+    import duckdb as _duckdb
+    import pyarrow.fs as pafs
+
+    # File lock prevents two concurrent merge-reviews processes from racing
+    # (e.g. a manual run and a queue-triggered run overlapping).  Non-blocking
+    # so a duplicate attempt exits cleanly instead of queuing behind.
+    lock_path = Path(__file__).parent.parent / "data" / ".merge_reviews.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fh = open(lock_path, "w")  # noqa: WPS515
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("merge-reviews already running — skipping duplicate run.", flush=True)
+        lock_fh.close()
+        return 0
+
+    try:
+        return _cmd_merge_reviews_inner(args)
+    finally:
+        fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        lock_fh.close()
+
+
+def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
     import json as _json
 
     import duckdb as _duckdb

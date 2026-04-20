@@ -24,26 +24,29 @@ interface MergeJob {
 
 export default {
   async queue(batch: MessageBatch<MergeJob>, env: Env): Promise<void> {
-    for (const msg of batch.messages) {
-      try {
-        const resp = await fetch(`${env.PIPELINE_URL}/api/reviews/merge`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Pipeline-Secret": env.PIPELINE_SECRET,
-          },
-          body: JSON.stringify(msg.body),
-        });
+    // Collapse the entire batch into a single pipeline call — all messages in
+    // the batch represent the same operation (merge-reviews), so one call is
+    // sufficient regardless of how many users pushed concurrently.
+    try {
+      const resp = await fetch(`${env.PIPELINE_URL}/api/reviews/merge`, {
+        method: "POST",
+        headers: { "X-Pipeline-Secret": env.PIPELINE_SECRET },
+      });
 
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => String(resp.status));
-          console.error(`[review-merge] Pipeline returned ${resp.status}: ${text}`);
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => String(resp.status));
+        console.error(`[review-merge] Pipeline returned ${resp.status}: ${text}`);
+        // Retry all messages so the merge is retried; CF Queue deduplicates
+        // further messages that arrive while these are pending.
+        for (const msg of batch.messages) {
           msg.retry({ delaySeconds: 30 });
-        } else {
-          msg.ack();
         }
-      } catch (err) {
-        console.error("[review-merge] Failed to reach pipeline:", err);
+      } else {
+        batch.ackAll();
+      }
+    } catch (err) {
+      console.error("[review-merge] Failed to reach pipeline:", err);
+      for (const msg of batch.messages) {
         msg.retry({ delaySeconds: 30 });
       }
     }
