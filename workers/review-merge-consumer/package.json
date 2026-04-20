@@ -1,0 +1,11 @@
+{
+  "name": "arktrace-review-merge-consumer",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
