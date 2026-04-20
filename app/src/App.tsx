@@ -104,10 +104,11 @@ export default function App() {
     setSyncStatus({ phase: "fetching_manifest" });
     const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, isAuthed, activeCfg, token);
     if (loaded > 0 && connRef.current) {
-      // Pull remote reviews from R2 and merge into local DuckDB before refreshing UI
-      await mergeDownloadedReviews(connRef.current).catch((err) =>
-        console.warn("[sync] mergeDownloadedReviews failed:", err)
-      );
+      if (isAuthed) {
+        await mergeDownloadedReviews(connRef.current).catch((err) =>
+          console.warn("[sync] mergeDownloadedReviews failed:", err)
+        );
+      }
       await refreshQuery();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

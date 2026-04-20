@@ -47,6 +47,12 @@ export interface ManifestFile {
    * that contain all regions — those are always downloaded.
    */
   region?: string;
+  /**
+   * When true, this file is only downloaded for authenticated (logged-in) users.
+   * Non-authenticated clients skip it entirely.  Used for merged analyst review
+   * files which must not leak to anonymous sessions.
+   */
+  private?: boolean;
 }
 
 export interface Manifest {
@@ -208,9 +214,10 @@ export async function syncAndLoad(
   // ── 2. Download missing / stale files ───────────────────────────────────
   // Filter by region: skip files tagged for a different region than requested.
   // Files with no region tag are always included (they contain all regions).
-  const wantedFiles = regions
+  const wantedFiles = (regions
     ? manifest.files.filter((f) => !f.region || regions.includes(f.region))
-    : manifest.files;
+    : manifest.files
+  ).filter((f) => !f.private || privateAuth);
 
   const toDownload: ManifestFile[] = [];
   for (const f of wantedFiles) {

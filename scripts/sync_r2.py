@@ -1159,6 +1159,7 @@ def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
                 "url": f"{_PUBLIC_BASE_URL}/{r2_key.replace(f'{bucket}/', '')}",
                 "size_bytes": local.stat().st_size,
                 "register_as": reg_as,
+                "private": True,  # skipped by non-authenticated clients in opfs.ts
             }
 
         manifest["files"] = list(existing.values())
