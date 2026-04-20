@@ -22,12 +22,13 @@ export async function checkPrivateAuth(): Promise<boolean> {
 }
 
 /**
- * Open the private manifest URL in a popup. CF Access intercepts it, redirects
- * to login, then back to the manifest. Once the popup closes the CF_Authorization
- * cookie is set and the caller should re-check auth.
+ * Open /auth-success on the Worker domain in a popup. CF Access intercepts it,
+ * redirects to login, then back to /auth-success which auto-closes the popup.
+ * Once the popup closes the CF_Authorization cookie is set; caller re-checks auth.
  */
 export function loginWithCFAccess(): Window | null {
-  return window.open(PRIVATE_MANIFEST_URL!, "cf-access-login", "width=520,height=620,noopener");
+  const origin = new URL(PRIVATE_MANIFEST_URL!).origin;
+  return window.open(`${origin}/auth-success`, "cf-access-login", "width=520,height=620,noopener");
 }
 
 /** Redirect to Cloudflare Access logout. */
