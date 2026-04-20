@@ -997,10 +997,6 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:  # noqa: ARG001
     triggered by the CF Queue consumer Worker after each user push.
     """
     import fcntl
-    import json as _json
-
-    import duckdb as _duckdb
-    import pyarrow.fs as pafs
 
     # File lock prevents two concurrent merge-reviews processes from racing
     # (e.g. a manual run and a queue-triggered run overlapping).  Non-blocking
