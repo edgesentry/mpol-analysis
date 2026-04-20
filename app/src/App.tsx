@@ -19,6 +19,8 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
+import { pushReviews, pullRemoteReviews } from "./lib/push";
+import type { PushStatus } from "./lib/push";
 import { checkPrivateAuth, login, logout, isPrivateModeEnabled, getAuthToken } from "./lib/auth";
 import { loadConfig } from "./lib/config";
 import type { AppConfig } from "./lib/config";
@@ -59,6 +61,7 @@ export default function App() {
   const prevVesselsRef = useRef<VesselRow[]>([]);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<PushStatus>({ phase: "idle" });
   const privateAuth = userEmail !== null;
   const privateMode = appConfig ? isPrivateModeEnabled(appConfig) : false;
 
@@ -101,6 +104,10 @@ export default function App() {
     setSyncStatus({ phase: "fetching_manifest" });
     const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, isAuthed, activeCfg, token);
     if (loaded > 0 && connRef.current) {
+      // Pull remote reviews from R2 and merge into local DuckDB before refreshing UI
+      await pullRemoteReviews(target, connRef.current).catch((err) =>
+        console.warn("[sync] pullRemoteReviews failed:", err)
+      );
       await refreshQuery();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,6 +132,17 @@ export default function App() {
     const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
     setReviewStates(states);
   }, [minConfidence, selectedRegions]);
+
+  const handlePush = useCallback(async () => {
+    const db = dbRef.current;
+    const conn = connRef.current;
+    if (!db || !conn || !userEmail) return;
+    try {
+      await pushReviews(db, conn, setPushStatus);
+    } catch (err) {
+      setPushStatus({ phase: "error", message: String(err) });
+    }
+  }, [userEmail]);
 
   const handleClaim = useCallback(async (mmsi: string) => {
     const conn = connRef.current;
@@ -291,7 +309,13 @@ export default function App() {
       />
 
       {/* Sync status */}
-      <SyncStatusBar status={syncStatus} onSync={() => doSync()} />
+      <SyncStatusBar
+        status={syncStatus}
+        onSync={() => doSync()}
+        userEmail={userEmail}
+        pushStatus={pushStatus}
+        onPush={userEmail ? handlePush : undefined}
+      />
 
       {/* Main content: sidebar + map */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
