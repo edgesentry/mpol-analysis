@@ -48,6 +48,7 @@ def secret(monkeypatch):
 # Auth
 # ---------------------------------------------------------------------------
 
+
 def test_no_header_returns_401():
     resp = client.post("/api/reviews/merge")
     assert resp.status_code == 401
@@ -67,6 +68,7 @@ def test_missing_env_var_returns_401():
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
+
 
 def test_valid_request_returns_202_and_runs_merge(secret):
     with patch.object(reviews_module, "_do_merge") as mock_merge:
@@ -91,6 +93,7 @@ def test_flags_cleared_after_single_run(secret):
 # ---------------------------------------------------------------------------
 # Coalescing guard — the critical dedup behaviour
 # ---------------------------------------------------------------------------
+
 
 def test_concurrent_request_sets_pending_and_triggers_one_extra_run(secret):
     """Two requests while a merge is running → exactly 2 total _do_merge calls.

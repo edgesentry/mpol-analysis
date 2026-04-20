@@ -170,7 +170,7 @@ _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from r
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 _DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
 _REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on every push-reviews
-_REVIEWS_PREFIX  = "reviews"          # per-user uploads live under reviews/<email>/
+_REVIEWS_PREFIX = "reviews"  # per-user uploads live under reviews/<email>/
 _REVIEWS_MERGED_PREFIX = "reviews/merged"  # server-side merged output
 
 # DuckLake catalog keys — public bucket (root) and private bucket (outputs/ prefix)
@@ -1046,14 +1046,16 @@ def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
         )
 
     reviews_keys = collect("/reviews.parquet")
-    audit_keys   = collect("/audit.parquet")
-    briefs_keys  = collect("/briefs.parquet")
+    audit_keys = collect("/audit.parquet")
+    briefs_keys = collect("/briefs.parquet")
 
     if not reviews_keys:
         print("No per-user review files found in R2 — nothing to merge.")
         return 0
 
-    print(f"Merging {len(reviews_keys)} user(s): {', '.join(k.split('/')[2] for k in reviews_keys)}")
+    print(
+        f"Merging {len(reviews_keys)} user(s): {', '.join(k.split('/')[2] for k in reviews_keys)}"
+    )
 
     # ── 2. Download to a temp directory ────────────────────────────────────
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1068,13 +1070,13 @@ def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
             return paths
 
         review_files = download_all(reviews_keys, "reviews")
-        audit_files  = download_all(audit_keys,   "audit")
-        briefs_files = download_all(briefs_keys,  "briefs")
+        audit_files = download_all(audit_keys, "audit")
+        briefs_files = download_all(briefs_keys, "briefs")
 
         # ── 3. Merge with DuckDB ────────────────────────────────────────────
         merged_reviews_path = tmp / "merged_reviews.parquet"
-        merged_audit_path   = tmp / "merged_audit.parquet"
-        merged_briefs_path  = tmp / "merged_briefs.parquet"
+        merged_audit_path = tmp / "merged_audit.parquet"
+        merged_briefs_path = tmp / "merged_briefs.parquet"
 
         con = _duckdb.connect()
         try:
@@ -1116,8 +1118,8 @@ def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
         # ── 4. Upload merged files to R2 ────────────────────────────────────
         uploads = [
             (merged_reviews_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/reviews.parquet"),
-            (merged_audit_path,   f"{bucket}/{_REVIEWS_MERGED_PREFIX}/audit.parquet"),
-            (merged_briefs_path,  f"{bucket}/{_REVIEWS_MERGED_PREFIX}/briefs.parquet"),
+            (merged_audit_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/audit.parquet"),
+            (merged_briefs_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/briefs.parquet"),
         ]
         for local, r2_key in uploads:
             size = _upload_file(fs, local, r2_key)
@@ -1136,14 +1138,26 @@ def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
         existing = {f["register_as"]: f for f in manifest.get("files", [])}
 
         for local, r2_key, reg_as in [
-            (merged_reviews_path, f"{_REVIEWS_MERGED_PREFIX}/reviews.parquet", "reviews_merged.parquet"),
-            (merged_audit_path,   f"{_REVIEWS_MERGED_PREFIX}/audit.parquet",   "reviews_audit_merged.parquet"),
-            (merged_briefs_path,  f"{_REVIEWS_MERGED_PREFIX}/briefs.parquet",  "reviews_briefs_merged.parquet"),
+            (
+                merged_reviews_path,
+                f"{_REVIEWS_MERGED_PREFIX}/reviews.parquet",
+                "reviews_merged.parquet",
+            ),
+            (
+                merged_audit_path,
+                f"{_REVIEWS_MERGED_PREFIX}/audit.parquet",
+                "reviews_audit_merged.parquet",
+            ),
+            (
+                merged_briefs_path,
+                f"{_REVIEWS_MERGED_PREFIX}/briefs.parquet",
+                "reviews_briefs_merged.parquet",
+            ),
         ]:
             existing[reg_as] = {
-                "key":         r2_key.replace(f"{bucket}/", ""),
-                "url":         f"{_PUBLIC_BASE_URL}/{r2_key.replace(f'{bucket}/', '')}",
-                "size_bytes":  local.stat().st_size,
+                "key": r2_key.replace(f"{bucket}/", ""),
+                "url": f"{_PUBLIC_BASE_URL}/{r2_key.replace(f'{bucket}/', '')}",
+                "size_bytes": local.stat().st_size,
                 "register_as": reg_as,
             }
 
