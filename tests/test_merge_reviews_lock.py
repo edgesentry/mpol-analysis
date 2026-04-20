@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 
