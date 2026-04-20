@@ -56,7 +56,8 @@ export default function App() {
   const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
   const prevVesselsRef = useRef<VesselRow[]>([]);
   const privateMode = isPrivateModeEnabled();
-  const [privateAuth, setPrivateAuth] = useState<boolean>(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const privateAuth = userEmail !== null;
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -69,11 +70,11 @@ export default function App() {
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
-        const authed = privateMode ? await checkPrivateAuth() : false;
-        if (!cancelled) setPrivateAuth(authed);
+        const email = privateMode ? await checkPrivateAuth() : null;
+        if (!cancelled) setUserEmail(email);
         // Skip auto-sync if the region picker is waiting for user input.
         if (!showRegionPicker) {
-          await doSync(db, undefined, authed);
+          await doSync(db, undefined, email !== null);
         }
       } catch (err) {
         if (!cancelled) setInitError(String(err));
@@ -222,21 +223,26 @@ export default function App() {
 
         {privateMode && (
           privateAuth ? (
-            <button
-              onClick={logoutFromCFAccess}
-              title="Sign out"
-              style={{
-                background: "transparent",
-                border: "1px solid #2d3748",
-                color: "#a0aec0",
-                padding: "0.25rem 0.6rem",
-                borderRadius: 4,
-                fontSize: "0.75rem",
-                cursor: "pointer",
-              }}
-            >
-              Private · Sign out
-            </button>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ color: "#a0aec0", fontSize: "0.75rem" }}>
+                Logged in as {userEmail}
+              </span>
+              <button
+                onClick={logoutFromCFAccess}
+                title="Sign out"
+                style={{
+                  background: "transparent",
+                  border: "1px solid #2d3748",
+                  color: "#a0aec0",
+                  padding: "0.25rem 0.6rem",
+                  borderRadius: 4,
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                }}
+              >
+                Sign out
+              </button>
+            </span>
           ) : (
             <button
               onClick={() => {
@@ -245,8 +251,8 @@ export default function App() {
                 const timer = setInterval(async () => {
                   if (popup.closed) {
                     clearInterval(timer);
-                    const authed = await checkPrivateAuth();
-                    setPrivateAuth(authed);
+                    const email = await checkPrivateAuth();
+                    setUserEmail(email);
                   }
                 }, 500);
               }}

@@ -4,20 +4,19 @@ const PRIVATE_MANIFEST_URL = import.meta.env.VITE_PRIVATE_MANIFEST_URL as string
 export const isPrivateModeEnabled = (): boolean => Boolean(PRIVATE_MANIFEST_URL);
 
 /**
- * Check whether the user is authenticated with Cloudflare Access by probing
- * the private manifest with credentials. Returns true if the request succeeds
- * (Access cookie present), false if redirected to login or blocked.
+ * Check CF Access authentication by calling /whoami on the Worker.
+ * Returns the authenticated user's email, or null if not authenticated.
  */
-export async function checkPrivateAuth(): Promise<boolean> {
-  if (!PRIVATE_MANIFEST_URL) return false;
+export async function checkPrivateAuth(): Promise<string | null> {
+  if (!PRIVATE_MANIFEST_URL) return null;
   try {
-    const resp = await fetch(PRIVATE_MANIFEST_URL, {
-      method: "HEAD",
-      credentials: "include",
-    });
-    return resp.ok;
+    const origin = new URL(PRIVATE_MANIFEST_URL).origin;
+    const resp = await fetch(`${origin}/whoami`, { credentials: "include" });
+    if (!resp.ok) return null;
+    const { email } = await resp.json() as { email: string };
+    return email || null;
   } catch {
-    return false;
+    return null;
   }
 }
 
