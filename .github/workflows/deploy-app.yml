@@ -31,6 +31,8 @@ jobs:
         working-directory: app
         # VITE_MANIFEST_URL left unset so opfs.ts falls back to the R2 URL.
         run: npm run build
+        env:
+          VITE_PRIVATE_MANIFEST_URL: ${{ vars.VITE_PRIVATE_MANIFEST_URL }}
 
       - name: Deploy to Cloudflare Pages
         working-directory: app
