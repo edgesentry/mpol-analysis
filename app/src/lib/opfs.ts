@@ -17,14 +17,12 @@
 
 import type { AsyncDuckDB } from "@duckdb/duckdb-wasm";
 import { registerParquet } from "./duckdb";
+import type { AppConfig } from "./config";
 
 export const R2_BASE_URL = "https://arktrace-public.edgesentry.io";
 // In dev, VITE_MANIFEST_URL can point to local fixture files served by Vite.
 const MANIFEST_URL =
   import.meta.env.VITE_MANIFEST_URL ?? `${R2_BASE_URL}/ducklake_manifest.json`;
-// Private manifest URL — set in production to enable token-gated private data.
-const PRIVATE_MANIFEST_URL: string | undefined =
-  import.meta.env.VITE_PRIVATE_MANIFEST_URL;
 
 // Default TTL: 7 days. Override with VITE_CACHE_TTL_DAYS env var.
 const CACHE_TTL_MS =
@@ -137,15 +135,24 @@ export function isStale(
 // Manifest fetch
 // ---------------------------------------------------------------------------
 
-export async function fetchManifest(privateAuth?: boolean): Promise<Manifest> {
-  const url = privateAuth && PRIVATE_MANIFEST_URL ? PRIVATE_MANIFEST_URL : MANIFEST_URL;
-  const resp = await fetch(url, {
-    cache: "no-store",
-    credentials: privateAuth ? "include" : "omit",
-  });
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch manifest (${resp.status}): ${url}`);
+export async function fetchManifest(
+  privateAuth?: boolean,
+  config?: AppConfig,
+  authToken?: string | null
+): Promise<Manifest> {
+  if (privateAuth && config) {
+    const url = config.privateManifestUrl ?? MANIFEST_URL;
+    const resp = await fetch(url, {
+      cache: "no-store",
+      ...(config.authProvider === "cloudflare-access"
+        ? { credentials: "include" }
+        : { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }),
+    });
+    if (!resp.ok) throw new Error(`Failed to fetch manifest (${resp.status}): ${url}`);
+    return resp.json() as Promise<Manifest>;
   }
+  const resp = await fetch(MANIFEST_URL, { cache: "no-store", credentials: "omit" });
+  if (!resp.ok) throw new Error(`Failed to fetch manifest (${resp.status}): ${MANIFEST_URL}`);
   return resp.json() as Promise<Manifest>;
 }
 
@@ -169,13 +176,15 @@ export async function syncAndLoad(
   db: AsyncDuckDB,
   onStatus: (s: SyncStatus) => void,
   regions?: string[],
-  privateAuth?: boolean
+  privateAuth?: boolean,
+  config?: AppConfig,
+  authToken?: string | null
 ): Promise<number> {
   // ── 1. Fetch manifest ───────────────────────────────────────────────────
   onStatus({ phase: "fetching_manifest" });
   let manifest: Manifest;
   try {
-    manifest = await fetchManifest(privateAuth);
+    manifest = await fetchManifest(privateAuth, config, authToken);
   } catch {
     // No network — try OPFS cache first, then bundled fixtures
     onStatus({ phase: "loading" });
@@ -223,9 +232,17 @@ export async function syncAndLoad(
       current: f.register_as,
     });
     try {
-      const resp = await fetch(f.url, {
-        credentials: privateAuth ? "include" : "omit",
-      });
+      const fetchUrl =
+        privateAuth && config?.privateSigningEndpoint
+          ? `${config.privateSigningEndpoint}?key=${encodeURIComponent(f.key)}`
+          : f.url;
+      const fetchOpts: RequestInit =
+        privateAuth && config
+          ? config.authProvider === "cloudflare-access"
+            ? { credentials: "include" }
+            : { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
+          : { credentials: "omit" };
+      const resp = await fetch(fetchUrl, fetchOpts);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buf = await resp.arrayBuffer();
       await opfsWriteBuffer(f.register_as, buf);

@@ -19,7 +19,9 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
-import { checkPrivateAuth, loginWithCFAccess, logoutFromCFAccess, isPrivateModeEnabled } from "./lib/auth";
+import { checkPrivateAuth, login, logout, isPrivateModeEnabled, getAuthToken } from "./lib/auth";
+import { loadConfig } from "./lib/config";
+import type { AppConfig } from "./lib/config";
 import { loadAlerts, diffAndAppend } from "./lib/alerts";
 import type { AlertEntry } from "./lib/alerts";
 import KpiBar from "./components/KpiBar";
@@ -55,26 +57,30 @@ export default function App() {
   const [alerts, setAlerts] = useState<AlertEntry[]>(() => loadAlerts());
   const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
   const prevVesselsRef = useRef<VesselRow[]>([]);
-  const privateMode = isPrivateModeEnabled();
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const privateAuth = userEmail !== null;
+  const privateMode = appConfig ? isPrivateModeEnabled(appConfig) : false;
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        const cfg = await loadConfig();
+        if (cancelled) return;
+        setAppConfig(cfg);
         const { db, conn } = await initDuckDB();
         if (cancelled) return;
         dbRef.current = db;
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
-        const email = privateMode ? await checkPrivateAuth() : null;
+        const email = isPrivateModeEnabled(cfg) ? await checkPrivateAuth(cfg) : null;
         if (!cancelled) setUserEmail(email);
         // Skip auto-sync if the region picker is waiting for user input.
         if (!showRegionPicker) {
-          await doSync(db, undefined, email !== null);
+          await doSync(db, undefined, email !== null, cfg);
         }
       } catch (err) {
         if (!cancelled) setInitError(String(err));
@@ -84,13 +90,16 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doSync = useCallback(async (db?: AsyncDuckDB, regions?: string[], auth?: boolean) => {
+  const doSync = useCallback(async (db?: AsyncDuckDB, regions?: string[], auth?: boolean, cfg?: AppConfig) => {
     const target = db ?? dbRef.current;
     if (!target) return;
+    const activeCfg = cfg ?? appConfig ?? undefined;
     const activeRegions = regions ?? selectedRegions;
     const regionFilter = activeRegions.length > 0 ? activeRegions : undefined;
+    const isAuthed = auth ?? privateAuth;
+    const token = activeCfg && isAuthed ? await getAuthToken(activeCfg) : null;
     setSyncStatus({ phase: "fetching_manifest" });
-    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, auth ?? privateAuth);
+    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, isAuthed, activeCfg, token);
     if (loaded > 0 && connRef.current) {
       await refreshQuery();
     }
@@ -228,7 +237,7 @@ export default function App() {
                 Logged in as {userEmail}
               </span>
               <button
-                onClick={logoutFromCFAccess}
+                onClick={() => appConfig && logout(appConfig)}
                 title="Sign out"
                 style={{
                   background: "transparent",
@@ -246,12 +255,13 @@ export default function App() {
           ) : (
             <button
               onClick={() => {
-                const popup = loginWithCFAccess();
+                if (!appConfig) return;
+                const popup = login(appConfig);
                 if (!popup) return;
                 const timer = setInterval(async () => {
                   if (popup.closed) {
                     clearInterval(timer);
-                    const email = await checkPrivateAuth();
+                    const email = await checkPrivateAuth(appConfig);
                     setUserEmail(email);
                   }
                 }, 500);
