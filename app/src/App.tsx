@@ -137,13 +137,13 @@ export default function App() {
   const handlePush = useCallback(async () => {
     const db = dbRef.current;
     const conn = connRef.current;
-    if (!db || !conn || !userEmail) return;
+    if (!db || !conn || !userEmail || !appConfig) return;
     try {
-      await pushReviews(db, conn, setPushStatus);
+      await pushReviews(db, conn, appConfig, setPushStatus);
     } catch (err) {
       setPushStatus({ phase: "error", message: String(err) });
     }
-  }, [userEmail]);
+  }, [userEmail, appConfig]);
 
   const handleClaim = useCallback(async (mmsi: string) => {
     const conn = connRef.current;

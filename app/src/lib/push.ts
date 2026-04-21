@@ -22,6 +22,7 @@
 
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { AsyncDuckDB } from "@duckdb/duckdb-wasm";
+import type { AppConfig } from "./config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +50,7 @@ export type PushStatus =
 export async function pushReviews(
   db: AsyncDuckDB,
   conn: AsyncDuckDBConnection,
+  config: AppConfig,
   onStatus: (s: PushStatus) => void
 ): Promise<void> {
   onStatus({ phase: "exporting" });
@@ -73,9 +75,9 @@ export async function pushReviews(
 
   onStatus({ phase: "uploading" });
 
-  const resp = await fetch("/api/reviews/push", {
+  const resp = await fetch(pushEndpointUrl(config), {
     method: "POST",
-    credentials: "include", // send CF_Authorization cookie
+    credentials: "include",
     body: form,
   });
 
@@ -87,6 +89,24 @@ export async function pushReviews(
 
   const { updatedAt } = (await resp.json()) as { updatedAt: string };
   onStatus({ phase: "done", pushedAt: updatedAt });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * For cloudflare-access deployments, push through the private Worker which
+ * has CF Access enabled — the email header is reliably injected there.
+ * The Pages Function route (/api/reviews/push) lacks CF Access protection
+ * and always returns 401 because the header is never injected.
+ */
+function pushEndpointUrl(config: AppConfig): string {
+  if (config.authProvider === "cloudflare-access" && config.privateManifestUrl) {
+    const origin = new URL(config.privateManifestUrl).origin;
+    return `${origin}/push-reviews`;
+  }
+  return "/api/reviews/push";
 }
 
 // ---------------------------------------------------------------------------
