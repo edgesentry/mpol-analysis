@@ -14,6 +14,7 @@ Available regions: singapore, japan, middleeast, europe, persiangulf, blacksea
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -581,8 +582,11 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     except PermissionError as exc:
         _ok(f"Skipping EO ingest — {exc}")
         return True
+    except json.JSONDecodeError as exc:
+        _ok(f"Skipping EO ingest — GFW response truncated ({exc}), will retry on next run")
+        return True
     except Exception as exc:
-        # Treat network timeouts as a soft skip so the pipeline continues.
+        # Treat network timeouts / disconnects as a soft skip so the pipeline continues.
         exc_str = str(exc)
         _TRANSIENT = (
             "timed out",
@@ -591,6 +595,7 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
             "connection reset",
             "connection refused",
             "remotedisconnected",
+            "unterminated string",
         )
         if any(t in exc_str.lower() for t in _TRANSIENT):
             _ok(
