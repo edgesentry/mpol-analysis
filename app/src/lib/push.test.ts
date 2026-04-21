@@ -96,6 +96,37 @@ describe("pushReviews — endpoint routing", () => {
   });
 });
 
+describe("pushReviews — tmp file pre-registration", () => {
+  it("pre-registers both tmp_ and final filename for each export table", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ updatedAt: "2026-04-21T00:00:00.000Z" }),
+    }));
+    const db = makeDb();
+    await pushReviews(db as never, makeConn() as never, CF_CONFIG, () => {});
+    const registeredNames = db.registerFileBuffer.mock.calls.map((c: unknown[]) => c[0]);
+    expect(registeredNames).toContain("tmp__push_reviews.parquet");
+    expect(registeredNames).toContain("_push_reviews.parquet");
+    expect(registeredNames).toContain("tmp__push_audit.parquet");
+    expect(registeredNames).toContain("_push_audit.parquet");
+    expect(registeredNames).toContain("tmp__push_briefs.parquet");
+    expect(registeredNames).toContain("_push_briefs.parquet");
+  });
+
+  it("registers tmp_ file before final file for each table", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ updatedAt: "2026-04-21T00:00:00.000Z" }),
+    }));
+    const db = makeDb();
+    await pushReviews(db as never, makeConn() as never, CF_CONFIG, () => {});
+    const names = db.registerFileBuffer.mock.calls.map((c: unknown[]) => c[0] as string);
+    for (const file of ["_push_reviews.parquet", "_push_audit.parquet", "_push_briefs.parquet"]) {
+      expect(names.indexOf(`tmp_${file}`)).toBeLessThan(names.indexOf(file));
+    }
+  });
+});
+
 describe("pushReviews — status progression", () => {
   it("emits exporting → uploading → done on success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({

@@ -64,10 +64,14 @@ export async function pushReviews(
 
   const form = new FormData();
   for (const { table, file, field } of exports) {
+    // DuckDB safe-writes via a tmp_ staging file before renaming to the final path.
+    // Pre-register both so the WASM layer doesn't log "Buffering missing file".
+    await db.registerFileBuffer(`tmp_${file}`, new Uint8Array(0));
     await db.registerFileBuffer(file, new Uint8Array(0));
     await conn.query(`COPY ${table} TO '${file}' (FORMAT PARQUET)`);
     const bytes = await db.copyFileToBuffer(file);
     await db.dropFile(file);
+    await db.dropFile(`tmp_${file}`).catch(() => {});
     form.append(
       field,
       new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }),
