@@ -168,11 +168,12 @@ export default function App() {
         identifier_basis: "mmsi",
         evidence: [],
       });
+      setPushStatus((prev) => prev.phase === "done" ? { phase: "idle" } : prev);
     } catch {
       // Roll back on failure
       await refreshQuery();
     }
-  }, [reviewStates, refreshQuery]);
+  }, [reviewStates, refreshQuery, setPushStatus]);
 
   // Re-query when filter changes (if data is already loaded)
   useEffect(() => {
@@ -357,6 +358,7 @@ export default function App() {
                     const states = await getBulkReviewStates(conn, vessels.map((v) => v.mmsi));
                     setReviewStates(states);
                   }
+                  setPushStatus((prev) => prev.phase === "done" ? { phase: "idle" } : prev);
                 }}
               />
             ) : null;
