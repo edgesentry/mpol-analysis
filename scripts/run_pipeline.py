@@ -584,8 +584,9 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     except Exception as exc:
         # Treat network timeouts as a soft skip so the pipeline continues.
         exc_str = str(exc)
-        if "timed out" in exc_str.lower() or "timeout" in exc_str.lower():
-            _ok("Skipping EO ingest — GFW API timed out (will retry on next run)")
+        _TRANSIENT = ("timed out", "timeout", "server disconnected", "connection reset", "connection refused", "remotedisconnected")
+        if any(t in exc_str.lower() for t in _TRANSIENT):
+            _ok(f"Skipping EO ingest — GFW API unreachable ({exc_str.splitlines()[0]}), will retry on next run")
             return True
         _fail(exc_str)
         if non_interactive:
