@@ -23,6 +23,7 @@
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { AsyncDuckDB } from "@duckdb/duckdb-wasm";
 import type { AppConfig } from "./config";
+import { isParquetRegistered } from "./duckdb";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -176,12 +177,13 @@ export async function mergeDownloadedReviews(
     },
   ];
 
-  for (const { sql } of ops) {
+  for (const { file, sql } of ops) {
+    if (!isParquetRegistered(file)) continue;
     try {
       await conn.query(sql);
       applied++;
     } catch {
-      // File not yet in the manifest (no pushes yet) — skip silently
+      // unexpected error — skip silently
     }
   }
 
