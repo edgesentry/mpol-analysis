@@ -49,6 +49,32 @@ If the public-label backtest is strong but pre-label precision is low, the model
 
 ---
 
+## Seeded vs. Blind Metrics — Disclosure
+
+arktrace distinguishes two evaluation modes. These must not be conflated when reporting results.
+
+| Mode | Flag | Purpose | Valid for |
+|---|---|---|---|
+| **Blind** | *(no `--seed-dummy`)* | Canonical performance measurement on live public-label data | Published baselines, Cap Vista reporting, CI regression gate |
+| **Seeded (demo)** | `--seed-dummy` | CI floor check — verifies scorer is not broken by injecting 10 known OFAC vessels with synthetic positions | Local smoke test, CI known-case gate only |
+
+**Why seeded metrics are higher:** The 10 injected vessels (CELINE, ELINE, REX 1, ANHONA, etc.) are confirmed OFAC positives with synthetic AIS positions crafted to produce high anomaly scores. A seeded run guarantees these vessels surface in the top-50, mechanically inflating AUROC, P@50, and Recall.
+
+### Documented Blind Run Results
+
+Most recent blind evaluation (singapore, 2026-04-14, `validation_metrics.json`):
+
+| Metric | Value | Notes |
+|---|---|---|
+| AUROC | 1.0 | 3 confirmed OFAC positives — all ranked above all negatives |
+| Precision@50 | 0.06 | 3 positives / 50 labeled rows (structural ceiling = 3/50 = 0.06 with perfect ranking) |
+| Recall@200 | 1.0 | All confirmed positives appear in top 200 |
+| Positive count | 3 | Confirmed OFAC vessels in the Singapore AIS dataset at time of run |
+
+> The structural ceiling on P@50 in the Singapore single-region blind run is 0.06 (3 positives / 50 labeled rows). AUROC = 1.0 confirms the model ranks all confirmed positives above all negatives — perfect discrimination — but the label density is too low for P@50 to be a meaningful standalone metric. This is expected and documented: see [Acceptance Thresholds](#acceptance-thresholds) structural ceiling note.
+
+---
+
 ## Baselines
 
 ### Random Baseline
@@ -88,8 +114,25 @@ The `data-publish` workflow runs weekly and after every main-branch push. Metric
 
 ### Locally — Public-Label Backtest
 
+> **Seeded vs. blind runs — read before using `--seed-dummy`.**
+> `--seed-dummy` patches 10 known OFAC-sanctioned vessels (CELINE, ELINE, and others) directly into the database with synthetic AIS positions. These vessels are confirmed positives injected with known-bad features and will rank near the top, inflating AUROC, Precision@50, and Recall metrics compared to a blind run on live data. **Never cite seeded-run metrics as baseline performance figures.** Use seeded runs only to verify that the scorer is not broken (CI known-case floor check). Use the blind command below for any metric you intend to publish or compare.
+
+**Blind evaluation (canonical baseline — no seeding):**
+
 ```bash
-# Run the full multi-region pipeline (produces watchlists + labeled population)
+uv run python scripts/run_public_backtest_batch.py \
+  --regions singapore,japan,europe,blacksea \
+  --gdelt-days 14 \
+  --stream-duration 0 \
+  --min-known-cases 5 \
+  --strict-known-cases
+
+cat data/processed/backtest_public_integration_summary.json
+```
+
+**Demo / CI floor check (seeded — do not use as baseline):**
+
+```bash
 uv run python scripts/run_public_backtest_batch.py \
   --regions singapore,japan,europe,blacksea \
   --gdelt-days 14 \
@@ -97,9 +140,6 @@ uv run python scripts/run_public_backtest_batch.py \
   --seed-dummy \
   --min-known-cases 30 \
   --strict-known-cases
-
-# Read the summary
-cat data/processed/backtest_public_integration_summary.json
 ```
 
 AUROC requires both positives and negatives in the labeled set. It is computed automatically when `run_public_backtest_batch.py` runs the full pipeline (not `--skip-pipeline`) and enough negatives are sampled from the low-confidence tail of the watchlist.

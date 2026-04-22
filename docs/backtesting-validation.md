@@ -318,6 +318,8 @@ Run a medium-scale batch that:
 
 Local equivalent run:
 
+> **Note:** The command below uses `--seed-dummy` for the CI known-case floor check only. This injects 10 known OFAC vessels with synthetic positions, inflating AUROC and Precision@50. Do not use seeded results as published baseline metrics. See `docs/evaluation-metrics.md` — Seeded vs. Blind Metrics for the canonical blind-run command and disclosed blind results.
+
 ```bash
 uv run python scripts/run_public_backtest_batch.py \
   --regions singapore,japan,middleeast,europe,gulf \
