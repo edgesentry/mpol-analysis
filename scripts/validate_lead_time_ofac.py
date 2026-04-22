@@ -384,13 +384,16 @@ def main() -> None:
     print(f"{'=' * 70}")
     n_matched = len(retro)
     n_pre = len(pre_desig)
-    lead_days_pre = [r["lead_days"] for r in pre_desig]
-    mean_lead = int(sum(lead_days_pre) / len(lead_days_pre)) if lead_days_pre else 0
-    median_lead = sorted(lead_days_pre)[len(lead_days_pre) // 2] if lead_days_pre else 0
+    lead_days_pre = sorted([r["lead_days"] for r in pre_desig])
+    n = len(lead_days_pre)
+    mean_lead = int(sum(lead_days_pre) / n) if n else 0
+    median_lead = lead_days_pre[n // 2] if n else 0
+    p25_lead = lead_days_pre[n // 4] if n else 0
+    p75_lead = lead_days_pre[(3 * n) // 4] if n else 0
     print(f"  Matched to designation dates : {n_matched}")
     print(f"  Pre-designation detections   : {n_pre} / {n_matched}")
     print(f"  Mean lead time (pre-desig)   : {mean_lead} days")
-    print(f"  Median lead time (pre-desig) : {median_lead} days")
+    print(f"  p25 / median / p75           : {p25_lead} / {median_lead} / {p75_lead} days")
     print(f"  Unknown-unknown candidates   : {len(prosp)}")
     print()
 
@@ -404,7 +407,9 @@ def main() -> None:
         "pre_designation_count": n_pre,
         "post_designation_count": len(post_desig),
         "mean_lead_days": mean_lead,
+        "p25_lead_days": p25_lead,
         "median_lead_days": median_lead,
+        "p75_lead_days": p75_lead,
         "unknown_unknown_candidates": len(prosp),
         "pre_designation_vessels": pre_desig,
         "post_designation_vessels": post_desig,
@@ -429,7 +434,9 @@ def main() -> None:
                 "matched": n_matched,
                 "pre_designation": n_pre,
                 "mean_lead_days": mean_lead,
+                "p25_lead_days": p25_lead,
                 "median_lead_days": median_lead,
+                "p75_lead_days": p75_lead,
                 "unknown_unknown_candidates": len(prosp),
             },
             indent=2,
