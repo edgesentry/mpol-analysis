@@ -1595,14 +1595,39 @@ def cmd_push_ais_dbs(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # Validate each candidate DB before uploading: must be openable and have
+    # an ais_positions table with at least one row.
+    import duckdb as _duckdb
+
+    valid_candidates = []
+    for local_path in candidates:
+        try:
+            con = _duckdb.connect(str(local_path), read_only=True)
+            row_count = con.execute("SELECT COUNT(*) FROM ais_positions").fetchone()[0]
+            con.close()
+            if row_count == 0:
+                print(f"  [skip] {local_path.name} — ais_positions table is empty")
+                continue
+            valid_candidates.append((local_path, row_count))
+        except Exception as exc:
+            print(f"  [skip] {local_path.name} — validation failed: {exc}", file=sys.stderr)
+
+    if not valid_candidates:
+        print("No valid AIS DBs to upload after validation.", file=sys.stderr)
+        return 1
+
     import pyarrow.fs as pafs
 
     fs = _build_r2_fs()
-    print(f"Uploading {len(candidates)} AIS DB(s) to {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
-    for local_path in candidates:
+    print(f"Uploading {len(valid_candidates)} AIS DB(s) to {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
+    for local_path, row_count in valid_candidates:
         r2_path = f"{_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}{local_path.name}"
         size_mb = local_path.stat().st_size / 1_048_576
-        print(f"  {local_path.name} ({size_mb:.1f} MB) → {r2_path} ...", end="", flush=True)
+        print(
+            f"  {local_path.name} ({size_mb:.1f} MB, {row_count:,} rows) → {r2_path} ...",
+            end="",
+            flush=True,
+        )
 
         # Check remote LastModified — skip if local file is older (unless --force)
         if not args.force:
@@ -1618,7 +1643,7 @@ def cmd_push_ais_dbs(args: argparse.Namespace) -> int:
                 pass  # object doesn't exist yet — proceed with upload
 
         _upload_file(fs, local_path, r2_path)
-        print(f" ✓ ({size_mb:.1f} MB)")
+        print(f" ✓ ({size_mb:.1f} MB, {row_count:,} rows)")
 
     print(f"\nDone. AIS DBs backed up to {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
     print("Restore on another machine with: uv run python scripts/sync_r2.py pull-ais-dbs")

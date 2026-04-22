@@ -60,6 +60,15 @@ def test_candidates_missing_region_db_skipped(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _mock_duckdb_valid(row_count: int = 1000):
+    """Return a context manager that mocks duckdb.connect to pass validation."""
+    mock_con = MagicMock()
+    mock_con.execute.return_value.fetchone.return_value = (row_count,)
+    mock_con.__enter__ = MagicMock(return_value=mock_con)
+    mock_con.__exit__ = MagicMock(return_value=False)
+    return patch("duckdb.connect", return_value=mock_con)
+
+
 @pytest.fixture
 def push_args(tmp_path):
     return argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False)
@@ -84,14 +93,28 @@ def test_push_uploads_all_eligible_dbs(push_args, tmp_path):
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = [mock_info]
 
-    with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
-        with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
-            result = sync_r2.cmd_push_ais_dbs(push_args)
+    with _mock_duckdb_valid():
+        with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
+            with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
+                result = sync_r2.cmd_push_ais_dbs(push_args)
 
     assert result == 0
     assert mock_upload.call_count == 2
     uploaded_names = {Path(c.args[1]).name for c in mock_upload.call_args_list}
     assert uploaded_names == {"japansea.duckdb", "blacksea.duckdb"}
+
+
+def test_push_skips_invalid_db(tmp_path):
+    """DB that fails validation (empty table) is skipped and returns 1."""
+    (tmp_path / "japansea.duckdb").write_bytes(b"x" * 2_000_000)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True)
+
+    with _mock_duckdb_valid(row_count=0):
+        with patch.object(sync_r2, "_upload_file") as mock_upload:
+            result = sync_r2.cmd_push_ais_dbs(args)
+
+    assert result == 1
+    mock_upload.assert_not_called()
 
 
 def test_push_skips_when_remote_is_newer(push_args, tmp_path):
@@ -111,9 +134,10 @@ def test_push_skips_when_remote_is_newer(push_args, tmp_path):
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = [mock_info]
 
-    with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
-        with patch.object(sync_r2, "_upload_file") as mock_upload:
-            result = sync_r2.cmd_push_ais_dbs(push_args)
+    with _mock_duckdb_valid():
+        with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
+            with patch.object(sync_r2, "_upload_file") as mock_upload:
+                result = sync_r2.cmd_push_ais_dbs(push_args)
 
     assert result == 0
     mock_upload.assert_not_called()
@@ -128,9 +152,10 @@ def test_push_force_uploads_even_when_remote_newer(tmp_path):
 
     mock_fs = MagicMock()
 
-    with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
-        with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
-            result = sync_r2.cmd_push_ais_dbs(args)
+    with _mock_duckdb_valid():
+        with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
+            with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
+                result = sync_r2.cmd_push_ais_dbs(args)
 
     assert result == 0
     mock_upload.assert_called_once()
@@ -145,9 +170,10 @@ def test_push_regions_arg_filters_uploads(tmp_path):
 
     mock_fs = MagicMock()
 
-    with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
-        with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
-            result = sync_r2.cmd_push_ais_dbs(args)
+    with _mock_duckdb_valid():
+        with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
+            with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
+                result = sync_r2.cmd_push_ais_dbs(args)
 
     assert result == 0
     uploaded_names = {Path(c.args[1]).name for c in mock_upload.call_args_list}
@@ -161,9 +187,10 @@ def test_push_r2_path_uses_private_bucket(tmp_path):
 
     mock_fs = MagicMock()
 
-    with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
-        with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
-            sync_r2.cmd_push_ais_dbs(args)
+    with _mock_duckdb_valid():
+        with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
+            with patch.object(sync_r2, "_upload_file", return_value=2_000_000) as mock_upload:
+                sync_r2.cmd_push_ais_dbs(args)
 
     r2_path = mock_upload.call_args.args[2]
     assert r2_path == f"{sync_r2._PRIVATE_BUCKET}/ais-dbs/japansea.duckdb"
