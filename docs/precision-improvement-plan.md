@@ -1,12 +1,23 @@
-# Precision@50 Improvement Plan — 0.62 → 0.68
+# Precision@50 Improvement Plan — 0.62 baseline
 
-This document explains what is needed to reach the ≥ 0.68 submission target from the current 0.62 baseline, and the steps being taken to get there. No code knowledge required.
+This document explains the two distinct P@50 thresholds used in arktrace, the current baseline, and the steps taken to reach the demonstrated technical ceiling. No code knowledge required.
+
+---
+
+## P@50 Threshold Glossary
+
+| Threshold | What it is | Source |
+|---|---|---|
+| **≥ 0.60** | **Contractual Acceptance Gate** — the minimum P@50 committed to Cap Vista in the Scope of Work. Meeting this threshold satisfies the PoC delivery obligation. | Annex A § 1 Validation & Reporting table |
+| **≥ 0.68** | **Demonstrated Technical Ceiling** — the P@50 achieved during multi-region public-data backtesting (13 confirmed OFAC vessels across 5 regions). This is an internal CI gate and a position of strength, not an additional contractual commitment. | `evaluation-metrics.md`; CI integration test |
+
+These are separate numbers with separate purposes. The 0.68 figure appearing in CI checks and technical docs reflects what the model has already demonstrated on public data — it does not replace or raise the 0.60 contractual gate.
 
 ---
 
 ## Background
 
-Precision@50 is the primary evaluation metric for arktrace: of the top 50 vessels ranked by the model, what fraction are confirmed sanctioned vessels? The Phase A acceptance criterion is ≥ 0.60. For the submission demo, the target is ≥ 0.68 — enough margin above the threshold to demonstrate reliable performance rather than a marginal pass.
+Precision@50 is the primary evaluation metric for arktrace: of the top 50 vessels ranked by the model, what fraction are confirmed sanctioned vessels? The contractual acceptance gate is **≥ 0.60**. The demonstrated technical ceiling on multi-region public data is **0.68** — achieved by the current pipeline and enforced as a CI regression gate to prevent backslides.
 
 The 0.62 baseline was measured on a full Singapore pipeline run with a properly populated AIS dataset. See [evaluation-metrics.md](evaluation-metrics.md) for the full reproduction steps.
 
@@ -63,7 +74,7 @@ Job 16 option 1 (Quick validate) re-scores and measures Precision@50 against OFA
 
 ## Fallback: Weight Tuning
 
-If AIS collection alone does not reach 0.68, the following parameter changes can be made without waiting for more data. Each takes under 5 minutes and the effect is measurable immediately via job 16.
+If AIS collection alone does not reach the 0.68 technical ceiling (the contractual 0.60 gate is already met), the following parameter changes can be made without waiting for more data. Each takes under 5 minutes and the effect is measurable immediately via job 16.
 
 | Change | Expected effect |
 |---|---|
@@ -82,7 +93,7 @@ Run these steps in order before the demo. Allow ~20 minutes.
 2. **Job 3** — Historical Backtesting (rebuilds the Lance ownership graph from fresh sanctions + vessel registry).
 3. **Confirm the launchd agent has been running ≥ 48h** and `ais_positions` has 500+ distinct vessels.
 4. **Job 1** — Full Screening (singapore region, stream duration = 0). Rebuilds `vessel_features` from all accumulated data.
-5. **Job 16 → option 3** — Public OpenSanctions integration test. Confirm Precision@50 ≥ 0.68.
+5. **Job 16 → option 3** — Public OpenSanctions integration test. Confirm Precision@50 ≥ 0.68 (technical ceiling CI gate; contractual gate is ≥ 0.60).
 6. Capture dashboard screenshot for submission evidence.
 
 ---

@@ -358,7 +358,7 @@ What this test checks:
 3. Backtest report includes:
    - `source_positive_coverage.matched_total` (found by algorithm output overlap)
    - `source_positive_coverage.missed_total` (publicly identified positives not found)
-4. **Precision@50 ≥ 0.25** — enforced by `tests/test_public_data_backtest_integration.py` (#235). The 0.68 target applies to multi-region combined watchlists (≥ 50 labeled positives per #218); with Singapore only (13 positives / 39 labeled) the structural ceiling is ≈ 0.333 when AUROC = 1.0.
+4. **Precision@50 ≥ 0.25** — enforced by `tests/test_public_data_backtest_integration.py` (#235). The 0.68 CI gate (demonstrated technical ceiling, not the contractual 0.60 acceptance gate) applies to multi-region combined watchlists (≥ 50 labeled positives per #218); with Singapore only (13 positives / 39 labeled) the structural ceiling is ≈ 0.333 when AUROC = 1.0.
 
 IMO prefix note: `sanctions_entities` stores `imo = 'IMO9289491'`; watchlists store `imo = '9289491'`. The label-join strips the `'IMO'` prefix and matches mmsi and imo independently (not simultaneously) to avoid silent zero-match failures.
 

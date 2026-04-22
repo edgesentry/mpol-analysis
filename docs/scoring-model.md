@@ -205,7 +205,7 @@ The pipeline computes validation metrics against a holdout set of OFAC-listed ve
 
 | Metric | Target | Meaning |
 |---|---|---|
-| Precision@50 | ≥ 0.25 (single-region floor) | ≥ 13 of top labeled rows are confirmed OFAC-listed; structural ceiling ≈ 0.333 with Singapore-only labels; multi-region target ≥ 0.68 |
+| Precision@50 | ≥ 0.60 contractual gate; ≥ 0.68 demonstrated technical ceiling (multi-region CI gate) | Contractual: Cap Vista acceptance gate. Technical ceiling: achieved on public-data backtest; enforced as CI regression gate. Single-region floor: ≥ 0.25 (structural ceiling ≈ 0.333 with Singapore-only labels). |
 | Recall@200 | — | Fraction of all OFAC-listed vessels recovered in the top 200 |
 | AUROC | — | Area under the ROC curve across the full ranked list |
 

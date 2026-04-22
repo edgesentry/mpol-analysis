@@ -94,7 +94,7 @@ Full policy: [`docs/triage-governance.md`](triage-governance.md).
 
 | To understand… | Read |
 |---|---|
-| Current Precision@50 status and path to 0.68 | [`docs/precision-improvement-plan.md`](precision-improvement-plan.md) |
+| P@50 thresholds (0.60 contractual gate vs 0.68 demonstrated ceiling) | [`docs/precision-improvement-plan.md`](precision-improvement-plan.md) |
 | Detection signals and scoring formula | [`docs/scoring-model.md`](scoring-model.md) |
 | All 19 features and what each detects | [`docs/feature-engineering.md`](feature-engineering.md) |
 | Causal reasoning and unknown-unknown detection | [`docs/causal-analysis.md`](causal-analysis.md) |
