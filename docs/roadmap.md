@@ -32,7 +32,7 @@
 
 ---
 
-### A3 · Feature Engineering ⬜
+### A3 · Feature Engineering ✅
 
 **Goal:** Full feature matrix computed for all vessels in the area of interest.
 
