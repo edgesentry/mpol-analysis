@@ -35,7 +35,20 @@ const LLM_TIMEOUT_MS = 45_000;
 
 type BriefStatus = "idle" | "loading" | "cached" | "ready" | "offline" | "error";
 
-function buildPrompt(v: VesselRow): string {
+const SYSTEM_PROMPT =
+  `You are a maritime intelligence analyst writing patrol dispatch briefs. ` +
+  `You will be given a structured vessel context block containing pre-computed scores, ` +
+  `SHAP signal attributions, and verified registry data. Your only job is to synthesise ` +
+  `that context into a concise plain-language brief.\n\n` +
+  `STRICT CONSTRAINTS — violation invalidates the brief:\n` +
+  `- Do NOT invent, infer, or guess any MMSI, IMO number, vessel name, flag, owner, or position not present in the context block.\n` +
+  `- Do NOT add sanctions designations, ownership links, or cargo claims not stated in the context block.\n` +
+  `- Do NOT speculate about intent beyond what the provided signals support.\n` +
+  `- Every factual claim must be traceable to a field in the context block.\n` +
+  `- Output plain text only — no markdown, no bullet points, no headers.\n` +
+  `- Maximum 3 sentences.`;
+
+function buildUserContent(v: VesselRow): string {
   const parts = [
     `Vessel: ${v.vessel_name || v.mmsi}`,
     `MMSI: ${v.mmsi}`,
@@ -52,9 +65,9 @@ function buildPrompt(v: VesselRow): string {
     .join("\n");
 
   return (
-    `You are a maritime intelligence analyst. Provide a concise 2-3 sentence risk assessment ` +
-    `for the following vessel flagged by an anomaly-detection system. Focus on probable cause ` +
-    `of the anomaly, regional context, and recommended follow-up action. Be direct — no preamble.\n\n` +
+    `Write a 2-3 sentence risk assessment for the vessel below. ` +
+    `Focus on probable cause of the anomaly, regional context, and recommended follow-up action. ` +
+    `Only reference data present in the context block below.\n\n` +
     parts
   );
 }
@@ -70,7 +83,10 @@ async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
       model: "local",
       max_tokens: 200,
       temperature: 0.3,
-      messages: [{ role: "user", content: buildPrompt(v) }],
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user",   content: buildUserContent(v) },
+      ],
     }),
     signal,
   });
