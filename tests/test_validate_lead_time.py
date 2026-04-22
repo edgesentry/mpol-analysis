@@ -168,12 +168,14 @@ def test_retrospective_sorted_by_lead_days_descending():
     now = datetime.now(UTC)
     dates = {
         "111111111": now + timedelta(days=120),  # large lead
-        "222222222": now + timedelta(days=10),   # small lead
+        "222222222": now + timedelta(days=10),  # small lead
     }
-    wl = pl.DataFrame([
-        _watchlist_row("111111111", confidence=0.60),
-        _watchlist_row("222222222", confidence=0.60),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row("111111111", confidence=0.60),
+            _watchlist_row("222222222", confidence=0.60),
+        ]
+    )
     rows = _retrospective(wl, dates, reference_date=now)
     assert len(rows) == 2
     assert rows[0]["lead_days"] >= rows[1]["lead_days"]
@@ -185,10 +187,15 @@ def test_retrospective_sorted_by_lead_days_descending():
 
 
 def test_prospective_returns_unsanctioned_high_confidence():
-    wl = pl.DataFrame([
-        _watchlist_row("555555555", confidence=UU_CONFIDENCE_THRESHOLD + 0.1,
-                       sanctions_distance=UU_SANCTIONS_DISTANCE),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row(
+                "555555555",
+                confidence=UU_CONFIDENCE_THRESHOLD + 0.1,
+                sanctions_distance=UU_SANCTIONS_DISTANCE,
+            ),
+        ]
+    )
     rows = _prospective(wl, {})
     assert len(rows) == 1
     assert rows[0]["mmsi"] == "555555555"
@@ -196,27 +203,36 @@ def test_prospective_returns_unsanctioned_high_confidence():
 
 def test_prospective_excludes_already_designated():
     now = datetime.now(UTC)
-    wl = pl.DataFrame([
-        _watchlist_row("666666666", confidence=0.80, sanctions_distance=UU_SANCTIONS_DISTANCE),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row("666666666", confidence=0.80, sanctions_distance=UU_SANCTIONS_DISTANCE),
+        ]
+    )
     dates = {"666666666": now - timedelta(days=10)}
     rows = _prospective(wl, dates)
     assert rows == []
 
 
 def test_prospective_excludes_low_confidence():
-    wl = pl.DataFrame([
-        _watchlist_row("777777777", confidence=UU_CONFIDENCE_THRESHOLD - 0.01,
-                       sanctions_distance=UU_SANCTIONS_DISTANCE),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row(
+                "777777777",
+                confidence=UU_CONFIDENCE_THRESHOLD - 0.01,
+                sanctions_distance=UU_SANCTIONS_DISTANCE,
+            ),
+        ]
+    )
     rows = _prospective(wl, {})
     assert rows == []
 
 
 def test_prospective_excludes_vessels_with_sanctions_link():
-    wl = pl.DataFrame([
-        _watchlist_row("888888888", confidence=0.80, sanctions_distance=2),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row("888888888", confidence=0.80, sanctions_distance=2),
+        ]
+    )
     rows = _prospective(wl, {})
     assert rows == []
 
@@ -232,11 +248,13 @@ def test_prospective_capped_at_50():
 
 
 def test_prospective_sorted_by_confidence_descending():
-    wl = pl.DataFrame([
-        _watchlist_row("100000001", confidence=0.50, sanctions_distance=UU_SANCTIONS_DISTANCE),
-        _watchlist_row("100000002", confidence=0.90, sanctions_distance=UU_SANCTIONS_DISTANCE),
-        _watchlist_row("100000003", confidence=0.70, sanctions_distance=UU_SANCTIONS_DISTANCE),
-    ])
+    wl = pl.DataFrame(
+        [
+            _watchlist_row("100000001", confidence=0.50, sanctions_distance=UU_SANCTIONS_DISTANCE),
+            _watchlist_row("100000002", confidence=0.90, sanctions_distance=UU_SANCTIONS_DISTANCE),
+            _watchlist_row("100000003", confidence=0.70, sanctions_distance=UU_SANCTIONS_DISTANCE),
+        ]
+    )
     rows = _prospective(wl, {})
     confidences = [r["confidence"] for r in rows]
     assert confidences == sorted(confidences, reverse=True)
@@ -250,7 +268,7 @@ def test_prospective_sorted_by_confidence_descending():
 def test_percentile_values_correct():
     lead_days = sorted([10, 20, 30, 40, 50, 60, 70, 80])
     n = len(lead_days)
-    p25 = lead_days[n // 4]   # index 2 → 30
+    p25 = lead_days[n // 4]  # index 2 → 30
     median = lead_days[n // 2]  # index 4 → 50
     p75 = lead_days[(3 * n) // 4]  # index 6 → 70
     assert p25 == 30
