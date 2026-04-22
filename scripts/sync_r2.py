@@ -1608,6 +1608,12 @@ def cmd_push_ais_dbs(args: argparse.Namespace) -> int:
             if row_count == 0:
                 print(f"  [skip] {local_path.name} — ais_positions table is empty")
                 continue
+            if args.min_rows and row_count < args.min_rows:
+                print(
+                    f"  [skip] {local_path.name} — {row_count:,} rows "
+                    f"< --min-rows={args.min_rows:,} (likely CI-only pipeline output)"
+                )
+                continue
             valid_candidates.append((local_path, row_count))
         except Exception as exc:
             print(f"  [skip] {local_path.name} — validation failed: {exc}", file=sys.stderr)
@@ -2010,6 +2016,17 @@ def main() -> int:
         "--force",
         action="store_true",
         help="Overwrite remote even if it is newer than the local file",
+    )
+    push_ais_dbs_p.add_argument(
+        "--min-rows",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Skip upload if the local DB has fewer than N rows in ais_positions. "
+            "Use in CI to prevent small pipeline-only outputs from overwriting "
+            "real streaming DBs (e.g. --min-rows 1000)."
+        ),
     )
 
     pull_ais_dbs_p = sub.add_parser(
