@@ -26,7 +26,7 @@ The default area of interest is the Strait of Malacca and Singapore Strait — t
 ## How It Works — Four Steps
 
 **1. Ingest public data**
-The pipeline pulls vessel tracking data (AIS), international sanctions lists (OFAC, EU, UN), vessel ownership records, and bilateral trade statistics from public sources. No proprietary data feeds or costly subscriptions are required.
+The pipeline pulls vessel tracking data (AIS), international sanctions lists (OFAC, EU, UN), vessel ownership records, and bilateral trade statistics from public sources. Engineered to exceed performance targets using only open-access data, while providing a zero-code **Proprietary Fusion Gateway** (`src/ingest/custom_feeds.py`) for immediate, plug-and-play integration of Cap Vista's internal sensor feeds and any additional proprietary datasets.
 
 **2. Apply causal inference and compute 19 signals per vessel**
 The core model (`src/score/causal_sanction.py`) runs a Difference-in-Differences regression for each vessel around every major sanction announcement, testing whether behavioural change was *causally driven* by the event rather than coincidental. This is the primary innovation. Four signal families — movement anomaly, identity churn, ownership network distance, and trade flow mismatch — serve as the evidentiary substrate that feeds the causal model and an unknown-unknown detector (`src/analysis/causal.py`), which surfaces vessels with no current sanctions link but evasion-consistent causal signatures.
