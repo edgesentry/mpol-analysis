@@ -140,7 +140,70 @@ Recalibration runs as part of the next scheduled 15-minute pipeline cycle. No ma
 
 ---
 
-## 6. Week 7 Trial Report Reference
+## 6. Phase A → Phase B Handoff and Chain of Custody
+
+This section documents how a dispatch decision made in Phase A (arktrace screening) flows into Phase B (patrol vessel investigation via edgesentry-app / edgesentry-rs) and how evidence integrity is maintained throughout.
+
+### 6a. What Phase A produces
+
+At dispatch sign-off, Phase A exports two artefacts:
+
+| Artefact | Content | Destination |
+|---|---|---|
+| `candidate_watchlist.parquet` | MMSI, last known position, composite score, top-3 SHAP signals, ATT value + CI, ownership hop depth | Transferred to patrol vessel via secure channel or VDES VDE-TDM |
+| Dispatch brief (PDF) | Auto-generated plain-language summary — vessel identity, score, signals, ownership chain, recommended action | Transmitted to duty officer and patrol vessel commander |
+
+The dispatch brief is generated deterministically from structured scoring outputs only (see § 4). Its content is reproducible from the same `candidate_watchlist.parquet` at any later date.
+
+### 6b. Evidence chain: Phase A rank → Phase B intercept
+
+```
+Phase A — arktrace (this repository)
+  candidate_watchlist.parquet  [composite score + SHAP + ATT + graph path]
+          │
+          │  secure transfer (SFTP / VDES VDE-TDM ch 26/86)
+          ▼
+Phase B — edgesentry-app (patrol vessel)
+  Dispatch task loaded from watchlist
+  → Patrol officer conducts inspection (OCR identity check, LiDAR hull scan, thermal)
+  → Evidence captured per tier (see docs/field-investigation.md)
+  → Signed JSON evidence bundle produced by edgesentry-audit:
+      { mmsi, confidence_score, watchlist_top_signals, ocr_result,
+        prev_record_hash [BLAKE3], signature [Ed25519] }
+          │
+          │  VDES ASM transmission (ch 24/84, ~40nm VHF / global SAT)
+          ▼
+Shore Station (Port Operations Centre)
+  → Verify Ed25519 signature (device key in hardware secure element)
+  → Verify BLAKE3 hash chain (deletion / reordering is cryptographically detectable)
+  → Ingest to arktrace feedback loop as confirmed_positive / confirmed_negative label
+```
+
+### 6c. Cryptographic integrity
+
+| Mechanism | Purpose | Key holder |
+|---|---|---|
+| **Ed25519 signature** | Proves each evidence record originated from the authorised patrol device; tamper-evident | edgesentry-app device key (hardware secure element on patrol hardware) |
+| **BLAKE3 hash chain** (`prev_record_hash`) | Links successive records — any deletion or reordering of the evidence log is detectable | Computed automatically by edgesentry-audit at record creation |
+
+The signed evidence bundle is the authoritative record for any subsequent legal or administrative action. The arktrace composite score is an input to the dispatch decision, not to the legal record — the signed field evidence is.
+
+### 6d. Chain of custody summary
+
+| Step | Who | What | When |
+|---|---|---|---|
+| Dispatch sign-off | Analyst / duty officer (per § 4) | Digital acknowledgement logged with analyst ID + timestamp | At dispatch |
+| Watchlist transfer | System (automated) | `candidate_watchlist.parquet` pushed to secure transfer endpoint | Within 5 minutes of sign-off |
+| Evidence capture | Patrol officer (edgesentry-app) | OCR / LiDAR / thermal per tier; signed by device key | At boarding |
+| Bundle transmission | edgesentry-app (automated) | VDES ASM frames → shore station | Immediately after capture |
+| Signature verification | Shore station / POCC | Ed25519 + BLAKE3 verified before ingestion | On receipt |
+| Feedback label | Analyst (dashboard) | Outcome recorded as `confirmed_positive` or `confirmed_negative` | Within 24 hours of return |
+
+> **Phase B implementation status:** The patrol vessel software (edgesentry-rs, edgesentry-app) and the Ed25519 / BLAKE3 evidence chain are design-complete; implementation begins after trial contract award. During the Cap Vista PoC, Phase B handoff is simulated: the analyst manually records patrol outcomes in the dashboard feedback panel (§ 5). The `candidate_watchlist.parquet` export and dispatch brief PDF are production-ready.
+
+---
+
+## 7. Week 7 Trial Report Reference
 
 This SOP is referenced in the Week 7 trial deliverables. The trial report will include:
 - Aggregate dispatch decision log (count by tier; no vessel-specific PII unless Cap Vista consents)
