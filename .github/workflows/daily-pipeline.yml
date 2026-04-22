@@ -1,0 +1,95 @@
+name: Daily pipeline refresh
+
+# Lightweight daily job that rescores active streaming regions (japansea,
+# blacksea, middleeast) against fresh AIS data pulled from private R2, then
+# pushes updated watchlists back so data-publish picks them up on Mondays.
+#
+# Intentionally does NOT run the full backtest, DuckLake checkpoint, or R2
+# snapshot push — those are handled by data-publish (weekly).
+#
+# Triggers:
+#   - Daily schedule 01:00 UTC (before data-publish at 02:00 on Mondays)
+#   - Manual dispatch
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # daily 01:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Rescore active regions & push watchlists
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Pull AIS DBs from private R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: |
+          uv run python scripts/sync_r2.py pull-ais-dbs \
+            --regions japansea,blacksea,middleeast \
+            --data-dir data/processed
+
+      - name: Pull custom feeds from private R2
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: uv run python scripts/sync_r2.py pull-custom-feeds
+
+      - name: Run pipeline — Japan Sea
+        run: |
+          uv run python scripts/run_pipeline.py \
+            --region japan \
+            --non-interactive
+
+      - name: Run pipeline — Black Sea
+        run: |
+          uv run python scripts/run_pipeline.py \
+            --region blacksea \
+            --non-interactive
+
+      - name: Run pipeline — Middle East
+        run: |
+          uv run python scripts/run_pipeline.py \
+            --region middleeast \
+            --non-interactive
+
+      - name: Push updated watchlists to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: uv run python scripts/sync_r2.py push-watchlists
+
+      - name: Back up updated AIS DBs to private R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: |
+          uv run python scripts/sync_r2.py push-ais-dbs \
+            --regions japansea,blacksea,middleeast \
+            --data-dir data/processed
