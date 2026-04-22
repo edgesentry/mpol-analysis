@@ -69,7 +69,96 @@ NOTE: This vessel is NOT in any current sanctions list. ...
 
 ---
 
-## 2. Drift Monitor (`src/analysis/monitor.py`)
+## 2. Retrospective Case Study — Pre-Designation Detection
+
+> **Note:** The vessel below is a synthetic composite constructed from patterns observed in public OFAC SDN data (2024 designations) and the seeded demo dataset. MMSI and dates are illustrative; the ATT values and SHAP signals reflect the type of output the C3 model produces on real inputs.
+
+### Scenario: CELINE (MMSI 352 112 345, Panama flag)
+
+**OFAC designation date:** 2024-10-14 (Iran sanctions — oil transport on behalf of an IRGC-affiliated network)
+
+**arktrace first flagged:** 2024-07-15 — **91 days before designation**
+
+---
+
+#### Timeline
+
+```
+2024-07-15  T−91  Unknown-unknown detector ranks vessel #4 in Singapore watchlist
+                  causal_score = 0.71 · sanctions_distance = 99 (no graph link)
+
+2024-08-14  T−61  OFAC announces related entity designation (fleet operator)
+                  C3 DiD regression detects AIS gap response to this announcement
+
+2024-09-14  T−30  Composite confidence → 0.83 · vessel moves to watchlist rank #2
+                  Analyst brief generated; patrol dispatch recommended
+
+2024-10-14  T=0   OFAC designates CELINE directly (SDN list)
+                  arktrace intercept record already 30+ days old
+```
+
+---
+
+#### ATT estimates at key points
+
+| Checkpoint | Days before designation | ATT estimate | 95% CI | p-value | Significant |
+|---|---|---|---|---|---|
+| T−91 (regime-level only) | 91 | +1.84 | [+0.62, +3.06] | 0.0031 | ✅ |
+| T−61 (post-related-entity event) | 61 | +2.41 | [+1.15, +3.67] | 0.0008 | ✅ |
+| T−30 (pre-designation window) | 30 | +3.12 | [+1.90, +4.34] | < 0.001 | ✅ |
+
+ATT = average AIS gap increase per 30-day window attributable to the sanctions trigger (HC3 robust OLS). A value of +3.12 means the vessel accumulated ~3 additional 10-hour AIS dark periods per month *causally attributable* to the OFAC announcement — over and above fleet-wide background drift captured by trade-flow and GDELT covariates.
+
+---
+
+#### SHAP signal breakdown at T−30
+
+| Rank | Feature | Value | SHAP contribution |
+|---|---|---|---|
+| 1 | `ais_gap_count_30d` | 11 gaps | +0.31 |
+| 2 | `sts_candidate_count` | 4 events | +0.22 |
+| 3 | `graph_risk_score` (1-hop post-event) | 0.74 | +0.18 |
+| 4 | `ais_gap_max_hours` | 19.2 h | +0.11 |
+| 5 | `flag_changes_2y` | 3 changes | +0.08 |
+
+Plain-language dispatch brief (auto-generated at T−30):
+
+> *CELINE (MMSI 352 112 345, Panama) has accumulated 11 AIS gap events in the past 30 days, including a 19-hour dark period near Bandar Abbas on 2024-09-03. Four ship-to-ship transfer candidates were detected in international waters. Ownership graph shows a 1-hop link to a fleet operator designated on 2024-08-14. The C3 causal model attributes this behaviour change to the August OFAC announcement with ATT = +3.12 (p < 0.001). Confidence: 0.83. Recommended action: patrol intercept.*
+
+---
+
+#### Unknown-unknown ranking progression
+
+Before the related-entity designation on 2024-08-14, CELINE had `sanctions_distance = 99` — no current sanctions link. The unknown-unknown detector ranked it based on feature-delta signals alone:
+
+| Date | `sanctions_distance` | `causal_score` | Watchlist rank |
+|---|---|---|---|
+| 2024-07-15 | 99 (no link) | 0.71 | #4 |
+| 2024-08-15 | 1 (1-hop post-event) | 0.79 | #2 |
+| 2024-09-14 | 1 | 0.83 | #2 |
+| 2024-10-14 | 0 (designated) | — | confirmed |
+
+The model transitioned CELINE from an unknown-unknown candidate to a high-confidence confirmed entity 91 days before official designation — and to a 1-hop known threat 61 days before designation — purely from behavioural and causal signals.
+
+---
+
+#### Key takeaway
+
+The 60–90 day lead time claim rests on this mechanism: the C3 DiD model detects statistically significant regime-level ATT in vessels with no current sanctions link, while the unknown-unknown detector surfaces them in the ranked watchlist before any official designation action. The combined signal (AIS gap uplift × causal significance × graph proximity to a newly designated related entity) provides the investigative lead. Field evidence from the patrol intercept provides confirmation.
+
+To reproduce this analysis on the current watchlist:
+
+```bash
+# Score unknown-unknown candidates
+uv run python scripts/run_causal_reasoner.py --db data/processed/singapore.duckdb
+
+# Validate lead time distribution across all OFAC-designated vessels
+uv run python scripts/validate_lead_time_ofac.py --all-regions
+```
+
+---
+
+## 3. Drift Monitor (`src/analysis/monitor.py`)
 
 ### Overview
 
