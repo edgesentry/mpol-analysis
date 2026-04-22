@@ -33,6 +33,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${0:A}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PIPELINE_DIR="${PROJECT_DIR}/pipeline"
 PLIST_DIR="${HOME}/Library/LaunchAgents"
 LOG_DIR="${HOME}/.arktrace"
 UV_BIN="/opt/homebrew/bin/uv"
@@ -224,7 +225,7 @@ for region in ${=REGIONS}; do
   </array>
 
   <key>WorkingDirectory</key>
-  <string>${PROJECT_DIR}</string>
+  <string>${PIPELINE_DIR}</string>
 
   <key>EnvironmentVariables</key>
   <dict>
@@ -236,6 +237,8 @@ for region in ${=REGIONS}; do
     <string>${HOME}</string>
     <key>PATH</key>
     <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${HOME}/.local/bin:${HOME}/.cargo/bin</string>
+    <key>PYTHONPATH</key>
+    <string>${PIPELINE_DIR}</string>
     <key>PYTHONUNBUFFERED</key>
     <string>1</string>
   </dict>
@@ -283,10 +286,12 @@ if [[ ${INSTALL_R2SYNC} -eq 1 ]]; then
     <string>--project</string>
     <string>${PROJECT_DIR}</string>
     <string>python</string>
-    <string>scripts/sync_r2.py</string>
+    <string>${PROJECT_DIR}/scripts/sync_r2.py</string>
     <string>push-ais-dbs</string>
     <string>--regions</string>
     <string>${r2_regions}</string>
+    <string>--data-dir</string>
+    <string>${PROJECT_DIR}/data/processed</string>
   </array>
 
   <key>WorkingDirectory</key>
