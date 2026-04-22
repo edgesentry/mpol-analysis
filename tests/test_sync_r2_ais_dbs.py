@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 import scripts.sync_r2 as sync_r2
-
 
 # ---------------------------------------------------------------------------
 # _ais_db_candidates
@@ -108,7 +106,7 @@ def test_push_skips_when_remote_is_newer(push_args, tmp_path):
     mock_info = MagicMock()
     mock_info.type = pafs.FileType.File
     # Remote mtime far in the future
-    mock_info.mtime = datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone.utc)
+    mock_info.mtime = datetime.datetime(2099, 1, 1, tzinfo=datetime.UTC)
 
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = [mock_info]
@@ -198,7 +196,7 @@ def test_pull_downloads_all_remote_dbs(pull_args, tmp_path, monkeypatch):
 
     import pyarrow.fs as pafs
 
-    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
 
     def make_info(name):
         info = MagicMock()
@@ -236,7 +234,7 @@ def test_pull_skips_when_local_is_newer(tmp_path, monkeypatch):
     local = tmp_path / "japansea.duckdb"
     local.write_bytes(b"x" * 2_000_000)
 
-    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
 
     info = MagicMock()
     info.type = pafs.FileType.File
@@ -268,7 +266,7 @@ def test_pull_force_downloads_even_when_local_newer(tmp_path, monkeypatch):
     local = tmp_path / "japansea.duckdb"
     local.write_bytes(b"x" * 2_000_000)
 
-    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
 
     info = MagicMock()
     info.type = pafs.FileType.File
@@ -297,7 +295,7 @@ def test_pull_regions_filter(tmp_path, monkeypatch):
 
     import pyarrow.fs as pafs
 
-    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+    past = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
 
     def make_info(name):
         info = MagicMock()
