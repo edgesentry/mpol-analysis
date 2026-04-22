@@ -487,8 +487,9 @@ The screening layer fuses four independent open-source data streams rather than 
 | Ownership graph | Equasis + OpenSanctions | Proximity to sanctioned entities, shell-company layers |
 | Trade flow | UN Comtrade+ | Route/cargo mismatch, declared vs. estimated volume |
 | Geopolitical events | GDELT | Sanction announcements, flag-state risk changes |
+| **EO vessel detections** | **Global Fishing Watch Vessel Presence API** | **"Dark" vessels visible from space with no AIS transmitting — `eo_dark_count_30d` and `eo_ais_mismatch_ratio` features; identifies vessels going dark deliberately vs. AIS receiver gaps** |
 
-No electro-optical (EO) or SAR satellite imagery is required at the screening layer. Open-source AIS and ownership data alone deliver a **6× lift** over the base rate of sanctioned vessels (Precision@50 = 0.62 vs. base rate ≈ 0.10). Satellite EO imagery is expensive per-scene and adds the most value when a specific high-confidence target has already been identified — exactly what Phase A produces.
+Open-source EO detections from the Global Fishing Watch Vessel Presence API are fused at the screening layer via two features: `eo_dark_count_30d` (satellite-detected vessel presences with no matching AIS in the 30-day window) and `eo_ais_mismatch_ratio` (fraction of EO detections with no AIS counterpart). This directly addresses the solicitation's requirement for *"fusion of various sources (open-source, Electro Optics)"* — identifying dark vessels visible from space that have deliberately switched off their AIS transponder. The GFW integration is fully implemented and pipeline-wired; live activation requires a GFW research-tier token for GAP/GAP_START event access (application submitted), or Cap Vista's MPOL EO feed via the Proprietary Fusion Gateway. Open-source AIS and ownership data alone already deliver a **6× lift** (Precision@50 = 0.62 vs. base rate ≈ 0.10); EO fusion adds an incremental lift by confirming dark periods with space-based detection.
 
 ### Phase B — EO sensors at close range (investigation layer)
 
@@ -502,11 +503,11 @@ Once Phase A identifies a high-confidence candidate, Phase B deploys tiered elec
 
 Phase B sensor output feeds the `edgesentry-app` evidence bundle — GPS-tagged, Ed25519-signed, BLAKE3 hash-chained — and is transmitted to the Port Operations Centre via VDES. See [docs/field-investigation.md](field-investigation.md) for full hardware specifications and cost breakdown.
 
-### Roadmap — satellite SAR / EO integration
+### Roadmap — commercial satellite SAR integration
 
-Wide-area persistent EO coverage (satellite SAR for dark vessel detection; optical for identity confirmation at anchor) is tracked in issue [#84](https://github.com/edgesentry/arktrace/issues/84). The intended integration point is Phase A feature engineering: SAR-derived vessel detections would add a `sar_dark_period_count` feature alongside the existing AIS gap features, feeding the same Isolation Forest scoring pipeline.
+GFW open-source EO detections are already fused at the screening layer (see Phase A above). The next EO tier — wide-area persistent **commercial satellite SAR** (e.g. ICEYE) — is tracked in issue [#84](https://github.com/edgesentry/arktrace/issues/84). Commercial SAR adds continuous wide-area coverage independent of AIS receiver range, confirming dark-ship behaviour rather than inferring it. The intended integration point is the same Phase A feature engineering pipeline: SAR-derived vessel detections map directly to the existing `sar_detections` table and feed `eo_dark_count_30d` via the Proprietary Fusion Gateway with no code changes.
 
-This is not required for the screening layer to meet the Precision@50 ≥ 0.60 target. It becomes valuable at global scale where AIS receiver coverage is sparse (open ocean, polar regions).
+Commercial SAR is not required to meet the Precision@50 ≥ 0.60 PoC target. It becomes most valuable at global scale where AIS receiver coverage is sparse (open ocean, polar regions) and GFW coverage is thinner.
 
 ---
 

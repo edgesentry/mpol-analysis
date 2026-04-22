@@ -25,8 +25,8 @@ The default area of interest is the Strait of Malacca and Singapore Strait — t
 
 ## How It Works — Four Steps
 
-**1. Ingest public data**
-The pipeline pulls vessel tracking data (AIS), international sanctions lists (OFAC, EU, UN), vessel ownership records, and bilateral trade statistics from public sources. Engineered to exceed performance targets using only open-access data, while providing a zero-code **Proprietary Fusion Gateway** (`src/ingest/custom_feeds.py`) for immediate, plug-and-play integration of Cap Vista's internal sensor feeds and any additional proprietary datasets.
+**1. Ingest and fuse public data — including open-source EO**
+The pipeline fuses five independent open-source data streams: AIS vessel tracking, international sanctions lists (OFAC, EU, UN), vessel ownership records, bilateral trade statistics, and **Global Fishing Watch open-source EO vessel detections** — identifying "dark" vessels visible from space with no AIS transmitting. This directly addresses the solicitation requirement for *"fusion of various sources (open-source, Electro Optics)."* Engineered to exceed performance targets using only open-access data, while providing a zero-code **Proprietary Fusion Gateway** (`src/ingest/custom_feeds.py`) for immediate, plug-and-play integration of Cap Vista's MPOL EO/SAR feeds and any additional proprietary datasets.
 
 **2. Apply causal inference and compute 19 signals per vessel**
 The core model (`src/score/causal_sanction.py`) runs a Difference-in-Differences regression for each vessel around every major sanction announcement, testing whether behavioural change was *causally driven* by the event rather than coincidental. This is the primary innovation. Four signal families — movement anomaly, identity churn, ownership network distance, and trade flow mismatch — serve as the evidentiary substrate that feeds the causal model and an unknown-unknown detector (`src/analysis/causal.py`), which surfaces vessels with no current sanctions link but evasion-consistent causal signatures.
@@ -46,6 +46,7 @@ High-scoring vessels are exported as a task file for the patrol vessel. The offi
 | **Pre-designation lead time** | 60–90 days before OFAC listing (backtested via DiD on historical sanction announcements). See [docs/scoring-model.md](scoring-model.md). |
 | **Unknown-unknown detection** | Causal signatures surface vessels with no sanctions link whose behaviour pattern matches confirmed evaders — catching threats before they appear on any list. |
 | **Detection rate** | Precision@50 target ≥ 0.60: at least 30 of the top-50 ranked candidates are confirmed OFAC-listed vessels. AUROC and Recall@200 are also tracked. |
+| **EO fusion (dark vessel detection)** | GFW Vessel Presence API fused at the screening layer: `eo_dark_count_30d` and `eo_ais_mismatch_ratio` identify vessels visible from space with no AIS — confirming deliberate transponder switch-off vs. AIS receiver gaps. |
 | **False positive reduction** | Geopolitical rerouting filter down-weights DiD scores for vessels on declared diversion routes (e.g. Cape of Good Hope since 2023), reducing noise from legitimate commercial rerouting. |
 | **Network propagation** | Confirmed vessels trigger graph-wide backtracking (`scripts/run_backtracking.py`) to surface ownership-connected threats not yet on any watchlist. |
 | **Explainability** | Every score has a per-feature SHAP breakdown. Analysts see the exact causal and network signals that drove each result — no black-box verdicts. |
