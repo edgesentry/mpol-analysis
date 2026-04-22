@@ -76,7 +76,9 @@ Proposed trial scope: **30–60 days** on Singapore / Malacca Strait as the prim
 ### Week 1 — Setup and baseline ingestion
 
 - Deploy pipeline on provided VM or edge hardware using `docker compose up`
-- Ingest 6 months of historical AIS for the Singapore / Malacca Strait bounding box
+- Load 6-month historical AIS baseline for the Singapore / Malacca Strait bounding box
+
+  > **Data source note:** The 6-month historical baseline is pre-computed AIS data hosted on Cloudflare R2 and pulled at trial setup via `scripts/fetch_demo_data.sh` — it is available from Day 1 without waiting for live collection to accumulate. Live aisstream.io ingestion supplements this baseline from Week 1 onwards. The March 2026 date mentioned in evaluation notes refers to when *live* WebSocket collection started; it does not limit the historical depth available at trial start.
 - Load OFAC SDN, EU FSF, and UN 1267 sanctions lists via OpenSanctions
 - Pull vessel ownership chains from Equasis; build Lance Graph
 - Run full feature engineering and scoring pipeline; generate initial `candidate_watchlist.parquet`
