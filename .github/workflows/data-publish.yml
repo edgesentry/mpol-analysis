@@ -147,18 +147,18 @@ jobs:
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
       - name: Seed demo files for push-demo
-        # push-demo reads from ~/.arktrace/data/; the backtest writes outputs to
-        # data/processed/.  Copy/generate the three required demo files so
-        # push-demo can find them regardless of whether the full pipeline ran.
+        # Ensures all _DEMO_FILES exist in ARKTRACE_DATA_DIR (data/processed in CI)
+        # so push-demo can find them. Generates empty-schema fallbacks for files
+        # that the pipeline doesn't produce in --skip-pipeline mode.
         run: |
           uv run python - <<'EOF'
-          import json, shutil
+          import json, os, shutil
           from pathlib import Path
           import polars as pl
 
-          demo_dir = Path.home() / ".arktrace" / "data"
+          demo_dir = Path(os.environ.get("ARKTRACE_DATA_DIR", str(Path.home() / ".arktrace" / "data")))
           demo_dir.mkdir(parents=True, exist_ok=True)
-          processed = Path("data/processed")
+          processed = demo_dir
 
           # candidate_watchlist.parquet — primary demo file; must exist in demo_dir.
           # The backtest writes it to data/processed/; copy it across.
