@@ -54,7 +54,7 @@ The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to 
 | Object store | **MinIO** | RELEASE.2025-09-07 | S3-compatible local object store; persists Parquet and Lance datasets; port 9000 (API) / 9001 (console) |
 | ML / clustering | **scikit-learn** | ≥ 1.5 | HDBSCAN, Isolation Forest; no GPU required |
 | Explainability | **SHAP** | ≥ 0.46 | TreeExplainer for Isolation Forest; per-vessel feature attribution |
-| Dashboard | **FastAPI + HTMX** | ≥ 0.115 / — | Production-grade API layer + partial-page updates; SSE alerts; MapLibre GL JS |
+| Dashboard | **React + TypeScript + Vite** | 18 / 5 / — | Edge-first SPA; DuckDB-WASM for in-browser OLAP; OPFS for local Parquet cache; MapLibre GL JS for vessel map |
 | Local LLM | **Ollama / MLX / LM Studio** | — | Local inference for analyst briefs and chat; no cloud dependency; provider selected via `LLM_PROVIDER` env var |
 | AIS streaming | **websockets** + **httpx** | — | aisstream.io WebSocket; Marine Cadastre HTTP download |
 | Causal inference | **numpy / scipy** (built-in) | — | DiD OLS with HC3 robust SEs; no external causal library required |
@@ -69,7 +69,7 @@ The full stack runs on a single machine — a field laptop, a shipboard server, 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  TACTICAL EDGE NODE  (patrol vessel / field laptop)             │
+│  PIPELINE HOST  (server / CI / developer laptop)                │
 │                                                                 │
 │  AIS stream (aisstream.io WebSocket)                            │
 │  SAR / EO imagery (offline batch or USB import)                 │
@@ -80,31 +80,40 @@ The full stack runs on a single machine — a field laptop, a shipboard server, 
 │         │              Lance Graph (ownership network)          │
 │         │                      │                               │
 │         ▼                      ▼                               │
-│  HTMX Dashboard  ←─────  Composite Score + SHAP signals        │
+│  Parquet artifacts  →  sync_r2.py push  →  arktrace-public (R2) │
+└─────────────────────────────────────────────────────────────────┘
+          │  browser fetches Parquet via manifest
+          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  ANALYST BROWSER  (Cloudflare Pages SPA)                        │
+│                                                                 │
+│  OPFS cache  ←──  manifest diff  ←──  arktrace-public (R2)     │
+│                                                                 │
+│  DuckDB-WASM  ←──  registered Parquet files  ←──  OPFS         │
+│         │                                                       │
+│         ▼                                                       │
+│  React SPA  →  Watchlist + Map + VesselDetail                   │
 │         │                                                       │
 │         ↕  (context window injection — no external calls)       │
 │         │                                                       │
-│  Ollama / MLX LLM  →  Analyst brief / chat response            │
+│  OpenAI-compatible endpoint  →  Analyst brief / chat response   │
 │         │                                                       │
 │         ▼                                                       │
-│  Duty Officer                                                   │
-│                                                                 │
-│  Persistence: MinIO (localhost:9000) — Parquet + Lance datasets │
+│  Duty Officer review  →  CF Pages Function  →  R2  →  CF Queue │
 └─────────────────────────────────────────────────────────────────┘
-          │  optional: report upload / AIS backfill
-          ▼
-   Cloud / HQ network
 ```
 
-| Component | Local runtime | Default persistence path | S3 path (when `S3_BUCKET` set) |
-|---|---|---|---|
-| OLAP store | DuckDB in-process | `data/processed/mpol.duckdb` | — (DuckDB file stays local; Parquet outputs go to S3) |
-| Parquet outputs | Polars → local or S3 | `data/processed/*.parquet` | `s3://arktrace/processed/*.parquet` |
-| Ownership graph | Lance embedded | `data/processed/mpol_graph/` | `s3://arktrace/mpol_graph/` |
-| Geopolitical index | Lance embedded | `data/processed/gdelt.lance` | `s3://arktrace/gdelt.lance` |
-| Object store | MinIO `localhost:9000` | `minio_data` Docker volume | — (MinIO is the S3 backend) |
-| Web app | FastAPI `localhost:8000` | — | — |
-| LLM inference | Ollama `localhost:11434` or MLX in-process | — | — |
+| Component | Runtime | Default path / URL |
+|---|---|---|
+| OLAP store (pipeline) | DuckDB in-process | `data/processed/mpol.duckdb` |
+| Parquet outputs | Polars → local or S3 | `data/processed/*.parquet` / `s3://arktrace/processed/` |
+| Ownership graph | Lance embedded | `data/processed/mpol_graph/` |
+| Geopolitical index | Lance embedded | `data/processed/gdelt.lance` |
+| Object store (local dev) | MinIO `localhost:9000` | `minio_data` Docker volume |
+| Object store (production) | Cloudflare R2 | `arktrace-public` (anonymous read) |
+| Web app | Cloudflare Pages (prod) / Vite dev server (local) | `https://demo.arktrace.edgesentry.io` / `localhost:5173` |
+| In-browser OLAP | DuckDB-WASM + OPFS | Browser origin private file system |
+| LLM inference | OpenAI-compatible endpoint (browser call) | Configured via `LLM_PROVIDER` env var |
 
 **Storage backend selection** is automatic: when `S3_BUCKET` is set in the environment, `src/storage/config.py` routes all Parquet and Lance I/O to `s3://<bucket>/…` via MinIO (or any S3-compatible store). When unset, everything writes to local `data/processed/` paths. No code changes are required to switch between the two modes.
 

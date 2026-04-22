@@ -6,7 +6,7 @@
 
 **Goal:** Running pipeline that ingests historical and live AIS for the area of interest.
 
-- `pyproject.toml` with full dependency set (DuckDB, Polars, lance-graph, scikit-learn, SHAP, FastAPI, uvicorn)
+- `pyproject.toml` with full dependency set (DuckDB, Polars, lance-graph, scikit-learn, SHAP)
 - DuckDB schema initialisation (`src/ingest/schema.py`)
 - Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag and `--bbox` argument.
 - aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
@@ -57,8 +57,8 @@
 - Causal Sanction-Response Model (`src/score/causal_sanction.py`): calibrates graph risk weights based on historical sanction announcement impacts (DiD regression).
 - Composite score + SHAP attribution (`src/score/composite.py`), supporting `--geopolitical-event-filter` for route downweighting.
 - Watchlist Output `candidate_watchlist.parquet` (`src/score/watchlist.py`)
-- FastAPI + HTMX dashboard with MapLibre GL JS, SSE alerts, and ranked table (`src/api/`).
-- Human-in-the-Loop Triage System: Tier taxonomy, dashboard review UI, and DuckDB `vessel_reviews` schema (`src/api/reviews.py`). Feedback-driven evaluation (`src/score/review_feedback_evaluation.py`).
+- React + TypeScript + Vite SPA with MapLibre GL JS and ranked watchlist table (`app/`). In-browser OLAP via DuckDB-WASM; Parquet files fetched from Cloudflare R2 and cached in OPFS. Deployed to Cloudflare Pages.
+- Human-in-the-Loop Triage System: Tier taxonomy, dashboard review UI, local DuckDB-WASM `vessel_reviews` table, push to R2 via CF Pages Function, server-side merge via CF Queue (`app/src/lib/reviews.ts`, `app/functions/api/reviews/push.ts`). Feedback-driven evaluation (`pipeline/src/score/review_feedback_evaluation.py`).
 - **[TODO]** Geopolitical Context Layer (GDELT + RAG): Add daily GDELT event ingestion and local LLM-generated analyst briefs to the dashboard. Includes interactive chat.
 
 **Acceptance:** Precision@50 ≥ 0.6 (≥ 30 of top-50 candidates are OFAC-listed vessels); SHAP explanations are human-readable and match analyst intuition on manually inspected cases; dashboard supports rapid review and pipeline re-training.

@@ -99,14 +99,16 @@
                            │  app users pull via sync_r2.py
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  OUTPUT  (local — from pipeline run or R2 pull)                 │
+│  OUTPUT  (Cloudflare Pages — React SPA, edge-first)             │
 │                                                                 │
-│  data/processed/candidate_watchlist.parquet                     │
-│  FastAPI + HTMX dashboard  (src/api/)  → http://localhost:8000  │
+│  arktrace-public (R2) ──► browser downloads Parquet via manifest│
+│  OPFS cache ────────────► DuckDB-WASM queries locally           │
+│  React SPA (app/) ──────► Watchlist + Map + VesselDetail        │
 │                                                                 │
-│         ↕  (context window — no external calls)                 │
+│  Analyst reviews ──► CF Pages Function ──► R2 ──► CF Queue     │
+│                       (POST /api/reviews/push)   (merge job)    │
 │                                                                 │
-│  Ollama / MLX LLM  →  analyst brief + streaming chat           │
+│  LLM brief ─────────► OpenAI-compatible endpoint (browser call) │
 └─────────────────────────────────────────────────────────────────┘
                            │
                            ▼  handoff

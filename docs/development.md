@@ -13,14 +13,22 @@ For context on the problem and full architecture, read [`docs/index.md`](index.m
 ```
 _inputs/        Challenge docs (Cap Vista Solicitation 5.0 — do not edit)
 docs/           Project documentation (source of truth for design decisions)
-scripts/        Operator-facing CLI tools (run_pipeline.py, run_backtracking.py, …)
-src/
-  graph/        Lance Graph storage layer (store.py — node/relationship schemas, read/write)
-  ingest/       Data ingestion scripts (AIS, sanctions, registry, trade flow)
-  features/     Feature engineering (Polars + Lance Graph)
-  score/        Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite, causal DiD)
-  analysis/     Post-confirmation intelligence (label_propagation, causal_rewind, backtracking_runner)
-  api/          FastAPI + HTMX dashboard (src/api/main.py → http://localhost:8000)
+scripts/        Operator-facing CLI tools (run_pipeline.py, sync_r2.py, …)
+pipeline/
+  src/
+    graph/      Lance Graph storage layer (store.py — node/relationship schemas, read/write)
+    ingest/     Data ingestion scripts (AIS, sanctions, registry, trade flow)
+    features/   Feature engineering (Polars + Lance Graph)
+    score/      Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite, causal DiD)
+    analysis/   Post-confirmation intelligence (label_propagation, causal_rewind, backtracking_runner)
+    api/        FastAPI pipeline API (POST /api/reviews/merge — called by CF Queue consumer)
+app/            React + TypeScript + Vite SPA (the analyst dashboard)
+  src/
+    components/ KpiBar, WatchlistTable, VesselDetail, VesselMap, …
+    lib/        duckdb.ts, opfs.ts, push.ts, reviews.ts, auth.ts, …
+  functions/    Cloudflare Pages Functions (POST /api/reviews/push)
+workers/
+  review-merge-consumer/   CF Queue consumer Worker (triggers merge-reviews after push)
 data/
   raw/          Downloaded raw data (gitignored)
   processed/    DuckDB files, Parquet outputs, Lance Graph datasets (<region>_graph/)
@@ -75,10 +83,14 @@ uv run python -m pipeline.src.score.watchlist           # output candidate_watch
 
 ### Run the dashboard
 
+The analyst dashboard is a React SPA that runs entirely in the browser (DuckDB-WASM + OPFS). In production it is deployed to Cloudflare Pages. For local development:
+
 ```bash
-uv run uvicorn src.api.main:app --reload
-# open http://localhost:8000
+cd app && npm install   # first time only
+cd app && npm run dev   # http://localhost:5173
 ```
+
+The dev server fetches Parquet files from Cloudflare R2 (same as production). No local server process is needed — the browser queries data directly via DuckDB-WASM.
 
 ### Run the operations shell (menu-driven jobs)
 
