@@ -80,6 +80,10 @@ Commands
                       arktrace-public/ (overwrites on every run — no rotation)
   push-ducklake-private upload DuckLake catalog.duckdb + private output files to
                       arktrace-private-capvista/outputs/ (authenticated analysts only)
+  push-ais-dbs        upload regional AIS .duckdb files to the private R2 bucket as a
+                      backup; skips files that are older than the remote copy
+  pull-ais-dbs        download regional AIS .duckdb files from the private R2 bucket;
+                      skips files that are older than the local copy
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -112,6 +116,9 @@ Examples
   uv run python scripts/sync_r2.py pull-custom-feeds         # pull feeds from private bucket
   uv run python scripts/sync_r2.py push-ducklake-public      # upload DuckLake catalog to public bucket
   uv run python scripts/sync_r2.py push-ducklake-private     # upload private outputs to private bucket
+  uv run python scripts/sync_r2.py push-ais-dbs              # back up all active AIS .duckdb to private R2
+  uv run python scripts/sync_r2.py push-ais-dbs --regions japansea,blacksea,middleeast
+  uv run python scripts/sync_r2.py pull-ais-dbs              # restore AIS DBs on a new machine
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -1531,6 +1538,158 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
     return 0
 
 
+_AIS_DBS_R2_PREFIX = "ais-dbs/"  # private bucket sub-prefix for raw AIS DB backups
+_AIS_DB_MIN_SIZE_BYTES = 1_048_576  # skip placeholder DBs smaller than 1 MB
+
+
+def _ais_db_candidates(data_dir: Path, regions: list[str] | None) -> list[Path]:
+    """Return regional .duckdb paths that are large enough to be non-empty.
+
+    If *regions* is given, only those region prefixes are considered.
+    Otherwise every non-excluded .duckdb in data_dir is a candidate.
+    """
+    _EXCLUDE_STEMS = {
+        "backtest_demo",
+        "public_eval",
+        "mpol",
+        "catalog",
+    }
+    candidates = []
+    if regions:
+        stems = [_REGION_PREFIX.get(r, r) for r in regions]
+        paths = [data_dir / f"{s}.duckdb" for s in stems]
+    else:
+        paths = sorted(data_dir.glob("*.duckdb"))
+
+    for p in paths:
+        if not p.exists():
+            continue
+        if p.stem in _EXCLUDE_STEMS:
+            continue
+        if p.stat().st_size < _AIS_DB_MIN_SIZE_BYTES:
+            continue
+        candidates.append(p)
+    return candidates
+
+
+def cmd_push_ais_dbs(args: argparse.Namespace) -> int:
+    """Upload regional AIS .duckdb files to the private R2 bucket for backup.
+
+    Each file is uploaded as:
+      arktrace-private-capvista/ais-dbs/<filename>.duckdb
+
+    Existing objects are overwritten (no rotation — the stream collector is the
+    source of truth and files grow continuously).
+    """
+    data_dir = Path(args.data_dir)
+    regions: list[str] | None = (
+        [r.strip() for r in args.regions.split(",")] if args.regions else None
+    )
+
+    candidates = _ais_db_candidates(data_dir, regions)
+    if not candidates:
+        print(
+            "No eligible AIS .duckdb files found. "
+            "Check --data-dir and --regions, or that files are > 1 MB.",
+            file=sys.stderr,
+        )
+        return 1
+
+    import pyarrow.fs as pafs
+
+    fs = _build_r2_fs()
+    print(f"Uploading {len(candidates)} AIS DB(s) to {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
+    for local_path in candidates:
+        r2_path = f"{_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}{local_path.name}"
+        size_mb = local_path.stat().st_size / 1_048_576
+        print(f"  {local_path.name} ({size_mb:.1f} MB) → {r2_path} ...", end="", flush=True)
+
+        # Check remote LastModified — skip if local file is older (unless --force)
+        if not args.force:
+            try:
+                info = fs.get_file_info([r2_path])[0]
+                if info.type == pafs.FileType.File:
+                    local_mtime = local_path.stat().st_mtime
+                    remote_mtime = info.mtime.timestamp() if info.mtime else 0
+                    if local_mtime <= remote_mtime:
+                        print(" (skipped — remote is newer or same; use --force to overwrite)")
+                        continue
+            except Exception:
+                pass  # object doesn't exist yet — proceed with upload
+
+        _upload_file(fs, local_path, r2_path)
+        print(f" ✓ ({size_mb:.1f} MB)")
+
+    print(f"\nDone. AIS DBs backed up to {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
+    print("Restore on another machine with: uv run python scripts/sync_r2.py pull-ais-dbs")
+    return 0
+
+
+def cmd_pull_ais_dbs(args: argparse.Namespace) -> int:
+    """Download regional AIS .duckdb files from the private R2 bucket.
+
+    Only downloads a file if the remote copy is newer than the local file
+    (by LastModified timestamp), unless --force is set.
+    """
+    if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
+        print(
+            "Error: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set — "
+            "pull-ais-dbs requires private bucket credentials.",
+            file=sys.stderr,
+        )
+        return 1
+
+    import pyarrow.fs as pafs
+
+    data_dir = Path(args.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    regions: list[str] | None = (
+        [r.strip() for r in args.regions.split(",")] if args.regions else None
+    )
+
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}"
+    selector = pafs.FileSelector(prefix, recursive=False)
+    try:
+        infos = fs.get_file_info(selector)
+    except Exception as exc:
+        print(f"Error listing {prefix}: {exc}", file=sys.stderr)
+        return 1
+
+    db_files = [i for i in infos if i.type == pafs.FileType.File and i.path.endswith(".duckdb")]
+    if not db_files:
+        print(f"No .duckdb files found at {prefix} — nothing to download.")
+        return 0
+
+    # Filter by requested regions if specified
+    if regions:
+        stems = {_REGION_PREFIX.get(r, r) for r in regions}
+        db_files = [i for i in db_files if Path(i.path).stem in stems]
+        if not db_files:
+            print(f"No matching files for regions: {regions}", file=sys.stderr)
+            return 1
+
+    print(f"Found {len(db_files)} AIS DB(s) in {_PRIVATE_BUCKET}/{_AIS_DBS_R2_PREFIX}")
+    for info in db_files:
+        filename = Path(info.path).name
+        local_path = data_dir / filename
+        size_mb = info.size / 1_048_576
+        print(f"  {filename} ({size_mb:.1f} MB) ...", end="", flush=True)
+
+        if not args.force and local_path.exists():
+            local_mtime = local_path.stat().st_mtime
+            remote_mtime = info.mtime.timestamp() if info.mtime else 0
+            if local_mtime >= remote_mtime:
+                print(" (skipped — local is same age or newer; use --force to overwrite)")
+                continue
+
+        _download_file(fs, info.path, local_path)
+        print(f" ✓ ({size_mb:.1f} MB)")
+
+    print(f"\nDone. AIS DBs restored to {data_dir}/")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -1805,6 +1964,49 @@ def main() -> int:
         ),
     )
 
+    push_ais_dbs_p = sub.add_parser(
+        "push-ais-dbs",
+        help=(
+            "Upload regional AIS .duckdb files to arktrace-private-capvista/ais-dbs/ "
+            "(requires credentials; skips files older than the remote copy)"
+        ),
+    )
+    push_ais_dbs_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+    push_ais_dbs_p.add_argument(
+        "--regions",
+        default=None,
+        metavar="REGIONS",
+        help=(
+            "Comma-separated region names to upload "
+            f"(default: all eligible DBs). Known regions: {', '.join(_REGION_PREFIX)}"
+        ),
+    )
+    push_ais_dbs_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite remote even if it is newer than the local file",
+    )
+
+    pull_ais_dbs_p = sub.add_parser(
+        "pull-ais-dbs",
+        help=(
+            "Download regional AIS .duckdb files from arktrace-private-capvista/ais-dbs/ "
+            "(requires credentials; skips files older than the local copy)"
+        ),
+    )
+    pull_ais_dbs_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+    pull_ais_dbs_p.add_argument(
+        "--regions",
+        default=None,
+        metavar="REGIONS",
+        help="Comma-separated region names to download (default: all available in bucket)",
+    )
+    pull_ais_dbs_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite local file even if it is newer than the remote copy",
+    )
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -1823,6 +2025,7 @@ def main() -> int:
         "pull-demo",
         "pull-reviews",
         "pull-custom-feeds",
+        "pull-ais-dbs",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -1846,6 +2049,8 @@ def main() -> int:
         "pull-custom-feeds": cmd_pull_custom_feeds,
         "push-ducklake-public": cmd_push_ducklake_public,
         "push-ducklake-private": cmd_push_ducklake_private,
+        "push-ais-dbs": cmd_push_ais_dbs,
+        "pull-ais-dbs": cmd_pull_ais_dbs,
         "list": cmd_list,
     }
     return dispatch[args.command](args)
