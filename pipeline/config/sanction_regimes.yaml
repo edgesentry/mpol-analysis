@@ -1,3 +1,10 @@
+# Significance threshold for the DiD causal model.
+# A vessel is flagged as causally significant when p < alpha.
+# Default: 0.05. Recommended range: 0.001 (very conservative) – 0.10 (permissive).
+# Lowering alpha reduces false positives; raising it increases recall at the cost
+# of more analyst review time.
+alpha: 0.05
+
 regimes:
   OFAC_Iran:
     label: "OFAC Iran"
