@@ -584,6 +584,7 @@ def run_causal_model(
     -------
     List of :class:`CausalEffect` dataclasses, one per regime.
     """
+    alpha = ALPHA
     if regimes is None:
         regimes = SANCTION_REGIMES
         if regimes_path and os.path.exists(regimes_path):
@@ -594,6 +595,8 @@ def run_causal_model(
                     data = yaml.safe_load(f)
                     if data and "regimes" in data:
                         regimes = data["regimes"]
+                    if data and "alpha" in data:
+                        alpha = float(data["alpha"])
             except Exception as e:
                 print(f"Failed to load regimes from {regimes_path}: {e}")
 
@@ -611,7 +614,7 @@ def run_causal_model(
                 per_date.append(result)
 
             pooled = _pool_estimates([r for r in per_date if r is not None])
-            is_sig = pooled["p"] < ALPHA and pooled["att"] != 0.0
+            is_sig = pooled["p"] < alpha and pooled["att"] != 0.0
 
             effect = CausalEffect(
                 regime=regime_key,
