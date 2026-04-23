@@ -166,7 +166,9 @@ def test_push_regions_arg_filters_uploads(tmp_path):
     for name in ("japansea.duckdb", "blacksea.duckdb", "europe.duckdb"):
         (tmp_path / name).write_bytes(b"x" * 2_000_000)
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions="japan,blacksea", force=True, min_rows=0)
+    args = argparse.Namespace(
+        data_dir=str(tmp_path), regions="japan,blacksea", force=True, min_rows=0
+    )
 
     mock_fs = MagicMock()
 
