@@ -89,30 +89,40 @@ jobs:
         run: uv run python scripts/sync_r2.py pull-watchlists
 
       - name: Run pipeline — Japan Sea
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region japan \
             --non-interactive
 
       - name: Run pipeline — Black Sea
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region blacksea \
             --non-interactive
 
       - name: Run pipeline — Middle East
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region middleeast \
             --non-interactive
 
       - name: Run pipeline — Singapore
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region singapore \
             --non-interactive
 
       - name: Run pipeline — Europe
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region europe \
