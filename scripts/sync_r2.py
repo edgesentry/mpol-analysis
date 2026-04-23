@@ -1631,7 +1631,9 @@ def cmd_pull_gebco_masks(args: argparse.Namespace) -> int:
 
     parquets = [i for i in infos if i.type == pafs.FileType.File and i.path.endswith(".parquet")]
     if not parquets:
-        print(f"No GEBCO masks found at {prefix} — run build_gebco_mask.py and push-gebco-masks first.")
+        print(
+            f"No GEBCO masks found at {prefix} — run build_gebco_mask.py and push-gebco-masks first."
+        )
         return 0
 
     print(f"Found {len(parquets)} GEBCO mask(s) in {prefix}")

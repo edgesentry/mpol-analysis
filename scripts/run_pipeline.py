@@ -565,7 +565,6 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     import os
 
     _step(6, TOTAL_STEPS, "Ingesting GFW EO detections...")
-    from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
 
     data_dir = Path(os.getenv("ARKTRACE_DATA_DIR", str(Path.home() / ".arktrace" / "data")))
     parquet_path = data_dir / f"{Path(p.db_path).stem}_eo_detections.parquet"
@@ -574,6 +573,8 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     if parquet_path.exists():
         try:
             import polars as pl
+
+            from pipeline.src.ingest.eo_gfw import ingest_eo_records
 
             df = pl.read_parquet(
                 parquet_path,
@@ -600,6 +601,8 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         return True
 
     try:
+        from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
+
         # RegionPreset.bbox = [lat_min, lon_min, lat_max, lon_max]
         # fetch_gfw_detections expects (lon_min, lat_min, lon_max, lat_max)
         lat_min, lon_min, lat_max, lon_max = p.bbox
