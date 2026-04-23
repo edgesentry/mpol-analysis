@@ -2,14 +2,11 @@
  * POST /api/reviews/push
  *
  * Accepts vessel_reviews, vessel_reviews_audit, and analyst_briefs as Parquet
- * files in a multipart FormData body, then:
- *   1. Writes them to R2 under reviews/<email>/ (per-user prefix).
- *   2. Enqueues a merge job to the CF Queue (arktrace-review-merge).
+ * files in a multipart FormData body and writes them to R2 under
+ * reviews/<email>/ (per-user prefix).
  *
- * The queue consumer (workers/review-merge-consumer/) picks up the job and
- * calls POST /api/reviews/merge on the Python pipeline server, which runs
- * `sync_r2.py merge-reviews` to produce a single reviews/merged/*.parquet and
- * patches ducklake_manifest.json so all clients detect the update on next sync.
+ * Merging is handled by a scheduled GitHub Actions workflow (merge-reviews.yml)
+ * that runs `sync_r2.py merge-reviews` every 15 minutes.
  *
  * Auth: Cloudflare Access injects Cf-Access-Authenticated-User-Email
  * automatically.  Requests lacking the header receive 401.
@@ -17,7 +14,6 @@
 
 interface Env {
   ARKTRACE_PUBLIC: R2Bucket;
-  REVIEW_MERGE_QUEUE: Queue;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
@@ -45,17 +41,11 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const now     = new Date().toISOString();
   const putOpts = { httpMetadata: { contentType: "application/octet-stream" } };
 
-  // 1. Write per-user Parquet files to R2
   await Promise.all([
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/reviews.parquet`, await reviews.arrayBuffer(), putOpts),
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/audit.parquet`,   await audit.arrayBuffer(),   putOpts),
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/briefs.parquet`,  await briefs.arrayBuffer(),  putOpts),
   ]);
-
-  // 2. Enqueue merge job — queue consumer calls pipeline /api/reviews/merge
-  ctx.waitUntil(
-    ctx.env.REVIEW_MERGE_QUEUE.send({ email, triggeredAt: now })
-  );
 
   return json({ ok: true, email, updatedAt: now }, 200);
 };

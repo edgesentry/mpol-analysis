@@ -7,7 +7,4 @@ compatibility_date    = "2025-01-01"
 binding     = "ARKTRACE_PUBLIC"
 bucket_name = "arktrace-public"
 
-# CF Queue producer — push.ts enqueues a merge job after every upload
-[[queues.producers]]
-binding = "REVIEW_MERGE_QUEUE"
-queue   = "arktrace-review-merge"
+# Review merging is handled by the merge-reviews.yml GitHub Actions workflow.

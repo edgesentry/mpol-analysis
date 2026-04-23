@@ -66,10 +66,8 @@ Commands
   pull-demo           download the demo bundle from R2 into data/processed/ — no credentials
                       required; intended for developers who want to run the dashboard
                       without running the full pipeline locally
-  push-reviews        export vessel_reviews table → reviews.parquet and upload to R2;
-                      run after an analyst session to back up / share review decisions
-  pull-reviews        download reviews.parquet from R2 and upsert into the local DuckDB
-                      vessel_reviews table (conflict resolution: newer reviewed_at wins)
+  pull-reviews        download merged reviews from R2 and upsert into the local DuckDB
+                      vessel_reviews table (read-only; merging is a commercial feature)
   push-custom-feeds   upload files from _inputs/custom_feeds/ to the private
                       arktrace-private-capvista R2 bucket (requires AWS_ACCESS_KEY_ID /
                       AWS_SECRET_ACCESS_KEY — same key used for arktrace-public)
@@ -110,8 +108,7 @@ Examples
   uv run python scripts/sync_r2.py pull-sanctions-db         # pull public_eval.duckdb for tests
   uv run python scripts/sync_r2.py pull-watchlists           # pull watchlists.zip (used by CI)
   uv run python scripts/sync_r2.py pull-demo                 # pull demo bundle (no credentials)
-  uv run python scripts/sync_r2.py push-reviews              # back up analyst reviews to R2
-  uv run python scripts/sync_r2.py pull-reviews              # restore / merge reviews from R2
+  uv run python scripts/sync_r2.py pull-reviews              # download merged public reviews from R2
   uv run python scripts/sync_r2.py push-custom-feeds         # upload feeds to private bucket
   uv run python scripts/sync_r2.py pull-custom-feeds         # pull feeds from private bucket
   uv run python scripts/sync_r2.py push-ducklake-public      # upload DuckLake catalog to public bucket
@@ -176,9 +173,7 @@ _GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
 _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from rotation zip
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 _DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
-_REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on every push-reviews
-_REVIEWS_PREFIX = "reviews"  # per-user uploads live under reviews/<email>/
-_REVIEWS_MERGED_PREFIX = "reviews/merged"  # server-side merged output
+_REVIEWS_MERGED_PREFIX = "reviews/merged"  # server-merged output (read by OSS clients)
 
 # DuckLake catalog keys — public bucket (root) and private bucket (outputs/ prefix)
 # catalog.duckdb is a fixed-key file overwritten on every push-ducklake-* run.
@@ -861,68 +856,17 @@ def cmd_pull_watchlists(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_push_reviews(args: argparse.Namespace) -> int:
-    """Export vessel_reviews from local DuckDB → reviews.parquet and upload to R2.
-
-    Overwrites the fixed-key reviews.parquet on every run.  Run after an analyst
-    session to back up decisions and make them available to other machines.
-    """
-    import duckdb as _duckdb
-
-    db_path = Path(args.db)
-    if not db_path.exists():
-        print(f"Error: DuckDB not found at {db_path}", file=sys.stderr)
-        return 1
-
-    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
-    r2_path = f"{bucket}/{_REVIEWS_R2_KEY}"
-
-    con = _duckdb.connect(str(db_path), read_only=True)
-    try:
-        row = con.execute("SELECT COUNT(*) FROM vessel_reviews").fetchone()
-        n_rows = row[0] if row else 0
-    except Exception:
-        print("No vessel_reviews table found — nothing to push.", file=sys.stderr)
-        return 1
-    finally:
-        con.close()
-
-    if n_rows == 0:
-        print("vessel_reviews is empty — nothing to push.")
-        return 0
-
-    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-
-    try:
-        con = _duckdb.connect(str(db_path), read_only=True)
-        try:
-            con.execute(f"COPY vessel_reviews TO '{tmp_path}' (FORMAT PARQUET)")
-        finally:
-            con.close()
-
-        size_kb = tmp_path.stat().st_size / 1024
-        print(f"Exporting {n_rows} reviews ({size_kb:.1f} KB) → R2 {r2_path} ...")
-        fs = _build_r2_fs()
-        uploaded = _upload_file(fs, tmp_path, r2_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    print(f"Done. {uploaded / 1024:.1f} KB uploaded.")
-    return 0
-
-
 def cmd_pull_reviews(args: argparse.Namespace) -> int:
-    """Download reviews.parquet from R2 and upsert into the local DuckDB vessel_reviews table.
+    """Download server-merged reviews.parquet from R2 into the local DuckDB vessel_reviews table.
 
-    Conflict resolution: newer ``reviewed_at`` timestamp wins.  Safe to run on
-    multiple machines — duplicate MMSIs are merged, not duplicated.
+    Reads from reviews/merged/reviews.parquet (the server-merged public copy).
+    Conflict resolution: newer ``reviewed_at`` timestamp wins.
     """
     import duckdb as _duckdb
 
     db_path = Path(args.db)
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
-    r2_path = f"{bucket}/{_REVIEWS_R2_KEY}"
+    r2_path = f"{bucket}/{_REVIEWS_MERGED_PREFIX}/reviews.parquet"
 
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
     fs = _build_r2_fs(anonymous=anon)
@@ -935,11 +879,7 @@ def cmd_pull_reviews(args: argparse.Namespace) -> int:
             raise FileNotFoundError
         size_kb = infos[0].size / 1024
     except Exception:
-        print(
-            "No reviews.parquet found in R2. Push reviews first with:\n"
-            "  uv run python scripts/sync_r2.py push-reviews",
-            file=sys.stderr,
-        )
+        print("No merged reviews found in R2 (reviews/merged/reviews.parquet).", file=sys.stderr)
         return 1
 
     print(f"Downloading reviews.parquet ({size_kb:.1f} KB) ...")
@@ -982,200 +922,6 @@ def cmd_pull_reviews(args: argparse.Namespace) -> int:
         tmp_path.unlink(missing_ok=True)
 
     print(f"Done. {downloaded / 1024:.1f} KB downloaded. vessel_reviews now has {merged} rows.")
-    return 0
-
-
-def cmd_merge_reviews(args: argparse.Namespace) -> int:  # noqa: ARG001
-    """Merge all per-user review Parquet files in R2 into reviews/merged/*.parquet.
-
-    Reads every  reviews/<email>/reviews.parquet
-                 reviews/<email>/audit.parquet
-                 reviews/<email>/briefs.parquet
-    file in the public R2 bucket, merges them with DuckDB using the conflict
-    strategies defined in issue #369, then uploads:
-        reviews/merged/reviews.parquet   (last-write-wins on updated_at)
-        reviews/merged/audit.parquet     (append-only, dedup on mmsi+changed_at)
-        reviews/merged/briefs.parquet    (last-write-wins on generated_at)
-
-    Finally patches ducklake_manifest.json so clients detect the new size_bytes
-    on their next sync and re-download the merged files.
-
-    Called automatically by the pipeline API (POST /api/reviews/merge) which is
-    triggered by the CF Queue consumer Worker after each user push.
-    """
-    import fcntl
-
-    # File lock prevents two concurrent merge-reviews processes from racing
-    # (e.g. a manual run and a queue-triggered run overlapping).  Non-blocking
-    # so a duplicate attempt exits cleanly instead of queuing behind.
-    lock_path = Path(__file__).parent.parent / "data" / ".merge_reviews.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_fh = open(lock_path, "w")  # noqa: WPS515
-    try:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print("merge-reviews already running — skipping duplicate run.", flush=True)
-        lock_fh.close()
-        return 0
-
-    try:
-        return _cmd_merge_reviews_inner(args)
-    finally:
-        fcntl.flock(lock_fh, fcntl.LOCK_UN)
-        lock_fh.close()
-
-
-def _cmd_merge_reviews_inner(args: argparse.Namespace) -> int:  # noqa: ARG001
-    import json as _json
-
-    import duckdb as _duckdb
-    import pyarrow.fs as pafs
-
-    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
-    fs = _build_r2_fs()
-
-    # ── 1. List all per-user Parquet files ─────────────────────────────────
-    try:
-        all_files = fs.get_file_info(
-            pafs.FileSelector(f"{bucket}/{_REVIEWS_PREFIX}/", recursive=True)
-        )
-    except Exception as exc:
-        print(f"Error listing reviews prefix: {exc}", file=sys.stderr)
-        return 1
-
-    def collect(suffix: str) -> list[str]:
-        return sorted(
-            f.path
-            for f in all_files
-            if f.path.endswith(suffix)
-            and f"{_REVIEWS_MERGED_PREFIX}/" not in f.path
-            and f.type == pafs.FileType.File
-        )
-
-    reviews_keys = collect("/reviews.parquet")
-    audit_keys = collect("/audit.parquet")
-    briefs_keys = collect("/briefs.parquet")
-
-    if not reviews_keys:
-        print("No per-user review files found in R2 — nothing to merge.")
-        return 0
-
-    print(
-        f"Merging {len(reviews_keys)} user(s): {', '.join(k.split('/')[2] for k in reviews_keys)}"
-    )
-
-    # ── 2. Download to a temp directory ────────────────────────────────────
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-
-        def download_all(keys: list[str], prefix: str) -> list[Path]:
-            paths: list[Path] = []
-            for i, key in enumerate(keys):
-                dst = tmp / f"{prefix}_{i}.parquet"
-                _download_file(fs, key, dst)
-                paths.append(dst)
-            return paths
-
-        review_files = download_all(reviews_keys, "reviews")
-        audit_files = download_all(audit_keys, "audit")
-        briefs_files = download_all(briefs_keys, "briefs")
-
-        # ── 3. Merge with DuckDB ────────────────────────────────────────────
-        merged_reviews_path = tmp / "merged_reviews.parquet"
-        merged_audit_path = tmp / "merged_audit.parquet"
-        merged_briefs_path = tmp / "merged_briefs.parquet"
-
-        con = _duckdb.connect()
-        try:
-            # vessel_reviews: last-write-wins on updated_at
-            reviews_glob = str(tmp / "reviews_*.parquet")
-            con.execute(f"""
-                COPY (
-                    SELECT * FROM read_parquet('{reviews_glob}')
-                    QUALIFY ROW_NUMBER() OVER (
-                        PARTITION BY mmsi ORDER BY updated_at DESC NULLS LAST
-                    ) = 1
-                ) TO '{merged_reviews_path}' (FORMAT PARQUET)
-            """)
-            _ = review_files  # used implicitly via glob
-
-            # vessel_reviews_audit: append-only, dedup on (mmsi, changed_at)
-            audit_glob = str(tmp / "audit_*.parquet")
-            con.execute(f"""
-                COPY (
-                    SELECT DISTINCT * FROM read_parquet('{audit_glob}')
-                ) TO '{merged_audit_path}' (FORMAT PARQUET)
-            """)
-            _ = audit_files
-
-            # analyst_briefs: last-write-wins on generated_at
-            briefs_glob = str(tmp / "briefs_*.parquet")
-            con.execute(f"""
-                COPY (
-                    SELECT * FROM read_parquet('{briefs_glob}')
-                    QUALIFY ROW_NUMBER() OVER (
-                        PARTITION BY mmsi ORDER BY generated_at DESC NULLS LAST
-                    ) = 1
-                ) TO '{merged_briefs_path}' (FORMAT PARQUET)
-            """)
-            _ = briefs_files
-        finally:
-            con.close()
-
-        # ── 4. Upload merged files to R2 ────────────────────────────────────
-        uploads = [
-            (merged_reviews_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/reviews.parquet"),
-            (merged_audit_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/audit.parquet"),
-            (merged_briefs_path, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/briefs.parquet"),
-        ]
-        for local, r2_key in uploads:
-            size = _upload_file(fs, local, r2_key)
-            print(f"  Uploaded {r2_key} ({size / 1024:.1f} KB)")
-
-        # ── 5. Patch ducklake_manifest.json ────────────────────────────────
-        manifest_key = f"{bucket}/ducklake_manifest.json"
-        manifest: dict = {}
-        try:
-            with fs.open_input_file(manifest_key) as fh:
-                manifest = _json.loads(fh.read())
-        except Exception:
-            print("  Warning: could not read manifest — skipping manifest patch", file=sys.stderr)
-            return 0
-
-        existing = {f["register_as"]: f for f in manifest.get("files", [])}
-
-        for local, r2_key, reg_as in [
-            (
-                merged_reviews_path,
-                f"{_REVIEWS_MERGED_PREFIX}/reviews.parquet",
-                "reviews_merged.parquet",
-            ),
-            (
-                merged_audit_path,
-                f"{_REVIEWS_MERGED_PREFIX}/audit.parquet",
-                "reviews_audit_merged.parquet",
-            ),
-            (
-                merged_briefs_path,
-                f"{_REVIEWS_MERGED_PREFIX}/briefs.parquet",
-                "reviews_briefs_merged.parquet",
-            ),
-        ]:
-            existing[reg_as] = {
-                "key": r2_key.replace(f"{bucket}/", ""),
-                "url": f"{_PUBLIC_BASE_URL}/{r2_key.replace(f'{bucket}/', '')}",
-                "size_bytes": local.stat().st_size,
-                "register_as": reg_as,
-                "private": True,  # skipped by non-authenticated clients in opfs.ts
-            }
-
-        manifest["files"] = list(existing.values())
-
-        with fs.open_output_stream(manifest_key) as fh:
-            fh.write(_json.dumps(manifest, indent=2).encode())
-
-        print("  Patched ducklake_manifest.json — clients will detect new size_bytes on next sync.")
-
     return 0
 
 
@@ -2030,29 +1776,12 @@ def main() -> int:
     )
     pull_demo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
-    push_reviews_p = sub.add_parser(
-        "push-reviews",
-        help="Export vessel_reviews → reviews.parquet and upload to R2 (requires credentials)",
-    )
-    push_reviews_p.add_argument(
-        "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
-    )
-
     pull_reviews_p = sub.add_parser(
         "pull-reviews",
         help="Download reviews.parquet from R2 and upsert into local DuckDB vessel_reviews table",
     )
     pull_reviews_p.add_argument(
         "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
-    )
-
-    sub.add_parser(
-        "merge-reviews",
-        help=(
-            "Merge all per-user review Parquet files in R2 into reviews/merged/*.parquet "
-            "and patch ducklake_manifest.json (requires credentials; called automatically "
-            "by POST /api/reviews/merge via CF Queue consumer)"
-        ),
     )
 
     _default_feeds_dir = str(_PRIVATE_FEEDS_DIR)
@@ -2258,9 +1987,7 @@ def main() -> int:
         "pull-watchlists": cmd_pull_watchlists,
         "push-demo": cmd_push_demo,
         "pull-demo": cmd_pull_demo,
-        "push-reviews": cmd_push_reviews,
         "pull-reviews": cmd_pull_reviews,
-        "merge-reviews": cmd_merge_reviews,
         "push-custom-feeds": cmd_push_custom_feeds,
         "pull-custom-feeds": cmd_pull_custom_feeds,
         "push-ducklake-public": cmd_push_ducklake_public,

@@ -1,114 +1,13 @@
 /**
- * push.ts — upload local analyst state to R2 and apply server-merged state on sync.
+ * push.ts — apply server-merged public reviews on sync.
  *
- * Upload flow (per user, manual):
- *   1. Export vessel_reviews, vessel_reviews_audit, analyst_briefs to Parquet
- *      via DuckDB-WASM COPY TO.
- *   2. POST the buffers to /api/reviews/push (CF Pages Function).
- *   3. The Worker writes reviews/<email>/*.parquet to R2 and enqueues a merge
- *      job to the CF Queue.
- *   4. The queue consumer calls POST /api/reviews/merge on the Python pipeline
- *      server, which runs sync_r2.py merge-reviews and patches the manifest.
- *
- * Pull / apply flow (automatic on every sync):
- *   1. syncAndLoad() downloads reviews_merged.parquet, reviews_audit_merged.parquet,
- *      and reviews_briefs_merged.parquet when the manifest reports new size_bytes.
- *   2. mergeDownloadedReviews() applies them to the local DuckDB-WASM tables
- *      using the same conflict strategies (last-write-wins / append-only dedup).
- *
- * No client-side index.json fetching or per-user file downloads — all merging
- * happens server-side in the Python pipeline.
+ * Pushing analyst reviews to R2 and merging them is a commercial feature.
+ * OSS users receive the already-merged public reviews via syncAndLoad() and
+ * apply them locally with mergeDownloadedReviews().
  */
 
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
-import type { AsyncDuckDB } from "@duckdb/duckdb-wasm";
-import type { AppConfig } from "./config";
 import { isParquetRegistered } from "./duckdb";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type PushStatus =
-  | { phase: "idle" }
-  | { phase: "exporting" }
-  | { phase: "uploading" }
-  | { phase: "done"; pushedAt: string }
-  | { phase: "error"; message: string };
-
-// ---------------------------------------------------------------------------
-// Push: local → R2
-// ---------------------------------------------------------------------------
-
-/**
- * Serialise the three analyst-state tables to Parquet and POST them to
- * /api/reviews/push.  The CF Pages Function validates auth (CF Access JWT),
- * writes the files to R2, and enqueues a merge job.
- *
- * Throws on auth failure or network error so the caller can surface the
- * message via onStatus({ phase: "error", message }).
- */
-export async function pushReviews(
-  db: AsyncDuckDB,
-  conn: AsyncDuckDBConnection,
-  config: AppConfig,
-  onStatus: (s: PushStatus) => void
-): Promise<void> {
-  onStatus({ phase: "exporting" });
-
-  const exports = [
-    { table: "vessel_reviews",       file: "_push_reviews.parquet", field: "reviews" },
-    { table: "vessel_reviews_audit", file: "_push_audit.parquet",   field: "audit"   },
-    { table: "analyst_briefs",       file: "_push_briefs.parquet",  field: "briefs"  },
-  ] as const;
-
-  const form = new FormData();
-  for (const { table, file, field } of exports) {
-    await conn.query(`COPY ${table} TO '${file}' (FORMAT PARQUET)`);
-    const bytes = await db.copyFileToBuffer(file);
-    await db.dropFile(file);
-    form.append(
-      field,
-      new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }),
-      `${field}.parquet`
-    );
-  }
-
-  onStatus({ phase: "uploading" });
-
-  const resp = await fetch(pushEndpointUrl(config), {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
-
-  if (resp.status === 401) throw new Error("Sign in required to push changes");
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => String(resp.status));
-    throw new Error(`Push failed: ${text}`);
-  }
-
-  const { updatedAt } = (await resp.json()) as { updatedAt: string };
-  onStatus({ phase: "done", pushedAt: updatedAt });
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * For cloudflare-access deployments, push through the private Worker which
- * has CF Access enabled — the email header is reliably injected there.
- * The Pages Function route (/api/reviews/push) lacks CF Access protection
- * and always returns 401 because the header is never injected.
- */
-function pushEndpointUrl(config: AppConfig): string {
-  if (config.authProvider === "cloudflare-access" && config.privateManifestUrl) {
-    const origin = new URL(config.privateManifestUrl).origin;
-    return `${origin}/push-reviews`;
-  }
-  return "/api/reviews/push";
-}
 
 // ---------------------------------------------------------------------------
 // Apply: merge server-merged Parquet files into local DuckDB
@@ -123,8 +22,8 @@ function pushEndpointUrl(config: AppConfig): string {
  *   reviews_audit_merged.parquet  → vessel_reviews_audit
  *   reviews_briefs_merged.parquet → analyst_briefs
  *
- * If the manifest does not yet contain these files (no reviews have ever been
- * pushed) the queries fail silently and 0 is returned.
+ * If the manifest does not yet contain these files (no reviews published yet)
+ * the queries fail silently and 0 is returned.
  *
  * Returns the number of merge operations that succeeded (0–3).
  */
