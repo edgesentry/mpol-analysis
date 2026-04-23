@@ -282,7 +282,7 @@ def test_step_eo_ingest_falls_back_to_api_when_no_parquet(tmp_path, monkeypatch)
 
 
 def test_step_eo_ingest_api_path_returns_true_with_token(tmp_path, monkeypatch):
-    """step_eo_ingest calls the API and returns True when a token is set."""
+    """step_eo_ingest calls the live API in interactive mode when a token is set."""
     from scripts.run_pipeline import PRESETS, step_eo_ingest
 
     monkeypatch.setenv("ARKTRACE_DATA_DIR", str(tmp_path))
@@ -291,9 +291,26 @@ def test_step_eo_ingest_api_path_returns_true_with_token(tmp_path, monkeypatch):
     preset = PRESETS["singapore"]
 
     mock_fetch = MagicMock(return_value=[])
-    # Inject mock_fetch directly via _fetch_fn to bypass lazy-import interception
+    # non_interactive=False → interactive/local mode, which falls back to the live API.
+    # non_interactive=True skips the API (CI relies on pre-fetched parquets instead).
     with patch("pipeline.src.ingest.eo_gfw.ingest_eo_records", return_value=0):
-        result = step_eo_ingest(preset, non_interactive=True, _fetch_fn=mock_fetch)
+        result = step_eo_ingest(preset, non_interactive=False, _fetch_fn=mock_fetch)
 
     assert result is True
     mock_fetch.assert_called_once()
+
+
+def test_step_eo_ingest_skips_api_in_non_interactive(tmp_path, monkeypatch):
+    """In non-interactive mode with no parquet, step_eo_ingest skips immediately."""
+    from scripts.run_pipeline import PRESETS, step_eo_ingest
+
+    monkeypatch.setenv("ARKTRACE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GFW_API_TOKEN", "test-token")
+
+    preset = PRESETS["singapore"]
+
+    mock_fetch = MagicMock(return_value=[])
+    result = step_eo_ingest(preset, non_interactive=True, _fetch_fn=mock_fetch)
+
+    assert result is True
+    mock_fetch.assert_not_called()
