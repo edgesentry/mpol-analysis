@@ -10,7 +10,7 @@
 
 Please **do not** report security vulnerabilities through public GitHub issues.
 
-Instead, report them by emailing **yohei.onishi11@gmail.com**. You should receive a response within 48 hours. If you do not, please follow up to ensure the original message was received.
+Instead, report them by emailing **admin@edgesentry.io**. You should receive a response within 48 hours. If you do not, please follow up to ensure the original message was received.
 
 Please include as much of the following information as possible to help us better understand and resolve the issue:
 
