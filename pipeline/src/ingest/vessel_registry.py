@@ -22,6 +22,7 @@ Usage:
 import argparse
 import csv
 import os
+from pathlib import Path
 
 import duckdb
 import polars as pl
@@ -112,6 +113,17 @@ def build_sts_contacts_from_ais(db_path: str) -> list[dict]:
         buckets.append(bucket.isoformat())
 
     bucketed_df = pl.DataFrame({"mmsi": mmsis, "cell": cells, "bucket": buckets})
+
+    # Apply GEBCO 200m depth filter if mask parquet exists alongside the DB.
+    # Keeps only STS co-locations in deep water (≥200 m below sea level),
+    # removing false positives from port anchorages and shallow straits.
+    mask_path = Path(db_path).parent / f"{Path(db_path).stem}_deep_cells.parquet"
+    if mask_path.exists():
+        deep_cells = frozenset(pl.read_parquet(mask_path)["h3_cell"].to_list())
+        bucketed_df = bucketed_df.filter(pl.col("cell").is_in(deep_cells))
+
+    if bucketed_df.is_empty():
+        return []
 
     mem = duckdb.connect()
     mem.register("bucketed", bucketed_df)

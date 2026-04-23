@@ -1540,6 +1540,7 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
 
 _AIS_DBS_R2_PREFIX = "ais-dbs/"  # private bucket sub-prefix for raw AIS DB backups
 _GFW_EO_R2_PREFIX = "gfw-eo/"  # private bucket sub-prefix for pre-fetched GFW EO parquets
+_GEBCO_MASKS_R2_PREFIX = "gebco-masks/"  # private bucket sub-prefix for GEBCO depth masks
 _AIS_DB_MIN_SIZE_BYTES = 1_048_576  # skip placeholder DBs smaller than 1 MB
 
 
@@ -1571,6 +1572,78 @@ def _ais_db_candidates(data_dir: Path, regions: list[str] | None) -> list[Path]:
             continue
         candidates.append(p)
     return candidates
+
+
+def cmd_push_gebco_masks(args: argparse.Namespace) -> int:
+    """Upload GEBCO depth-mask parquets to arktrace-private-capvista/gebco-masks/.
+
+    Each file must be named ``{region_prefix}_deep_cells.parquet`` and live in
+    --data-dir.  Run ``scripts/build_gebco_mask.py`` first to generate them.
+    """
+    data_dir = Path(args.data_dir)
+    parquets = sorted(data_dir.glob("*_deep_cells.parquet"))
+    if not parquets:
+        print(
+            f"No *_deep_cells.parquet files found in {data_dir}. "
+            "Run scripts/build_gebco_mask.py first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_GEBCO_MASKS_R2_PREFIX}"
+    print(f"Uploading {len(parquets)} GEBCO mask(s) to {prefix}")
+    for p in parquets:
+        r2_path = f"{prefix}{p.name}"
+        size_mb = p.stat().st_size / 1_048_576
+        print(f"  {p.name} ({size_mb:.1f} MB) → {r2_path} ...", end="", flush=True)
+        _upload_file(fs, p, r2_path)
+        print(" ✓")
+    print(f"\nDone. GEBCO masks pushed to {prefix}")
+    return 0
+
+
+def cmd_pull_gebco_masks(args: argparse.Namespace) -> int:
+    """Download GEBCO depth-mask parquets from arktrace-private-capvista/gebco-masks/.
+
+    Files are written to --data-dir as ``{region_prefix}_deep_cells.parquet``.
+    The daily pipeline loads these to filter STS co-locations to deep water only.
+    """
+    if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
+        print(
+            "Error: AWS credentials not set — pull-gebco-masks requires private bucket access.",
+            file=sys.stderr,
+        )
+        return 1
+
+    import pyarrow.fs as pafs
+
+    data_dir = Path(args.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_GEBCO_MASKS_R2_PREFIX}"
+
+    try:
+        infos = fs.get_file_info(pafs.FileSelector(prefix, recursive=False))
+    except Exception as exc:
+        print(f"Error listing {prefix}: {exc}", file=sys.stderr)
+        return 1
+
+    parquets = [i for i in infos if i.type == pafs.FileType.File and i.path.endswith(".parquet")]
+    if not parquets:
+        print(f"No GEBCO masks found at {prefix} — run build_gebco_mask.py and push-gebco-masks first.")
+        return 0
+
+    print(f"Found {len(parquets)} GEBCO mask(s) in {prefix}")
+    for info in parquets:
+        filename = Path(info.path).name
+        local_path = data_dir / filename
+        size_mb = info.size / 1_048_576
+        print(f"  {filename} ({size_mb:.1f} MB) ...", end="", flush=True)
+        _download_file(fs, info.path, local_path)
+        print(f" ✓ ({size_mb:.1f} MB)")
+    print(f"\nDone. GEBCO masks restored to {data_dir}/")
+    return 0
 
 
 def cmd_push_gfw_eo(args: argparse.Namespace) -> int:
@@ -2134,6 +2207,18 @@ def main() -> int:
     )
     pull_gfw_eo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
+    push_gebco_p = sub.add_parser(
+        "push-gebco-masks",
+        help="Upload *_deep_cells.parquet GEBCO masks to arktrace-private-capvista/gebco-masks/",
+    )
+    push_gebco_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
+    pull_gebco_p = sub.add_parser(
+        "pull-gebco-masks",
+        help="Download GEBCO depth masks from arktrace-private-capvista/gebco-masks/ into data-dir",
+    )
+    pull_gebco_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -2154,6 +2239,7 @@ def main() -> int:
         "pull-custom-feeds",
         "pull-ais-dbs",
         "pull-gfw-eo",
+        "pull-gebco-masks",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -2181,6 +2267,8 @@ def main() -> int:
         "pull-ais-dbs": cmd_pull_ais_dbs,
         "push-gfw-eo": cmd_push_gfw_eo,
         "pull-gfw-eo": cmd_pull_gfw_eo,
+        "push-gebco-masks": cmd_push_gebco_masks,
+        "pull-gebco-masks": cmd_pull_gebco_masks,
         "list": cmd_list,
     }
     return dispatch[args.command](args)
