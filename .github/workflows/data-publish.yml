@@ -124,7 +124,6 @@ jobs:
             --non-interactive
 
       - name: Run pipeline — Europe
-        env:
         run: |
           uv run python scripts/run_pipeline.py \
             --region europe \
