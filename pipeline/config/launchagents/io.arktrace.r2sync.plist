@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.arktrace.r2sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace</string>
+    <string>python</string>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace/scripts/sync_r2.py</string>
+    <string>push-ais-dbs</string>
+    <string>--regions</string>
+    <string>japansea,blacksea,middleeast,singapore,europe</string>
+    <string>--data-dir</string>
+    <string>/Users/yoheionishi/work/edgesentry/arktrace/data/processed</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yoheionishi/work/edgesentry/arktrace</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AWS_ACCESS_KEY_ID</key>
+    <string>REPLACE_WITH_AWS_ACCESS_KEY_ID</string>
+    <key>AWS_SECRET_ACCESS_KEY</key>
+    <string>REPLACE_WITH_AWS_SECRET_ACCESS_KEY</string>
+    <key>HOME</key>
+    <string>/Users/yoheionishi</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/yoheionishi/.local/bin:/Users/yoheionishi/.cargo/bin</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <!-- Run every 6 hours (21600 seconds) -->
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yoheionishi/.arktrace/r2sync.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/yoheionishi/.arktrace/r2sync.err</string>
+</dict>
+</plist>

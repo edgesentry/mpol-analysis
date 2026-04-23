@@ -92,6 +92,24 @@ cmd_init() {
     (( installed++ )) || true
   done
 
+  # Install r2sync agent if template exists and AWS credentials are available
+  local r2sync_src="$CONFIG_DIR/${LABEL_PREFIX%.*}.r2sync.plist"
+  local r2sync_dst="$LAUNCH_AGENTS_DIR/${LABEL_PREFIX%.*}.r2sync.plist"
+  if [[ -f "$r2sync_src" ]]; then
+    _load_dotenv
+    local aws_key="${AWS_ACCESS_KEY_ID:-}"
+    local aws_secret="${AWS_SECRET_ACCESS_KEY:-}"
+    if [[ -z "$aws_key" || -z "$aws_secret" ]]; then
+      echo "  [skip] r2sync — AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set"
+    else
+      sed -e "s|REPLACE_WITH_AWS_ACCESS_KEY_ID|${aws_key}|g" \
+          -e "s|REPLACE_WITH_AWS_SECRET_ACCESS_KEY|${aws_secret}|g" \
+          "$r2sync_src" > "$r2sync_dst"
+      echo "  [ok]   r2sync → $r2sync_dst"
+      (( installed++ )) || true
+    fi
+  fi
+
   echo
   echo "$installed plist(s) installed to $LAUNCH_AGENTS_DIR"
   echo "Run 'scripts/aisstream_agents.sh start <region>' to activate."
