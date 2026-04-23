@@ -71,7 +71,7 @@ def _mock_duckdb_valid(row_count: int = 1000):
 
 @pytest.fixture
 def push_args(tmp_path):
-    return argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False)
+    return argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False, min_rows=0)
 
 
 def test_push_returns_1_when_no_candidates(push_args, tmp_path):
@@ -107,7 +107,7 @@ def test_push_uploads_all_eligible_dbs(push_args, tmp_path):
 def test_push_skips_invalid_db(tmp_path):
     """DB that fails validation (empty table) is skipped and returns 1."""
     (tmp_path / "japansea.duckdb").write_bytes(b"x" * 2_000_000)
-    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True, min_rows=0)
 
     with _mock_duckdb_valid(row_count=0):
         with patch.object(sync_r2, "_upload_file") as mock_upload:
@@ -148,7 +148,7 @@ def test_push_force_uploads_even_when_remote_newer(tmp_path):
     db = tmp_path / "japansea.duckdb"
     db.write_bytes(b"x" * 2_000_000)
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True, min_rows=0)
 
     mock_fs = MagicMock()
 
@@ -166,7 +166,7 @@ def test_push_regions_arg_filters_uploads(tmp_path):
     for name in ("japansea.duckdb", "blacksea.duckdb", "europe.duckdb"):
         (tmp_path / name).write_bytes(b"x" * 2_000_000)
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions="japan,blacksea", force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions="japan,blacksea", force=True, min_rows=0)
 
     mock_fs = MagicMock()
 
@@ -183,7 +183,7 @@ def test_push_regions_arg_filters_uploads(tmp_path):
 def test_push_r2_path_uses_private_bucket(tmp_path):
     """Uploaded R2 paths are under arktrace-private-capvista/ais-dbs/."""
     (tmp_path / "japansea.duckdb").write_bytes(b"x" * 2_000_000)
-    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True, min_rows=0)
 
     mock_fs = MagicMock()
 
@@ -203,7 +203,7 @@ def test_push_r2_path_uses_private_bucket(tmp_path):
 
 @pytest.fixture
 def pull_args(tmp_path):
-    return argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False)
+    return argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False, min_rows=0)
 
 
 def test_pull_returns_1_without_credentials(pull_args, monkeypatch):
@@ -272,7 +272,7 @@ def test_pull_skips_when_local_is_newer(tmp_path, monkeypatch):
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = [info]
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=False, min_rows=0)
     with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
         with patch.object(sync_r2, "_download_file") as mock_dl:
             result = sync_r2.cmd_pull_ais_dbs(args)
@@ -304,7 +304,7 @@ def test_pull_force_downloads_even_when_local_newer(tmp_path, monkeypatch):
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = [info]
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions=None, force=True, min_rows=0)
     with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
         with patch.object(sync_r2, "_download_file", return_value=2_000_000) as mock_dl:
             result = sync_r2.cmd_pull_ais_dbs(args)
@@ -337,7 +337,7 @@ def test_pull_regions_filter(tmp_path, monkeypatch):
     mock_fs = MagicMock()
     mock_fs.get_file_info.return_value = infos
 
-    args = argparse.Namespace(data_dir=str(tmp_path), regions="japan", force=True)
+    args = argparse.Namespace(data_dir=str(tmp_path), regions="japan", force=True, min_rows=0)
     with patch.object(sync_r2, "_build_r2_fs", return_value=mock_fs):
         with patch.object(sync_r2, "_download_file", return_value=2_000_000) as mock_dl:
             result = sync_r2.cmd_pull_ais_dbs(args)
