@@ -1539,6 +1539,7 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
 
 
 _AIS_DBS_R2_PREFIX = "ais-dbs/"  # private bucket sub-prefix for raw AIS DB backups
+_GFW_EO_R2_PREFIX = "gfw-eo/"  # private bucket sub-prefix for pre-fetched GFW EO parquets
 _AIS_DB_MIN_SIZE_BYTES = 1_048_576  # skip placeholder DBs smaller than 1 MB
 
 
@@ -1570,6 +1571,78 @@ def _ais_db_candidates(data_dir: Path, regions: list[str] | None) -> list[Path]:
             continue
         candidates.append(p)
     return candidates
+
+
+def cmd_push_gfw_eo(args: argparse.Namespace) -> int:
+    """Upload pre-fetched GFW EO detection parquets to arktrace-private-capvista/gfw-eo/.
+
+    Each file must be named ``{region_prefix}_eo_detections.parquet`` and live
+    in --data-dir.  Run ``scripts/gfw_ingest.py`` first to generate them.
+    """
+    data_dir = Path(args.data_dir)
+    parquets = sorted(data_dir.glob("*_eo_detections.parquet"))
+    if not parquets:
+        print(
+            f"No *_eo_detections.parquet files found in {data_dir}. "
+            "Run scripts/gfw_ingest.py first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_GFW_EO_R2_PREFIX}"
+    print(f"Uploading {len(parquets)} GFW EO parquet(s) to {prefix}")
+    for p in parquets:
+        r2_path = f"{prefix}{p.name}"
+        size_kb = p.stat().st_size / 1024
+        print(f"  {p.name} ({size_kb:.1f} KB) → {r2_path} ...", end="", flush=True)
+        _upload_file(fs, p, r2_path)
+        print(" ✓")
+    print(f"\nDone. GFW EO parquets pushed to {prefix}")
+    return 0
+
+
+def cmd_pull_gfw_eo(args: argparse.Namespace) -> int:
+    """Download pre-fetched GFW EO detection parquets from arktrace-private-capvista/gfw-eo/.
+
+    Files are written to --data-dir as ``{region_prefix}_eo_detections.parquet``.
+    The daily pipeline ingests these instead of calling the GFW API directly.
+    """
+    if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
+        print(
+            "Error: AWS credentials not set — pull-gfw-eo requires private bucket access.",
+            file=sys.stderr,
+        )
+        return 1
+
+    import pyarrow.fs as pafs
+
+    data_dir = Path(args.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fs = _build_r2_fs()
+    prefix = f"{_PRIVATE_BUCKET}/{_GFW_EO_R2_PREFIX}"
+
+    try:
+        infos = fs.get_file_info(pafs.FileSelector(prefix, recursive=False))
+    except Exception as exc:
+        print(f"Error listing {prefix}: {exc}", file=sys.stderr)
+        return 1
+
+    parquets = [i for i in infos if i.type == pafs.FileType.File and i.path.endswith(".parquet")]
+    if not parquets:
+        print(f"No GFW EO parquets found at {prefix} — run gfw-ingest workflow first.")
+        return 0
+
+    print(f"Found {len(parquets)} GFW EO parquet(s) in {prefix}")
+    for info in parquets:
+        filename = Path(info.path).name
+        local_path = data_dir / filename
+        size_kb = info.size / 1024
+        print(f"  {filename} ({size_kb:.1f} KB) ...", end="", flush=True)
+        _download_file(fs, info.path, local_path)
+        print(f" ✓ ({size_kb:.1f} KB)")
+    print(f"\nDone. GFW EO parquets restored to {data_dir}/")
+    return 0
 
 
 def cmd_push_ais_dbs(args: argparse.Namespace) -> int:
@@ -2049,6 +2122,18 @@ def main() -> int:
         help="Overwrite local file even if it is newer than the remote copy",
     )
 
+    push_gfw_eo_p = sub.add_parser(
+        "push-gfw-eo",
+        help="Upload *_eo_detections.parquet files to arktrace-private-capvista/gfw-eo/",
+    )
+    push_gfw_eo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
+    pull_gfw_eo_p = sub.add_parser(
+        "pull-gfw-eo",
+        help="Download GFW EO parquets from arktrace-private-capvista/gfw-eo/ into data-dir",
+    )
+    pull_gfw_eo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -2068,6 +2153,7 @@ def main() -> int:
         "pull-reviews",
         "pull-custom-feeds",
         "pull-ais-dbs",
+        "pull-gfw-eo",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -2093,6 +2179,8 @@ def main() -> int:
         "push-ducklake-private": cmd_push_ducklake_private,
         "push-ais-dbs": cmd_push_ais_dbs,
         "pull-ais-dbs": cmd_pull_ais_dbs,
+        "push-gfw-eo": cmd_push_gfw_eo,
+        "pull-gfw-eo": cmd_pull_gfw_eo,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

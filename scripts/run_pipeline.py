@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Region presets
@@ -557,16 +558,41 @@ def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
 def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     """Ingest GFW EO vessel-presence detections (dark vessels) into eo_detections.
 
-    Skipped automatically when GFW_API_TOKEN is not set — the feature layer
-    will then produce zero EO features, which is correct for offline runs.
+    Prefers a pre-fetched parquet produced by scripts/gfw_ingest.py and pulled
+    from R2 via pull-gfw-eo.  Falls back to a live GFW API call when no parquet
+    is found and GFW_API_TOKEN is set.  Skips gracefully when neither is available.
     """
     import os
 
     _step(6, TOTAL_STEPS, "Ingesting GFW EO detections...")
     from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
 
-    # Collect GFW_API_TOKEN plus any numbered extras (GFW_API_TOKEN_1/2/3/…).
-    # Multiple tokens allow concurrent reports across sequential pipeline runs.
+    data_dir = Path(os.getenv("ARKTRACE_DATA_DIR", str(Path.home() / ".arktrace" / "data")))
+    parquet_path = data_dir / f"{Path(p.db_path).stem}_eo_detections.parquet"
+
+    # --- prefer pre-fetched parquet (pushed by gfw-ingest.yml weekly job) ---
+    if parquet_path.exists():
+        try:
+            import polars as pl
+
+            df = pl.read_parquet(
+                parquet_path,
+                columns=["detection_id", "detected_at", "lat", "lon", "source", "confidence"],
+            )
+            records = df.to_dicts()
+            # Convert detected_at back to datetime objects if needed
+            for r in records:
+                if not hasattr(r["detected_at"], "tzinfo"):
+                    from datetime import UTC
+
+                    r["detected_at"] = r["detected_at"].replace(tzinfo=UTC)
+            n = ingest_eo_records(records, db_path=p.db_path)
+            _ok(f"{n} EO detections ingested from pre-fetched parquet ({parquet_path.name})")
+            return True
+        except Exception as exc:
+            _ok(f"Parquet ingest failed ({exc}); falling back to GFW API")
+
+    # --- fall back to live API ---
     tokens = [t for t in [os.getenv("GFW_API_TOKEN", "")] if t]
     tokens += [v for k, v in sorted(os.environ.items()) if k.startswith("GFW_API_TOKEN_") and v]
     if not tokens:
@@ -589,7 +615,6 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         _ok(f"Skipping EO ingest — GFW response truncated ({exc}), will retry on next run")
         return True
     except Exception as exc:
-        # Treat network timeouts / disconnects as a soft skip so the pipeline continues.
         exc_str = str(exc)
         _TRANSIENT = (
             "timed out",
