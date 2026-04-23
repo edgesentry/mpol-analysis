@@ -1,12 +1,8 @@
 import type { SyncStatus } from "../lib/opfs";
-import type { PushStatus } from "../lib/push";
 
 interface Props {
   status: SyncStatus;
   onSync: () => void;
-  userEmail?: string | null;
-  pushStatus?: PushStatus;
-  onPush?: () => void;
 }
 
 function formatCacheAge(iso: string): string {
@@ -14,14 +10,6 @@ function formatCacheAge(iso: string): string {
   if (days === 0) return "today";
   if (days === 1) return "1 day ago";
   return `${days} days ago`;
-}
-
-function formatPushedAt(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins === 1) return "1 min ago";
-  if (mins < 60) return `${mins} mins ago`;
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 const BTN: React.CSSProperties = {
@@ -32,13 +20,6 @@ const BTN: React.CSSProperties = {
   borderRadius: 4,
   cursor: "pointer",
   fontSize: "0.7rem",
-};
-
-const BTN_PUSH: React.CSSProperties = {
-  ...BTN,
-  background: "#1e3a5f",
-  border: "1px solid #2b6cb0",
-  color: "#90cdf4",
 };
 
 const BTN_SMALL: React.CSSProperties = {
@@ -52,7 +33,7 @@ const BTN_SMALL: React.CSSProperties = {
   fontSize: "0.65rem",
 };
 
-export default function SyncStatusBar({ status, onSync, userEmail, pushStatus, onPush }: Props) {
+export default function SyncStatusBar({ status, onSync }: Props) {
   const base: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
@@ -65,48 +46,11 @@ export default function SyncStatusBar({ status, onSync, userEmail, pushStatus, o
     flexShrink: 0,
   };
 
-  // Push button — shown only when a user is logged in and sync is ready/idle
-  const showPush =
-    !!userEmail &&
-    !!onPush &&
-    (status.phase === "ready" || status.phase === "idle");
-
-  function PushBtn() {
-    if (!showPush) return null;
-    const phase = pushStatus?.phase ?? "idle";
-    const pushing = phase === "exporting" || phase === "uploading";
-    const label =
-      phase === "exporting" ? "Exporting…"
-      : phase === "uploading" ? "Uploading…"
-      : phase === "done"     ? `Pushed ${formatPushedAt((pushStatus as { phase: "done"; pushedAt: string }).pushedAt)}`
-      : phase === "error"    ? "Push failed — retry"
-      : "Push reviews";
-
-    return (
-      <button
-        onClick={onPush}
-        disabled={pushing}
-        title={userEmail ?? undefined}
-        style={{
-          ...BTN_PUSH,
-          opacity: pushing ? 0.6 : 1,
-          cursor: pushing ? "default" : "pointer",
-          color: phase === "error" ? "#fc8181"
-               : phase === "done"  ? "#68d391"
-               : "#90cdf4",
-        }}
-      >
-        ↑ {label}
-      </button>
-    );
-  }
-
   if (status.phase === "idle") {
     return (
       <div style={base}>
         <span>Not synced.</span>
         <button onClick={onSync} style={BTN}>Sync from R2</button>
-        <PushBtn />
       </div>
     );
   }
@@ -155,7 +99,6 @@ export default function SyncStatusBar({ status, onSync, userEmail, pushStatus, o
           : status.fromCache
           ? ` (from OPFS cache${ageLabel})`
           : ` (synced from R2${ageLabel})`}
-        <PushBtn />
         <button onClick={onSync} style={BTN_SMALL}>Re-sync</button>
       </div>
     );
@@ -165,8 +108,7 @@ export default function SyncStatusBar({ status, onSync, userEmail, pushStatus, o
     return (
       <div style={{ ...base, color: "#fc8181" }}>
         ✗ {status.message}
-        <PushBtn />
-        <button onClick={onSync} style={{ ...BTN_SMALL, marginLeft: showPush ? "0" : "auto" }}>
+        <button onClick={onSync} style={{ ...BTN_SMALL, marginLeft: "auto" }}>
           Retry
         </button>
       </div>

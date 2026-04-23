@@ -19,8 +19,7 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
-import { pushReviews, mergeDownloadedReviews } from "./lib/push";
-import type { PushStatus } from "./lib/push";
+import { mergeDownloadedReviews } from "./lib/push";
 import { checkPrivateAuth, login, logout, isPrivateModeEnabled, getAuthToken } from "./lib/auth";
 import { loadConfig } from "./lib/config";
 import type { AppConfig } from "./lib/config";
@@ -61,7 +60,6 @@ export default function App() {
   const prevVesselsRef = useRef<VesselRow[]>([]);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [pushStatus, setPushStatus] = useState<PushStatus>({ phase: "idle" });
   const privateAuth = userEmail !== null;
   const privateMode = appConfig ? isPrivateModeEnabled(appConfig) : false;
 
@@ -134,17 +132,6 @@ export default function App() {
     setReviewStates(states);
   }, [minConfidence, selectedRegions]);
 
-  const handlePush = useCallback(async () => {
-    const db = dbRef.current;
-    const conn = connRef.current;
-    if (!db || !conn || !userEmail || !appConfig) return;
-    try {
-      await pushReviews(db, conn, appConfig, setPushStatus);
-    } catch (err) {
-      setPushStatus({ phase: "error", message: String(err) });
-    }
-  }, [userEmail, appConfig]);
-
   const handleClaim = useCallback(async (mmsi: string) => {
     const conn = connRef.current;
     if (!conn) return;
@@ -168,12 +155,11 @@ export default function App() {
         identifier_basis: "mmsi",
         evidence: [],
       });
-      setPushStatus((prev) => prev.phase === "done" ? { phase: "idle" } : prev);
     } catch {
       // Roll back on failure
       await refreshQuery();
     }
-  }, [reviewStates, refreshQuery, setPushStatus]);
+  }, [reviewStates, refreshQuery]);
 
   // Re-query when filter changes (if data is already loaded)
   useEffect(() => {
@@ -317,9 +303,6 @@ export default function App() {
       <SyncStatusBar
         status={syncStatus}
         onSync={() => doSync()}
-        userEmail={userEmail}
-        pushStatus={pushStatus}
-        onPush={userEmail ? handlePush : undefined}
       />
 
       {/* Main content: sidebar + map */}
@@ -361,7 +344,6 @@ export default function App() {
                     const states = await getBulkReviewStates(conn, vessels.map((v) => v.mmsi));
                     setReviewStates(states);
                   }
-                  setPushStatus((prev) => prev.phase === "done" ? { phase: "idle" } : prev);
                 }}
               />
             ) : null;
