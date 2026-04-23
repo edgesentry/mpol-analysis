@@ -132,7 +132,7 @@ The full stack runs on a single machine — a field laptop, a shipboard server, 
 | Geopolitical index | Lance embedded | `data/processed/gdelt.lance` |
 | Object store (local dev) | MinIO `localhost:9000` | `minio_data` Docker volume |
 | Object store (production) | Cloudflare R2 | `arktrace-public` (anonymous read) |
-| Web app | Cloudflare Pages (prod) / Vite dev server (local) | `https://demo.arktrace.edgesentry.io` / `localhost:5173` |
+| Web app | Cloudflare Pages (prod) / Vite dev server (local) | `https://arktrace.edgesentry.io` / `localhost:5173` |
 | In-browser OLAP | DuckDB-WASM + OPFS | Browser origin private file system |
 | LLM inference | OpenAI-compatible endpoint (browser call) | Configured via `LLM_PROVIDER` env var |
 
