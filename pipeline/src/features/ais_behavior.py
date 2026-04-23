@@ -15,6 +15,7 @@ Usage:
 import math
 import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import duckdb
 import polars as pl
@@ -142,8 +143,17 @@ def compute_position_jumps(df: pl.DataFrame) -> pl.DataFrame:
     return with_speed.group_by("mmsi").agg(pl.len().alias("position_jump_count"))
 
 
-def compute_sts_candidates(df: pl.DataFrame) -> pl.DataFrame:
-    """sts_candidate_count per MMSI via H3 co-location (≥2 vessels, same cell, same 30-min bucket)."""
+def compute_sts_candidates(
+    df: pl.DataFrame,
+    deep_cells: frozenset[str] | None = None,
+) -> pl.DataFrame:
+    """sts_candidate_count per MMSI via H3 co-location (≥2 vessels, same cell, same 30-min bucket).
+
+    When ``deep_cells`` is provided (a frozenset of H3 resolution-8 cell IDs where
+    GEBCO depth ≤ -200 m), co-locations in shallow water are excluded.  This
+    removes false positives from port anchorages and shallow straits (e.g.
+    Malacca Strait narrows to ~25 m in some sections).
+    """
     stopped = df.filter(pl.col("nav_status").is_in(STOPPED_STATUSES))
     if stopped.is_empty():
         return pl.DataFrame(
@@ -162,6 +172,14 @@ def compute_sts_candidates(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("timestamp").dt.truncate("30m").alias("ts_bucket"),
         ]
     )
+
+    if deep_cells is not None:
+        stopped = stopped.filter(pl.col("h3_cell").is_in(deep_cells))
+        if stopped.is_empty():
+            return pl.DataFrame(
+                {"mmsi": [], "sts_candidate_count": []},
+                schema={"mmsi": pl.Utf8, "sts_candidate_count": pl.Int32},
+            )
 
     multi = (
         stopped.group_by(["h3_cell", "ts_bucket"])
@@ -225,6 +243,20 @@ def compute_port_call_ratio(df: pl.DataFrame) -> pl.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def _load_deep_cells(db_path: str) -> frozenset[str] | None:
+    """Load GEBCO deep-cell mask for the region inferred from db_path.
+
+    Looks for ``{stem}_deep_cells.parquet`` alongside the DB file.
+    Returns None (no filter) if the mask is not found.
+    """
+    p = Path(db_path)
+    mask_path = p.parent / f"{p.stem}_deep_cells.parquet"
+    if not mask_path.exists():
+        return None
+    cells = pl.read_parquet(mask_path)["h3_cell"].to_list()
+    return frozenset(cells)
+
+
 def compute_ais_features(
     db_path: str = DEFAULT_DB_PATH,
     window_days: int = 60,
@@ -247,10 +279,11 @@ def compute_ais_features(
     if df.is_empty():
         return _empty
 
+    deep_cells = _load_deep_cells(db_path)
     all_mmsi = df.select("mmsi").unique()
     gaps = compute_gap_features(df, gap_threshold_h)
     jumps = compute_position_jumps(df)
-    sts = compute_sts_candidates(df)
+    sts = compute_sts_candidates(df, deep_cells=deep_cells)
     loiter = compute_loitering(df)
     port = compute_port_call_ratio(df)
 

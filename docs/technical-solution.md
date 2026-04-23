@@ -61,7 +61,7 @@ These five features are the **evidentiary substrate** that feeds the C3 DiD caus
 
 ### Geographic Scope
 
-The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to water depth of 200 m below mean sea level."* arktrace's default Singapore / Malacca Strait bounding box (`−5°N 92°E → 22°N 122°E`) covers this area. The 200 m bathymetric depth mask (GEBCO) is applied during STS candidate detection to exclude deep-ocean false positives — confirmed shallow-water STS sites are the operationally relevant targets. See [docs/regional-playbooks.md](regional-playbooks.md) for bbox details.
+The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to water depth of 200 m below mean sea level."* arktrace's default Singapore / Malacca Strait bounding box (`−5°N 92°E → 22°N 122°E`) covers this area. A **200 m bathymetric depth mask** (GEBCO) is applied during STS candidate detection: co-locations in water shallower than 200 m are excluded, removing false positives from port anchorages and shallow straits (the Malacca Strait narrows to ~25 m in some sections). Illicit STS transfers occur in international open water, which is uniformly deep. See [docs/regional-playbooks.md](regional-playbooks.md) for bbox details.
 
 ---
 
@@ -182,7 +182,7 @@ Switching providers or adding a secondary S-AIS feed requires no architectural c
 |---|---|---|---|
 | [GEBCO](https://www.gebco.net/) | Global bathymetric grid (water depth) | NetCDF / GeoTIFF | Free download |
 
-GEBCO is used to build a **200m-depth boundary mask** as an H3 hexagon set. STS candidate detection filters to events within this mask (shallow draught tankers cannot operate in deeper open ocean), reducing false positives from legitimate vessel interactions.
+GEBCO is used to build a **200 m depth mask** as an H3 resolution-8 hexagon set. The mask is pre-computed once via `scripts/build_gebco_mask.py` (downloads GEBCO 2024 via WCS for each region bbox, converts deep-water pixels to H3 cells, writes `{region}_deep_cells.parquet`). During STS candidate detection, co-locations in H3 cells shallower than 200 m are excluded — these are typically port anchorages, shallow straits, or coastal water where innocent vessel proximity is common. Only open-ocean deep-water co-locations are scored as STS candidates.
 
 ### Geopolitical Event Data
 

@@ -148,6 +148,9 @@ every Monday 02:00 UTC and after every successful `Public Backtest Integration` 
 | Source | Object | Step |
 |---|---|---|
 | `arktrace-private-capvista` | All feed CSVs in bucket root | `sync_r2.py pull-custom-feeds` (continue-on-error; skips gracefully on forks) |
+| `arktrace-private-capvista/ais-dbs/` | Regional AIS DuckDB files | `sync_r2.py pull-ais-dbs --regions ...` |
+| `arktrace-private-capvista/gfw-eo/` | Pre-fetched GFW EO detection parquets (weekly) | `sync_r2.py pull-gfw-eo` (continue-on-error) |
+| `arktrace-private-capvista/gebco-masks/` | GEBCO 200 m depth masks — `{region}_deep_cells.parquet` (one-time, built locally) | `sync_r2.py pull-gebco-masks` (continue-on-error) |
 
 **Writes:**
 

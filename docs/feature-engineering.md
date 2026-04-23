@@ -47,7 +47,7 @@ Count of distinct vessels that have occupied the same H3 hexagon (resolution 8, 
 
 **Shadow fleet signal:** Ship-to-Ship transfers occur at anchorages and in open water. Two tankers sharing the same ~0.7 km cell for a sustained period without a declared port call are STS candidates. H3 resolution 8 is chosen to match the beam of a VLCC at anchor (width ≈ 60 m) within the cell precision.
 
-**Implementation:** H3 hexagon IDs are pre-computed for all positions; a self-join on hexagon + time window identifies co-located vessels.
+**Implementation:** H3 hexagon IDs are pre-computed for all positions; a self-join on hexagon + time window identifies co-located vessels. When a GEBCO 200 m depth mask is present (`{region}_deep_cells.parquet` alongside the DB, built by `scripts/build_gebco_mask.py`), co-locations in water shallower than 200 m are excluded — removing false positives from port anchorages and shallow straits such as the Malacca Strait.
 
 ### `port_call_ratio`
 
