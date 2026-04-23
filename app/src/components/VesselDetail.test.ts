@@ -38,9 +38,6 @@ const BASE_VESSEL: VesselRow = {
   last_lon: 103.8198,
   confidence: 0.87,
   top_signals: null,
-  sanctions_distance: null,
-  causal_att: null,
-  causal_p_value: null,
 };
 
 // ── SYSTEM_PROMPT constraints ────────────────────────────────────────────────
@@ -91,18 +88,18 @@ describe("buildUserContent", () => {
     expect(content).toContain("Vessel: 123456789");
   });
 
-  it("omits null fields — flag", () => {
-    const content = buildUserContent({ ...BASE_VESSEL, flag: null });
+  it("omits empty fields — flag", () => {
+    const content = buildUserContent({ ...BASE_VESSEL, flag: "" });
     expect(content).not.toContain("Flag:");
   });
 
-  it("omits null fields — vessel type", () => {
-    const content = buildUserContent({ ...BASE_VESSEL, vessel_type: null });
+  it("omits empty fields — vessel type", () => {
+    const content = buildUserContent({ ...BASE_VESSEL, vessel_type: "" });
     expect(content).not.toContain("Type:");
   });
 
-  it("omits null fields — region", () => {
-    const content = buildUserContent({ ...BASE_VESSEL, region: null });
+  it("omits empty fields — region", () => {
+    const content = buildUserContent({ ...BASE_VESSEL, region: "" });
     expect(content).not.toContain("Region:");
   });
 
