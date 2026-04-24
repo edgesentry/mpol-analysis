@@ -53,7 +53,13 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
           -webkit-print-color-adjust: exact;
         }
         #dispatch-print-root * {
-          color: inherit !important;
+          color: #111 !important;
+          background: transparent !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
+        /* Re-apply coloured borders for severity badges and brief accent */
+        #dispatch-print-root [style*="border"] {
           print-color-adjust: exact;
           -webkit-print-color-adjust: exact;
         }
