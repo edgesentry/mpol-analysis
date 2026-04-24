@@ -20,7 +20,7 @@ import {
   buildExportPayload,
   buildCopyMarkdown,
   type ShapSignal,
-} from "./DispatchModal";
+} from "./dispatchBriefUtils";
 import type { VesselRow } from "../lib/duckdb";
 import type { VesselReview } from "../lib/reviews";
 
