@@ -36,18 +36,20 @@ jobs:
     permissions:
       contents: read
     strategy:
+      # Secrets cannot be referenced in matrix values — use token_num (1/2/3)
+      # and resolve the actual secret in the step env block below.
       matrix:
         include:
           - region: singapore
-            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
+            token_num: 1
           - region: japan
-            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
+            token_num: 2
           - region: europe
-            gfw_api_token: ${{ secrets.GFW_API_TOKEN_3 }}
+            token_num: 3
           - region: blacksea
-            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
+            token_num: 1
           - region: middleeast
-            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
+            token_num: 2
       fail-fast: false
     env:
       ARKTRACE_DATA_DIR: data/processed
@@ -66,7 +68,7 @@ jobs:
 
       - name: Fetch GFW EO detections
         env:
-          GFW_API_TOKEN: ${{ matrix.gfw_api_token }}
+          GFW_API_TOKEN: ${{ matrix.token_num == 1 && secrets.GFW_API_TOKEN_1 || matrix.token_num == 2 && secrets.GFW_API_TOKEN_2 || secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/gfw_ingest.py \
             --regions ${{ matrix.region }} \
