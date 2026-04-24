@@ -4,30 +4,8 @@ import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
 import { getReview, tierColor, handoffLabel } from "../lib/reviews";
 import type { VesselReview } from "../lib/reviews";
-import {
-  formatLastSeen,
-  confidenceTier,
-  confidenceTierColor,
-  signalLabel,
-  signalSeverity,
-  severityColor,
-} from "../lib/humanise";
-
-interface ShapSignal {
-  feature: string;
-  value: number | string | null;
-  contribution: number;
-}
-
-function parseSignals(raw: string | null | undefined): ShapSignal[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ShapSignal[]) : [];
-  } catch {
-    return [];
-  }
-}
+import { confidenceTier, confidenceTierColor, formatLastSeen, signalLabel, signalSeverity, severityColor } from "../lib/humanise";
+import { parseSignals, buildExportPayload, buildCopyMarkdown, buildPdfFilename } from "./dispatchBriefUtils";
 
 interface Props {
   vessel: VesselRow;
@@ -58,6 +36,7 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
     style.id = "__dispatch-print-style";
     style.textContent = `
       @media print {
+        @page { margin: 18mm 16mm; }
         body > *:not(#dispatch-print-root) { display: none !important; }
         #dispatch-print-root {
           position: static !important;
@@ -67,17 +46,21 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
           background: white !important;
           border: none !important;
           box-shadow: none !important;
-          padding: 2rem !important;
-          font-family: system-ui, sans-serif !important;
-          color: black !important;
+          padding: 0 !important;
+          font-family: system-ui, -apple-system, sans-serif !important;
+          color: #111 !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
         #dispatch-print-root * {
-          color: black !important;
-          background: transparent !important;
-          border-color: #ccc !important;
+          color: inherit !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
+        #dispatch-print-header { display: block !important; }
         #dispatch-print-footer { display: none !important; }
       }
+      #dispatch-print-header { display: none; }
     `;
     document.head.appendChild(style);
     return () => {
@@ -88,35 +71,7 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
 
   // ── Export JSON ────────────────────────────────────────────────────────────
   function handleExport() {
-    const payload = {
-      exported_at: new Date().toISOString(),
-      mmsi: vessel.mmsi,
-      imo: vessel.imo ?? null,
-      vessel_name: vessel.vessel_name || null,
-      flag: vessel.flag || null,
-      vessel_type: vessel.vessel_type || null,
-      confidence: vessel.confidence,
-      confidence_tier: confidenceTier(vessel.confidence),
-      region: vessel.region || null,
-      last_lat: vessel.last_lat ?? null,
-      last_lon: vessel.last_lon ?? null,
-      last_seen: vessel.last_seen ?? null,
-      top_signals: signals.map((s) => ({
-        feature: s.feature,
-        label: signalLabel(s.feature),
-        value: s.value,
-        severity: signalSeverity(s.feature, s.value),
-        contribution: s.contribution,
-      })),
-      analyst_brief: brief || null,
-      review: review ? {
-        decision_tier: review.decision_tier,
-        handoff_state: review.handoff_state,
-        reviewer_id: review.reviewer_id || null,
-        rationale: review.rationale || null,
-        updated_at: review.updated_at,
-      } : null,
-    };
+    const payload = buildExportPayload(vessel, signals, brief, review);
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -128,44 +83,7 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
 
   // ── Copy to clipboard ─────────────────────────────────────────────────────
   function handleCopy() {
-    const signalLines = signals
-      .map((s) => {
-        const sev = signalSeverity(s.feature, s.value);
-        return `- **${signalLabel(s.feature)}**: ${s.value ?? "—"}${sev ? ` [${sev}]` : ""} (${(s.contribution * 100).toFixed(0)}%)`;
-      })
-      .join("\n");
-
-    const md = [
-      `# Patrol Dispatch Brief`,
-      `**Vessel:** ${vessel.vessel_name || vessel.mmsi}`,
-      `**MMSI:** ${vessel.mmsi}`,
-      vessel.imo ? `**IMO:** ${vessel.imo}` : null,
-      `**Flag:** ${vessel.flag || "—"}`,
-      `**Type:** ${vessel.vessel_type || "—"}`,
-      `**Region:** ${vessel.region || "—"}`,
-      `**Last seen:** ${formatLastSeen(vessel.last_seen)}`,
-      vessel.last_lat != null && vessel.last_lon != null
-        ? `**Position:** ${vessel.last_lat.toFixed(4)}°, ${vessel.last_lon.toFixed(4)}°`
-        : null,
-      `**Anomaly confidence:** ${vessel.confidence.toFixed(3)} — ${confidenceTier(vessel.confidence)}`,
-      "",
-      signals.length ? `## Top signals\n${signalLines}` : null,
-      "",
-      brief ? `## Analyst brief\n${brief}` : null,
-      "",
-      review ? [
-        `## Review decision`,
-        review.decision_tier ? `**Tier:** ${review.decision_tier}` : null,
-        `**Status:** ${handoffLabel(review.handoff_state)}`,
-        review.reviewer_id ? `**Reviewer:** ${review.reviewer_id}` : null,
-        review.rationale ? `**Rationale:** ${review.rationale}` : null,
-      ].filter(Boolean).join("\n") : null,
-      "",
-      `---`,
-      `*Generated ${new Date().toISOString()}*`,
-    ]
-      .filter((l) => l !== null)
-      .join("\n");
+    const md = buildCopyMarkdown(vessel, signals, brief, review);
 
     navigator.clipboard.writeText(md).catch(() => {/* ignore */});
   }
@@ -222,6 +140,19 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
 
         {/* Body */}
         <div style={{ overflowY: "auto", padding: "0.85rem 1rem", flex: 1 }}>
+
+          {/* Print-only header — hidden on screen */}
+          <div id="dispatch-print-header" style={{ marginBottom: "1.2rem", paddingBottom: "0.75rem", borderBottom: "2px solid #111" }}>
+            <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "#555", marginBottom: "0.2rem" }}>
+              Arktrace · Dispatch Brief
+            </div>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111" }}>
+              {vessel.vessel_name || vessel.mmsi}
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "#555", marginTop: "0.2rem" }}>
+              MMSI {vessel.mmsi}{vessel.imo ? ` · IMO ${vessel.imo}` : ""} · Generated {new Date().toISOString().replace("T", " ").slice(0, 19)} UTC
+            </div>
+          </div>
 
           {/* Confidence */}
           <div style={{ marginBottom: "0.75rem" }}>
@@ -372,13 +303,13 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
           <button
             onClick={() => {
               const prev = document.title;
-              document.title = `Patrol Dispatch — ${vessel.vessel_name || vessel.mmsi} (${vessel.mmsi})`;
+              document.title = buildPdfFilename(vessel.mmsi);
               window.print();
               document.title = prev;
             }}
             style={{ background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#718096", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}
           >
-            Print
+            Export PDF
           </button>
           <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#4a5568", cursor: "pointer", fontSize: "0.72rem", padding: "0.3rem 0.75rem" }}>
             Close
