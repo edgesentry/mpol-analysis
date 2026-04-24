@@ -138,8 +138,20 @@ for i in $(seq 1 30); do
         --to   "localhost:${PORT}" \
         > /tmp/caddy-llama.log 2>&1 &
       CADDY_PID=$!
-      sleep 1
-      if kill -0 "${CADDY_PID}" 2>/dev/null; then
+      # Poll until Caddy is accepting TLS connections (cert renewal can take
+      # several seconds on an expired cert — a fixed sleep 1 races this).
+      CADDY_READY=0
+      for _c in $(seq 1 15); do
+        if ! kill -0 "${CADDY_PID}" 2>/dev/null; then
+          break  # process already died — no point waiting
+        fi
+        if curl -sk --max-time 1 "https://localhost:${HTTPS_PORT}/v1/models" > /dev/null 2>&1; then
+          CADDY_READY=1
+          break
+        fi
+        sleep 1
+      done
+      if [[ ${CADDY_READY} -eq 1 ]]; then
         echo "   ✅ Caddy HTTPS proxy   → https://localhost:${HTTPS_PORT}/v1"
         echo "      (Safari: accept the Caddy local-CA cert on first visit)"
       else
