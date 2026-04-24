@@ -495,6 +495,19 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
         "calibration_error": round(_ece(scores, y_true), 4),
     }
 
+    # Rank position of every true positive — helps diagnose new-region calibration
+    # issues (e.g. positives sitting between rank 51–200 after a region is added).
+    positive_ranks = (
+        ranked.with_row_index("rank")
+        .filter(pl.col("y_true") == 1)
+        .select(
+            ["rank"]
+            + [c for c in ["mmsi", "imo", "vessel_name", "confidence"] if c in ranked.columns]
+        )
+        .with_columns((pl.col("rank") + 1).alias("rank"))  # convert to 1-based
+        .to_dicts()
+    )
+
     return {
         "window_id": window.window_id,
         "start_date": window.start_date,
@@ -509,6 +522,7 @@ def evaluate_window(window: BacktestWindow, capacities: list[int]) -> dict[str, 
         },
         "recommended_threshold": round(float(used_threshold), 4),
         "source_positive_coverage": source_coverage,
+        "positive_rank_distribution": positive_ranks,
     }
 
 

@@ -71,8 +71,11 @@ PRESETS: dict[str, RegionPreset] = {
         bbox=[-10, 32, 30, 80],
         gap_threshold_h=12,
         window_days=60,
-        w_anomaly=0.40,
-        w_graph=0.40,
+        # #507: evasion in this region is primarily AIS-dark-period driven (same
+        # pattern as persiangulf/gulfofaden) — raising w_anomaly and reducing
+        # w_graph matches observed positives' signal profile and recovers P@50.
+        w_anomaly=0.50,
+        w_graph=0.30,
         w_identity=0.20,
         db_path="data/processed/middleeast.duckdb",
         watchlist_path="data/processed/middleeast_watchlist.parquet",

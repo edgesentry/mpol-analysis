@@ -30,7 +30,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 _REPORT_PATH = Path("data/processed/backtest_public_integration_summary.json")
-_REGRESSION_THRESHOLD = 0.02
+_REGRESSION_THRESHOLD = 0.01  # #507: lowered from 0.02 — catches single-step drops like 0.27→0.26
 
 
 def _load_report() -> dict:
