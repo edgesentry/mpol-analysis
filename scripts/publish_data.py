@@ -78,6 +78,12 @@ _REGION_ARTIFACTS: dict[str, list[str]] = {
         "europe_causal_effects.parquet",
         "europe_graph",
     ],
+    "blacksea": [
+        "blacksea.duckdb",
+        "blacksea_watchlist.parquet",
+        "blacksea_causal_effects.parquet",
+        "blacksea_graph",
+    ],
     "gulfofguinea": [
         "gulfofguinea.duckdb",
         "gulfofguinea_watchlist.parquet",
