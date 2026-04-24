@@ -16,7 +16,7 @@
     <string>/Users/yoheionishi/work/edgesentry/arktrace/scripts/sync_r2.py</string>
     <string>push-ais-dbs</string>
     <string>--regions</string>
-    <string>japansea,blacksea,middleeast,singapore,europe,gulfofmexico,hornofafrica,persiangulf</string>
+    <string>japansea,blacksea,middleeast,singapore,europe,gulfofmexico,hornofafrica,persiangulf,gulfofaden,gulfofguinea</string>
     <string>--data-dir</string>
     <string>/Users/yoheionishi/work/edgesentry/arktrace/data/processed</string>
   </array>
