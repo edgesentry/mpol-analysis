@@ -94,14 +94,25 @@ echo "   Endpoint  → http://localhost:${PORT}/v1/chat/completions"
 echo "   Press Ctrl+C to stop."
 echo ""
 
-llama-server \
-  --hf-repo "${HF_MODEL}" \
-  --hf-file "${GGUF_FILE}" \
-  --port "${PORT}" \
-  --ctx-size 4096 \
-  --n-gpu-layers "${GPU_LAYERS}" \
-  &
-LLM_PID=$!
+CADDY_PID=""
+
+# Reuse an existing llama-server on this port rather than trying to bind
+# a second instance (which exits and takes Caddy down via the trap handler).
+EXISTING_PID=""
+EXISTING_PID=$(lsof -ti ":${PORT}" 2>/dev/null | head -1) || true
+if [[ -n "${EXISTING_PID}" ]]; then
+  echo "   ♻️  llama-server already running on :${PORT} (PID ${EXISTING_PID}) — reusing"
+  LLM_PID="${EXISTING_PID}"
+else
+  llama-server \
+    --hf-repo "${HF_MODEL}" \
+    --hf-file "${GGUF_FILE}" \
+    --port "${PORT}" \
+    --ctx-size 4096 \
+    --n-gpu-layers "${GPU_LAYERS}" \
+    &
+  LLM_PID=$!
+fi
 
 # ── Wait for readiness ─────────────────────────────────────────────────────────
 echo "   Waiting for server to be ready…"
@@ -138,8 +149,20 @@ for i in $(seq 1 30); do
         --to   "localhost:${PORT}" \
         > /tmp/caddy-llama.log 2>&1 &
       CADDY_PID=$!
-      sleep 1
-      if kill -0 "${CADDY_PID}" 2>/dev/null; then
+      # Poll until Caddy is accepting TLS connections (cert renewal can take
+      # several seconds on an expired cert — a fixed sleep 1 races this).
+      CADDY_READY=0
+      for _c in $(seq 1 15); do
+        if ! kill -0 "${CADDY_PID}" 2>/dev/null; then
+          break  # process already died — no point waiting
+        fi
+        if curl -sk --max-time 1 "https://localhost:${HTTPS_PORT}/v1/models" > /dev/null 2>&1; then
+          CADDY_READY=1
+          break
+        fi
+        sleep 1
+      done
+      if [[ ${CADDY_READY} -eq 1 ]]; then
         echo "   ✅ Caddy HTTPS proxy   → https://localhost:${HTTPS_PORT}/v1"
         echo "      (Safari: accept the Caddy local-CA cert on first visit)"
       else
@@ -166,11 +189,20 @@ echo ""
 # ── Shutdown handler ───────────────────────────────────────────────────────────
 _cleanup() {
   echo ""
-  echo "Shutting down llama-server…"
-  kill "${LLM_PID}" 2>/dev/null || true
+  # Only kill llama-server if this script started it (not a reused process)
+  if [[ -z "${EXISTING_PID}" ]]; then
+    echo "Shutting down llama-server…"
+    kill "${LLM_PID}" 2>/dev/null || true
+  fi
   [[ -n "${CADDY_PID}" ]] && kill "${CADDY_PID}" 2>/dev/null || true
   echo "Done."
 }
 trap '_cleanup' EXIT INT TERM
 
-wait "${LLM_PID}"
+# Only wait on processes this shell owns
+if [[ -z "${EXISTING_PID}" ]]; then
+  wait "${LLM_PID}"
+else
+  echo "   (llama-server is external — press Ctrl+C to stop Caddy)"
+  wait "${CADDY_PID}" 2>/dev/null || true
+fi
