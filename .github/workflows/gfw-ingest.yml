@@ -7,6 +7,15 @@ name: GFW EO Ingest
 # Triggers:
 #   - Weekly Monday 00:00 UTC (before data-publish at 01:00)
 #   - Manual dispatch
+#
+# Token assignment — GFW allows ONE concurrent report per token, so each
+# parallel job is pinned to a dedicated token to avoid cross-job 429s.
+# With 3 tokens and 5 regions two tokens serve two regions each; those
+# pairs are staggered so both regions don't fire at exactly the same second.
+#
+#   GFW_API_TOKEN_1 → singapore, blacksea
+#   GFW_API_TOKEN_2 → japan, middleeast
+#   GFW_API_TOKEN_3 → europe
 
 on:
   schedule:
@@ -21,8 +30,60 @@ concurrency:
 
 jobs:
   ingest:
-    name: Fetch GFW EO detections & push to R2
+    name: Fetch ${{ matrix.region }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - region: singapore
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
+          - region: japan
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
+          - region: europe
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_3 }}
+          - region: blacksea
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
+          - region: middleeast
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
+      fail-fast: false
+    env:
+      ARKTRACE_DATA_DIR: data/processed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Fetch GFW EO detections
+        env:
+          GFW_API_TOKEN: ${{ matrix.gfw_api_token }}
+        run: |
+          uv run python scripts/gfw_ingest.py \
+            --regions ${{ matrix.region }} \
+            --days 30
+
+      - name: Upload parquet artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gfw-eo-${{ matrix.region }}
+          path: data/processed/${{ matrix.region }}_eo_detections.parquet
+          if-no-files-found: warn
+
+  push:
+    name: Push GFW EO parquets to R2
+    runs-on: ubuntu-latest
+    needs: ingest
+    if: always()
     permissions:
       contents: read
     env:
@@ -40,15 +101,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --group dev
 
-      - name: Fetch GFW EO detections for all active regions
-        env:
-          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
-          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
-          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
-        run: |
-          uv run python scripts/gfw_ingest.py \
-            --regions singapore,japan,europe,blacksea,middleeast \
-            --days 30
+      - name: Download all parquet artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gfw-eo-*
+          path: data/processed
+          merge-multiple: true
 
       - name: Push GFW EO parquets to private R2
         env:
