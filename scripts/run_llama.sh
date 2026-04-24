@@ -94,6 +94,8 @@ echo "   Endpoint  → http://localhost:${PORT}/v1/chat/completions"
 echo "   Press Ctrl+C to stop."
 echo ""
 
+CADDY_PID=""
+
 # Reuse an existing llama-server on this port rather than trying to bind
 # a second instance (which exits and takes Caddy down via the trap handler).
 EXISTING_PID=""
@@ -187,11 +189,20 @@ echo ""
 # ── Shutdown handler ───────────────────────────────────────────────────────────
 _cleanup() {
   echo ""
-  echo "Shutting down llama-server…"
-  kill "${LLM_PID}" 2>/dev/null || true
+  # Only kill llama-server if this script started it (not a reused process)
+  if [[ -z "${EXISTING_PID}" ]]; then
+    echo "Shutting down llama-server…"
+    kill "${LLM_PID}" 2>/dev/null || true
+  fi
   [[ -n "${CADDY_PID}" ]] && kill "${CADDY_PID}" 2>/dev/null || true
   echo "Done."
 }
 trap '_cleanup' EXIT INT TERM
 
-wait "${LLM_PID}"
+# Only wait on processes this shell owns
+if [[ -z "${EXISTING_PID}" ]]; then
+  wait "${LLM_PID}"
+else
+  echo "   (llama-server is external — press Ctrl+C to stop Caddy)"
+  wait "${CADDY_PID}" 2>/dev/null || true
+fi
