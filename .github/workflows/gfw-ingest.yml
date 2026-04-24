@@ -39,15 +39,15 @@ jobs:
       matrix:
         include:
           - region: singapore
-            token_secret: GFW_API_TOKEN_1
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
           - region: japan
-            token_secret: GFW_API_TOKEN_2
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
           - region: europe
-            token_secret: GFW_API_TOKEN_3
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_3 }}
           - region: blacksea
-            token_secret: GFW_API_TOKEN_1
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_1 }}
           - region: middleeast
-            token_secret: GFW_API_TOKEN_2
+            gfw_api_token: ${{ secrets.GFW_API_TOKEN_2 }}
       fail-fast: false
     env:
       ARKTRACE_DATA_DIR: data/processed
@@ -66,7 +66,7 @@ jobs:
 
       - name: Fetch GFW EO detections
         env:
-          GFW_API_TOKEN: ${{ secrets[matrix.token_secret] }}
+          GFW_API_TOKEN: ${{ matrix.gfw_api_token }}
         run: |
           uv run python scripts/gfw_ingest.py \
             --regions ${{ matrix.region }} \
