@@ -410,6 +410,8 @@ def _upload_file(fs, local_path: Path, r2_path: str, _retries: int = 3) -> int:
     # R2 occasionally returns InvalidPart during CompleteMultipartUpload — a
     # transient condition where uploaded parts are not found on completion.
     # Retry the entire upload from scratch; do not resume partial parts.
+    if _retries < 1:
+        raise ValueError("_retries must be >= 1")
     for attempt in range(1, _retries + 1):
         try:
             with local_path.open("rb") as src:
