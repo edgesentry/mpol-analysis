@@ -151,7 +151,7 @@ export async function fetchManifest(
     const resp = await fetch(url, {
       cache: "no-store",
       ...(config.authProvider === "cloudflare-access"
-        ? { credentials: "include" }
+        ? { credentials: "include", redirect: "manual" }
         : { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }),
     });
     if (!resp.ok) throw new Error(`Failed to fetch manifest (${resp.status}): ${url}`);
@@ -246,7 +246,7 @@ export async function syncAndLoad(
       const fetchOpts: RequestInit =
         privateAuth && config
           ? config.authProvider === "cloudflare-access"
-            ? { credentials: "include" }
+            ? { credentials: "include", redirect: "manual" }
             : { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
           : { credentials: "omit" };
       const resp = await fetch(fetchUrl, fetchOpts);

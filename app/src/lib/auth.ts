@@ -32,7 +32,7 @@ export async function checkPrivateAuth(config: AppConfig): Promise<string | null
   const origin = privateOrigin(config);
   if (!origin) return null;
   try {
-    const resp = await fetch(`${origin}/whoami`, { credentials: "include" });
+    const resp = await fetch(`${origin}/whoami`, { credentials: "include", redirect: "manual" });
     if (!resp.ok) return null;
     const { email } = (await resp.json()) as { email: string };
     return email || null;
