@@ -80,7 +80,7 @@ async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: import.meta.env.VITE_LLM_MODEL ?? "local",
+      model: import.meta.env.VITE_LLM_MODEL ?? "bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M",
       max_tokens: 200,
       temperature: 0.3,
       messages: [
