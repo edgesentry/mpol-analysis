@@ -116,8 +116,9 @@ export async function queryWatchlist(
   opts: { minConfidence?: number; regions?: string[] } = {}
 ): Promise<VesselRow[]> {
   const { minConfidence = 0, regions } = opts;
-  const [hasImo, hasTopSignals, hasAisGap, hasSts] = await Promise.all([
+  const [hasImo, hasRegion, hasTopSignals, hasAisGap, hasSts] = await Promise.all([
     watchlistHasCol(conn, "imo"),
+    watchlistHasCol(conn, "region"),
     watchlistHasCol(conn, "top_signals"),
     watchlistHasCol(conn, "ais_gap_count_30d"),
     watchlistHasCol(conn, "sts_candidate_count"),
@@ -134,14 +135,14 @@ export async function queryWatchlist(
       last_lat,
       last_lon,
       CAST(last_seen AS VARCHAR) AS last_seen,
-      region,
+      ${hasRegion ? "region" : "NULL AS region"},
       ${hasTopSignals ? "CAST(top_signals AS VARCHAR) AS top_signals" : "NULL AS top_signals"},
       ${hasAisGap ? "CAST(ais_gap_count_30d AS INTEGER) AS ais_gap_count_30d" : "NULL AS ais_gap_count_30d"},
       ${hasSts ? "CAST(sts_candidate_count AS INTEGER) AS sts_candidate_count" : "NULL AS sts_candidate_count"}
     FROM read_parquet('watchlist.parquet')
     WHERE confidence >= ${minConfidence}
   `;
-  if (regions && regions.length > 0) {
+  if (hasRegion && regions && regions.length > 0) {
     const list = regions.map((r) => `'${r.replace(/'/g, "''")}'`).join(", ");
     sql += ` AND region IN (${list})`;
   }
