@@ -54,7 +54,7 @@ describe("checkPrivateAuth — cloudflare-access", () => {
     expect(await checkPrivateAuth(CF_CONFIG)).toBe("user@example.com");
     expect(fetch).toHaveBeenCalledWith(
       "https://worker.example.com/whoami",
-      { credentials: "include" }
+      { credentials: "include", redirect: "manual" }
     );
   });
 
