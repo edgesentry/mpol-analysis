@@ -940,6 +940,127 @@ def cmd_pull_reviews(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_merge_reviews(args: argparse.Namespace) -> int:
+    """Merge per-user reviews/*/reviews.parquet files into reviews/merged/reviews.parquet.
+
+    Lists all ``reviews/<email>/reviews.parquet`` objects in R2, unions them with
+    DuckDB, resolves conflicts by keeping the newest ``reviewed_at`` per mmsi, and
+    uploads the result to ``reviews/merged/reviews.parquet``.  Also merges
+    ``audit.parquet`` and ``briefs.parquet`` (union-distinct, no per-key dedup).
+    """
+    import pyarrow.fs as pafs
+    import duckdb as _duckdb
+
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    fs = _build_r2_fs()
+
+    selector = pafs.FileSelector(f"{bucket}/reviews/", recursive=True)
+    try:
+        infos = fs.get_file_info(selector)
+    except Exception as exc:
+        print(f"Failed to list reviews in R2: {exc}", file=sys.stderr)
+        return 1
+
+    def _user_files(suffix: str) -> list[str]:
+        return [
+            i.path for i in infos
+            if i.type == pafs.FileType.File
+            and i.path.endswith(f"/{suffix}")
+            and "/merged/" not in i.path
+        ]
+
+    reviews_paths = _user_files("reviews.parquet")
+    audit_paths   = _user_files("audit.parquet")
+    briefs_paths  = _user_files("briefs.parquet")
+
+    if not reviews_paths:
+        print("No per-user reviews found in R2 — nothing to merge.")
+        return 0
+
+    print(f"Merging {len(reviews_paths)} user review file(s) ...")
+
+    tmp_downloads: list[Path] = []
+    try:
+        def _fetch_all(r2_paths: list[str]) -> list[Path]:
+            result = []
+            for r2_path in r2_paths:
+                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as t:
+                    p = Path(t.name)
+                _download_file(fs, r2_path, p)
+                result.append(p)
+            tmp_downloads.extend(result)
+            return result
+
+        reviews_local = _fetch_all(reviews_paths)
+        audit_local   = _fetch_all(audit_paths)
+        briefs_local  = _fetch_all(briefs_paths)
+
+        def _merge_newest(local_files: list[Path], key: str, order_col: str) -> tuple[Path, int]:
+            """Union files; keep newest order_col per key. Returns (tmp_path, row_count)."""
+            src_list = ", ".join(f"'{p}'" for p in local_files)
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as t:
+                out = Path(t.name)
+            con = _duckdb.connect()
+            try:
+                con.execute(f"""
+                    COPY (
+                        SELECT * EXCLUDE (_rn)
+                        FROM (
+                            SELECT *, ROW_NUMBER() OVER (
+                                PARTITION BY {key}
+                                ORDER BY {order_col} DESC NULLS LAST
+                            ) AS _rn
+                            FROM read_parquet([{src_list}])
+                        )
+                        WHERE _rn = 1
+                    ) TO '{out}' (FORMAT PARQUET)
+                """)
+                rows = con.execute(f"SELECT COUNT(*) FROM read_parquet('{out}')").fetchone()[0]
+            finally:
+                con.close()
+            tmp_downloads.append(out)
+            return out, rows
+
+        def _merge_union(local_files: list[Path]) -> tuple[Path, int]:
+            """Union files, deduplicate all columns. Returns (tmp_path, row_count)."""
+            src_list = ", ".join(f"'{p}'" for p in local_files)
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as t:
+                out = Path(t.name)
+            con = _duckdb.connect()
+            try:
+                con.execute(f"""
+                    COPY (
+                        SELECT DISTINCT * FROM read_parquet([{src_list}])
+                    ) TO '{out}' (FORMAT PARQUET)
+                """)
+                rows = con.execute(f"SELECT COUNT(*) FROM read_parquet('{out}')").fetchone()[0]
+            finally:
+                con.close()
+            tmp_downloads.append(out)
+            return out, rows
+
+        reviews_out, reviews_rows = _merge_newest(reviews_local, "mmsi", "reviewed_at")
+        _upload_file(fs, reviews_out, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/reviews.parquet")
+        print(f"  reviews.parquet  → {reviews_rows} rows")
+
+        if audit_local:
+            audit_out, audit_rows = _merge_union(audit_local)
+            _upload_file(fs, audit_out, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/audit.parquet")
+            print(f"  audit.parquet    → {audit_rows} rows")
+
+        if briefs_local:
+            briefs_out, briefs_rows = _merge_newest(briefs_local, "mmsi", "reviewed_at")
+            _upload_file(fs, briefs_out, f"{bucket}/{_REVIEWS_MERGED_PREFIX}/briefs.parquet")
+            print(f"  briefs.parquet   → {briefs_rows} rows")
+
+    finally:
+        for p in tmp_downloads:
+            p.unlink(missing_ok=True)
+
+    print("merge-reviews done.")
+    return 0
+
+
 def cmd_push_demo(args: argparse.Namespace) -> int:
     """Upload the fixed-key demo bundle to R2 (requires credentials).
 
@@ -1799,6 +1920,11 @@ def main() -> int:
         "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
     )
 
+    sub.add_parser(
+        "merge-reviews",
+        help="Merge per-user reviews/*/reviews.parquet into reviews/merged/ (requires credentials)",
+    )
+
     _default_feeds_dir = str(_PRIVATE_FEEDS_DIR)
 
     push_custom_feeds_p = sub.add_parser(
@@ -2003,6 +2129,7 @@ def main() -> int:
         "push-demo": cmd_push_demo,
         "pull-demo": cmd_pull_demo,
         "pull-reviews": cmd_pull_reviews,
+        "merge-reviews": cmd_merge_reviews,
         "push-custom-feeds": cmd_push_custom_feeds,
         "pull-custom-feeds": cmd_pull_custom_feeds,
         "push-ducklake-public": cmd_push_ducklake_public,
