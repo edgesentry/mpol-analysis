@@ -118,6 +118,10 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHYSICAL INVESTIGATION  (edgesentry-app / edgesentry-rs)       │
 │  (out of scope for this repo — see roadmap.md)                  │
+│                                                                 │
+│  Data handoff: arktrace writes candidate_watchlist.parquet      │
+│  → eds parse maritime --source candidate_watchlist.parquet      │
+│    reads it directly (Parquet auto-detected by extension)       │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
