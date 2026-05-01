@@ -48,9 +48,7 @@ def _compute_sanctions_distance(tables: dict) -> pl.DataFrame:
     sanctioned_ids: set[str] = set(sb["src_id"].to_list()) if len(sb) else set()
 
     # Direct (vessel mmsi in sanctioned_ids)
-    direct: set[str] = set(
-        vessels.filter(pl.col("mmsi").is_in(sanctioned_ids))["mmsi"].to_list()
-    )
+    direct: set[str] = set(vessels.filter(pl.col("mmsi").is_in(sanctioned_ids))["mmsi"].to_list())
 
     # 1-hop: vessel → (OWNED_BY | MANAGED_BY) → company → sanctioned
     if len(ob) or len(mb):
@@ -77,9 +75,7 @@ def _compute_sanctions_distance(tables: dict) -> pl.DataFrame:
         )
         if sanctioned_parents and (len(ob) or len(mb)):
             two_hop_vessels = (
-                vessel_companies.filter(pl.col("dst_id").is_in(sanctioned_parents))[
-                    "src_id"
-                ]
+                vessel_companies.filter(pl.col("dst_id").is_in(sanctioned_parents))["src_id"]
                 .unique()
                 .to_list()
             )
@@ -111,15 +107,11 @@ def _compute_cluster_sanctions_ratio(tables: dict) -> pl.DataFrame:
     sb = pl.from_arrow(tables["SANCTIONED_BY"])
 
     if len(ob) == 0:
-        return vessels.with_columns(
-            pl.lit(0.0).cast(pl.Float32).alias("cluster_sanctions_ratio")
-        )
+        return vessels.with_columns(pl.lit(0.0).cast(pl.Float32).alias("cluster_sanctions_ratio"))
 
     sanctioned_ids: set[str] = set(sb["src_id"].to_list()) if len(sb) else set()
 
-    own = ob.select(["src_id", "dst_id"]).rename(
-        {"src_id": "vessel", "dst_id": "owner"}
-    )
+    own = ob.select(["src_id", "dst_id"]).rename({"src_id": "vessel", "dst_id": "owner"})
 
     # Self-join on owner to get (vessel, peer) pairs
     pairs = (
@@ -130,14 +122,10 @@ def _compute_cluster_sanctions_ratio(tables: dict) -> pl.DataFrame:
     )
 
     if len(pairs) == 0:
-        return vessels.with_columns(
-            pl.lit(0.0).cast(pl.Float32).alias("cluster_sanctions_ratio")
-        )
+        return vessels.with_columns(pl.lit(0.0).cast(pl.Float32).alias("cluster_sanctions_ratio"))
 
     ratio_df = (
-        pairs.with_columns(
-            pl.col("peer").is_in(sanctioned_ids).alias("peer_sanctioned")
-        )
+        pairs.with_columns(pl.col("peer").is_in(sanctioned_ids).alias("peer_sanctioned"))
         .group_by("vessel")
         .agg(
             [
@@ -146,9 +134,9 @@ def _compute_cluster_sanctions_ratio(tables: dict) -> pl.DataFrame:
             ]
         )
         .with_columns(
-            (
-                pl.col("sanctioned_count").cast(pl.Float32) / pl.col("cluster_size")
-            ).alias("cluster_sanctions_ratio")
+            (pl.col("sanctioned_count").cast(pl.Float32) / pl.col("cluster_size")).alias(
+                "cluster_sanctions_ratio"
+            )
         )
         .select(["vessel", "cluster_sanctions_ratio"])
         .rename({"vessel": "mmsi"})
@@ -168,13 +156,9 @@ def _compute_shared_manager_risk(
     mb = pl.from_arrow(tables["MANAGED_BY"])
 
     if len(mb) == 0:
-        return vessels.with_columns(
-            pl.lit(MAX_HOPS).cast(pl.Int32).alias("shared_manager_risk")
-        )
+        return vessels.with_columns(pl.lit(MAX_HOPS).cast(pl.Int32).alias("shared_manager_risk"))
 
-    mgd = mb.select(["src_id", "dst_id"]).rename(
-        {"src_id": "vessel", "dst_id": "manager"}
-    )
+    mgd = mb.select(["src_id", "dst_id"]).rename({"src_id": "vessel", "dst_id": "manager"})
 
     peers_df = (
         mgd.join(mgd.rename({"vessel": "peer"}), on="manager")
@@ -189,9 +173,7 @@ def _compute_shared_manager_risk(
     rows = []
     for row in peers_df.iter_rows(named=True):
         peers = row["peer_mmsis"] or []
-        min_dist = min(
-            (sanctions_map.get(p, MAX_HOPS) for p in peers), default=MAX_HOPS
-        )
+        min_dist = min((sanctions_map.get(p, MAX_HOPS) for p in peers), default=MAX_HOPS)
         rows.append({"mmsi": row["mmsi"], "shared_manager_risk": min_dist})
 
     smr_df = (
@@ -213,18 +195,14 @@ def _compute_shared_address_centrality(tables: dict) -> pl.DataFrame:
     ra = pl.from_arrow(tables["REGISTERED_AT"])
 
     if (len(ob) == 0 and len(mb) == 0) or len(ra) == 0:
-        return vessels.with_columns(
-            pl.lit(0).cast(pl.Int32).alias("shared_address_centrality")
-        )
+        return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("shared_address_centrality"))
 
     frames = []
     if len(ob):
         frames.append(ob.select(["src_id", "dst_id"]))
     if len(mb):
         frames.append(mb.select(["src_id", "dst_id"]))
-    vessel_company = (
-        pl.concat(frames).unique().rename({"src_id": "vessel", "dst_id": "company"})
-    )
+    vessel_company = pl.concat(frames).unique().rename({"src_id": "vessel", "dst_id": "company"})
 
     reg_at = ra.rename({"src_id": "company", "dst_id": "address"})
     vessel_address = (
@@ -232,9 +210,7 @@ def _compute_shared_address_centrality(tables: dict) -> pl.DataFrame:
     )
 
     if len(vessel_address) == 0:
-        return vessels.with_columns(
-            pl.lit(0).cast(pl.Int32).alias("shared_address_centrality")
-        )
+        return vessels.with_columns(pl.lit(0).cast(pl.Int32).alias("shared_address_centrality"))
 
     centrality_df = (
         vessel_address.join(vessel_address.rename({"vessel": "peer"}), on="address")
@@ -266,17 +242,11 @@ def _compute_sts_hub_degree(tables: dict) -> pl.DataFrame:
 
     both_dirs = pl.concat(
         [
-            sts.select(
-                pl.col("src_id").alias("mmsi"), pl.col("dst_id").alias("partner")
-            ),
-            sts.select(
-                pl.col("dst_id").alias("mmsi"), pl.col("src_id").alias("partner")
-            ),
+            sts.select(pl.col("src_id").alias("mmsi"), pl.col("dst_id").alias("partner")),
+            sts.select(pl.col("dst_id").alias("mmsi"), pl.col("src_id").alias("partner")),
         ]
     )
-    hub_df = both_dirs.group_by("mmsi").agg(
-        pl.col("partner").n_unique().alias("sts_hub_degree")
-    )
+    hub_df = both_dirs.group_by("mmsi").agg(pl.col("partner").n_unique().alias("sts_hub_degree"))
 
     return vessels.join(hub_df, on="mmsi", how="left").with_columns(
         pl.col("sts_hub_degree").fill_null(0).cast(pl.Int32)
@@ -321,10 +291,7 @@ def _apply_direct_sanctions_fallback(sd_df: pl.DataFrame, db_path: str) -> pl.Da
         return sd_df
 
     return sd_df.with_columns(
-        pl.when(
-            (pl.col("sanctions_distance") == MAX_HOPS)
-            & pl.col("mmsi").is_in(direct_mmsi)
-        )
+        pl.when((pl.col("sanctions_distance") == MAX_HOPS) & pl.col("mmsi").is_in(direct_mmsi))
         .then(pl.lit(0, dtype=pl.Int32))
         .otherwise(pl.col("sanctions_distance"))
         .alias("sanctions_distance")
