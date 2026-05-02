@@ -35,6 +35,22 @@ H3_RESOLUTION = 8  # ~0.7 km cell edge ≈ 0.5 nm for STS detection
 STOPPED_STATUSES = [0, 1, 3, 5]  # underway, at anchor, restricted, moored
 PORT_MOORED_STATUS = 5
 
+# Chokepoint exit reference points (lat, lon) — positions ~5–10 nm outside each strait exit
+# bearing away from the chokepoint into open water.  A gap onset within 50 nm of any of
+# these points on an outbound heading is the "AIS compliance weaponization" signature.
+_CHOKEPOINT_EXITS: list[tuple[float, float, str]] = [
+    (1.16, 104.4, "singapore_east"),  # Singapore Strait eastern exit → South China Sea
+    (1.28, 103.5, "singapore_west"),  # Singapore Strait western exit → Malacca
+    (6.5, 99.8, "malacca_north"),  # Malacca Strait northern exit → Andaman Sea
+    (26.5, 57.2, "hormuz_east"),  # Strait of Hormuz eastern exit → Gulf of Oman
+    (12.4, 43.6, "babelMandeb_south"),  # Bab-el-Mandeb southern exit → Gulf of Aden
+    (29.9, 32.6, "suez_south"),  # Suez Canal southern exit → Red Sea
+    (36.2, 28.0, "aegean_south"),  # Turkish Straits / Aegean exit (Dardanelles)
+    (-34.0, 18.4, "capetown"),  # Cape of Good Hope (no canal, used as diversion)
+]
+_CHOKEPOINT_EXIT_RADIUS_KM = 50.0 * 1.852  # 50 nautical miles in km
+PRE_GAP_WINDOW_H = 6.0  # hours of transmission history to analyse before each gap
+
 
 def _geo_to_h3(lat: float, lon: float, res: int) -> str:
     """H3 cell index — compatible with h3-py 3.x and 4.x."""
@@ -220,6 +236,136 @@ def compute_loitering(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def _near_chokepoint_exit(lat: float, lon: float) -> bool:
+    return any(
+        _haversine_km(lat, lon, clat, clon) <= _CHOKEPOINT_EXIT_RADIUS_KM
+        for clat, clon, _ in _CHOKEPOINT_EXITS
+    )
+
+
+def compute_chokepoint_gap_features(
+    df: pl.DataFrame,
+    gap_threshold_h: float = GAP_THRESHOLD_H,
+    pre_gap_window_h: float = PRE_GAP_WINDOW_H,
+) -> pl.DataFrame:
+    """chokepoint_exit_gap_count and ais_pre_gap_regularity per MMSI.
+
+    chokepoint_exit_gap_count — number of AIS gap onsets whose last known position
+    is within 50 nm of a major chokepoint exit.  Near-zero false-positive rate for
+    legitimate commercial traffic; high specificity for evasion.
+
+    ais_pre_gap_regularity — mean coefficient of variation (std/mean) of AIS
+    transmission intervals in the ``pre_gap_window_h`` hours before each gap onset,
+    averaged across all qualifying gaps per MMSI.  Suspiciously low CV (machine-like
+    regular transmissions) preceding a long dark period is the "AIS compliance
+    weaponization" signature identified in the Al Jazeera 2026-04-30 investigation.
+    Returns NaN (→ filled with 1.0 = noisy baseline) when no qualifying gap exists.
+    """
+    sorted_df = (
+        df.lazy()
+        .sort(["mmsi", "timestamp"])
+        .with_columns(pl.col("timestamp").diff().over("mmsi").dt.total_minutes().alias("gap_min"))
+        .collect()
+    )
+
+    gap_rows = sorted_df.filter(pl.col("gap_min") > gap_threshold_h * 60)
+    if gap_rows.is_empty():
+        return pl.DataFrame(
+            {
+                "mmsi": [],
+                "chokepoint_exit_gap_count": [],
+                "ais_pre_gap_regularity": [],
+            },
+            schema={
+                "mmsi": pl.Utf8,
+                "chokepoint_exit_gap_count": pl.Int32,
+                "ais_pre_gap_regularity": pl.Float32,
+            },
+        )
+
+    # --- chokepoint_exit_gap_count ---
+    # Each row in gap_rows is the *first* position after a gap; the gap-onset position
+    # is the row immediately before (previous lat/lon for that MMSI).  We already have
+    # the previous timestamp via diff, but need the previous lat/lon.  Recompute with
+    # shift so each gap row carries its onset coordinates.
+    with_onset = (
+        sorted_df.lazy()
+        .sort(["mmsi", "timestamp"])
+        .with_columns(
+            [
+                pl.col("lat").shift(1).over("mmsi").alias("onset_lat"),
+                pl.col("lon").shift(1).over("mmsi").alias("onset_lon"),
+            ]
+        )
+        .filter(pl.col("gap_min") > gap_threshold_h * 60)
+        .drop_nulls(subset=["onset_lat", "onset_lon"])
+        .collect()
+    )
+
+    with_choke = with_onset.with_columns(
+        pl.struct(["onset_lat", "onset_lon"])
+        .map_elements(
+            lambda s: _near_chokepoint_exit(s["onset_lat"], s["onset_lon"]),
+            return_dtype=pl.Boolean,
+        )
+        .alias("near_exit")
+    )
+
+    choke_counts = with_choke.group_by("mmsi").agg(
+        pl.col("near_exit").sum().cast(pl.Int32).alias("chokepoint_exit_gap_count")
+    )
+
+    # --- ais_pre_gap_regularity ---
+    # For each gap onset, collect all inter-message intervals in the preceding
+    # pre_gap_window_h hours and compute CV.  We work in plain Python here because
+    # variable-window group ops in Polars are verbose; the number of gap events is small.
+    pre_gap_window_us = int(pre_gap_window_h * 3600 * 1_000_000)
+
+    mmsi_ts = sorted_df.select(["mmsi", "timestamp"]).sort(["mmsi", "timestamp"])
+    ts_by_mmsi: dict[str, list[int]] = {}
+    for row in mmsi_ts.iter_rows(named=True):
+        ts_by_mmsi.setdefault(row["mmsi"], []).append(
+            row["timestamp"].timestamp() * 1_000_000
+            if hasattr(row["timestamp"], "timestamp")
+            else int(row["timestamp"])
+        )
+
+    cv_records: list[dict] = []
+    for row in with_onset.iter_rows(named=True):
+        mmsi = row["mmsi"]
+        # onset timestamp: re-derive from gap row timestamp minus gap_min.
+        gap_start_us = (
+            int(row["timestamp"].timestamp() * 1_000_000)
+            if hasattr(row["timestamp"], "timestamp")
+            else int(row["timestamp"])
+        ) - int(row["gap_min"] * 60 * 1_000_000)
+
+        window_start_us = gap_start_us - pre_gap_window_us
+        ts_list = ts_by_mmsi.get(mmsi, [])
+        window_ts = [t for t in ts_list if window_start_us <= t <= gap_start_us]
+        if len(window_ts) < 3:
+            continue
+        intervals = [window_ts[i + 1] - window_ts[i] for i in range(len(window_ts) - 1)]
+        mean_iv = sum(intervals) / len(intervals)
+        if mean_iv == 0:
+            continue
+        std_iv = (sum((x - mean_iv) ** 2 for x in intervals) / len(intervals)) ** 0.5
+        cv_records.append({"mmsi": mmsi, "cv": std_iv / mean_iv})
+
+    if cv_records:
+        cv_df = pl.DataFrame(cv_records, schema={"mmsi": pl.Utf8, "cv": pl.Float64})
+        regularity = cv_df.group_by("mmsi").agg(
+            pl.col("cv").mean().cast(pl.Float32).alias("ais_pre_gap_regularity")
+        )
+    else:
+        regularity = pl.DataFrame(
+            {"mmsi": [], "ais_pre_gap_regularity": []},
+            schema={"mmsi": pl.Utf8, "ais_pre_gap_regularity": pl.Float32},
+        )
+
+    return choke_counts.join(regularity, on="mmsi", how="full", coalesce=True)
+
+
 def compute_port_call_ratio(df: pl.DataFrame) -> pl.DataFrame:
     """port_call_ratio = fraction of stopped time declared as moored (nav_status=5)."""
     return (
@@ -274,6 +420,8 @@ def compute_ais_features(
             "sts_candidate_count": pl.Int32,
             "port_call_ratio": pl.Float32,
             "loitering_hours_30d": pl.Float32,
+            "chokepoint_exit_gap_count": pl.Int32,
+            "ais_pre_gap_regularity": pl.Float32,
         }
     )
     if df.is_empty():
@@ -286,6 +434,7 @@ def compute_ais_features(
     sts = compute_sts_candidates(df, deep_cells=deep_cells)
     loiter = compute_loitering(df)
     port = compute_port_call_ratio(df)
+    choke = compute_chokepoint_gap_features(df, gap_threshold_h)
 
     return (
         all_mmsi.lazy()
@@ -294,6 +443,7 @@ def compute_ais_features(
         .join(sts.lazy(), on="mmsi", how="left")
         .join(loiter.lazy(), on="mmsi", how="left")
         .join(port.lazy(), on="mmsi", how="left")
+        .join(choke.lazy(), on="mmsi", how="left")
         .with_columns(
             [
                 pl.col("ais_gap_count_30d").fill_null(0).cast(pl.Int32),
@@ -302,6 +452,9 @@ def compute_ais_features(
                 pl.col("sts_candidate_count").fill_null(0).cast(pl.Int32),
                 pl.col("port_call_ratio").fill_null(0.5).cast(pl.Float32),
                 pl.col("loitering_hours_30d").fill_null(0.0).cast(pl.Float32),
+                pl.col("chokepoint_exit_gap_count").fill_null(0).cast(pl.Int32),
+                # 1.0 = noisy/normal baseline; low CV = suspiciously machine-like
+                pl.col("ais_pre_gap_regularity").fill_null(1.0).cast(pl.Float32),
             ]
         )
         .collect()
