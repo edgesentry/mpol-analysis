@@ -1,17 +1,18 @@
 # Feature Engineering
 
-The arktrace pipeline computes 22 features across five families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
+The arktrace pipeline computes 27 features across five families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
 
 ## Feature families
 
 | Family | Module | Features | Backend |
 |---|---|---|---|
-| AIS Behavioral | `ais_behavior.py` | 6 | DuckDB / Polars |
-| Identity Volatility | `identity.py` | 5 | Lance Graph + DuckDB |
+| AIS Behavioral | `ais_behavior.py` | 8 | DuckDB / Polars |
+| Identity Volatility | `identity.py` | 7 | Lance Graph + DuckDB |
 | Ownership Graph | `ownership_graph.py` | 5 | Lance Graph (Polars joins) |
 | Trade Flow Mismatch | `trade_mismatch.py` | 2 | DuckDB + Comtrade API |
 | EO Fusion | `eo_fusion.py` | 4 | DuckDB (GFW API via `eo_gfw.py` / CSV) |
-| **Total** | | **22** | |
+| SAR Detections | `sar_detections.py` | 1 | DuckDB |
+| **Total** | | **27** | |
 
 ---
 
@@ -189,6 +190,60 @@ Count of EO (Electro-Optical satellite imagery) vessel detections in the last 30
 Fraction of all EO detections attributed to this vessel (matched + unmatched) that were unmatched (dark): `eo_dark_count_30d / total_attributed_detections`.
 
 **Shadow fleet signal:** A vessel that appears in satellite imagery only when it is also broadcasting on AIS has a ratio near 0 — consistent with compliant behaviour. A vessel with a ratio above 0.5 is dark during more than half its satellite observations, indicating a systematic pattern of AIS suppression rather than occasional equipment failure.
+
+---
+
+## Chokepoint Exit / AIS Compliance Weaponization features
+
+Source: `ais_positions` DuckDB table. Computed by `compute_chokepoint_gap_features()` in `src/features/ais_behavior.py`. Added in arktrace#543 (2026-05-02).
+
+**Background:** The Al Jazeera shadow fleet investigation (2026-04-30) confirmed a new evasion pattern: vessels transmit perfect, uninterrupted AIS *during* strait passage to appear compliant, then go dark immediately after clearing the chokepoint. The existing `ais_gap_count_30d` does not distinguish where gaps begin.
+
+### `chokepoint_exit_gap_count`
+
+Number of AIS gap onsets (last known position before going dark) that fall within 50 nautical miles of a major chokepoint exit: Singapore Strait (east/west), Malacca north, Strait of Hormuz east, Bab-el-Mandeb, Suez Canal south, Aegean/Dardanelles, Cape of Good Hope.
+
+**Shadow fleet signal:** Legitimate commercial traffic does not go dark at chokepoint exits. Port congestion and anchorage delays produce gaps *near ports*, not in open water immediately past a major strait. Near-zero false-positive rate for compliant vessels; high specificity for deliberate AIS suppression after chokepoint transit.
+
+**Default when missing:** 0
+
+### `ais_pre_gap_regularity`
+
+Mean coefficient of variation (CV = std/mean) of AIS transmission intervals in the 6 hours before each gap onset, averaged across all qualifying gaps (> `GAP_THRESHOLD_H`) per vessel.
+
+A CV near 0 means transmissions were machine-like regular — identical intervals, as if a timer was set to broadcast exactly every N seconds before cutting. Legitimate vessels have noisy, irregular transmission intervals driven by satellite coverage, congestion, and transponder behaviour. CV is calculated only for gaps with ≥ 3 pre-gap pings; vessels with no qualifying gaps receive the neutral default of 1.0.
+
+**Shadow fleet signal:** Suspiciously regular transmission (low CV) immediately preceding a long dark period is the hallmark of deliberate AIS compliance: a vessel broadcasting on a strict timer to appear compliant during a monitored strait transit, then switching off once clear.
+
+**Default when missing:** 1.0 (noisy/normal baseline)
+
+---
+
+## IMO Identity Spoofing features
+
+Source: `vessel_meta` DuckDB table (AIS-reported type) joined against `equasis_vessel_ref` (Equasis registered type and scrapped status). Computed by `compute_imo_mismatch_features()` in `src/features/identity.py`. Added in arktrace#544 (2026-05-02).
+
+**Requires:** Equasis reference data loaded via `upsert_equasis_vessel_ref(db_path, equasis_csv)`. When `equasis_vessel_ref` is empty, both features default to `False` for all vessels (graceful degradation).
+
+**Background:** Shadow fleet vessels increasingly adopt IMO numbers from scrapped or fictitious ships to pass ownership graph lookups as clean entities. A vessel broadcasting as a 2018-built chemical tanker (AIS ship_type=68) but registered under an IMO number belonging to a 2005-built VLCC (Equasis vessel_type=80) is a clear identity inconsistency.
+
+### `imo_type_mismatch`
+
+Boolean. `True` when the broad ship-type category reported in AIS messages differs from the category registered for the same IMO number in Equasis.
+
+Broad categories (ITU-R M.1371): fishing (30), service/tug (31–57), passenger (60–69), cargo (70–79), tanker (80–89). Mismatch is only raised when both the AIS and Equasis categories are known (non-zero); vessels with unknown/other types on either side are not flagged.
+
+**Shadow fleet signal:** A vessel cannot physically change type. A tanker hull claiming a cargo IMO, or a fishing vessel broadcasting a tanker IMO, is either operating with a spoofed identity document or has adopted the IMO of a scrapped vessel whose former type is on record.
+
+**Default when missing:** `False`
+
+### `imo_scrapped_flag`
+
+Boolean. `True` when the vessel's reported IMO number appears in the Equasis deleted/scrapped vessel registry (`scrapped=True` in `equasis_vessel_ref`).
+
+**Shadow fleet signal:** Scrapped vessels are removed from active Lloyd's/Equasis registries. An active AIS broadcast using a scrapped IMO is definitive evidence of identity fraud — the vessel either never existed, or the physical vessel was decommissioned and its IMO number reused to create a clean identity.
+
+**Default when missing:** `False`
 
 ---
 
