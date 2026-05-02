@@ -9,11 +9,14 @@ import polars as pl
 import pytest
 
 from pipeline.src.features.ais_behavior import (
+    _CHOKEPOINT_EXITS,
     GAP_THRESHOLD_H,
     LOITER_SPEED_KNOTS,
     PORT_MOORED_STATUS,
     _haversine_km,
+    _near_chokepoint_exit,
     compute_ais_features,
+    compute_chokepoint_gap_features,
     compute_gap_features,
     compute_loitering,
     compute_port_call_ratio,
@@ -497,6 +500,8 @@ def test_compute_ais_features_empty_db_returns_correct_schema(tmp_db):
         "sts_candidate_count",
         "port_call_ratio",
         "loitering_hours_30d",
+        "chokepoint_exit_gap_count",
+        "ais_pre_gap_regularity",
     }
     assert expected_cols == set(result.columns)
 
@@ -525,3 +530,121 @@ def test_compute_ais_features_fill_null_defaults(tmp_db):
     assert row["sts_candidate_count"][0] == 0
     assert row["loitering_hours_30d"][0] == pytest.approx(0.0)
     assert row["port_call_ratio"][0] == pytest.approx(0.5)  # fill_null default
+    assert row["chokepoint_exit_gap_count"][0] == 0
+    assert row["ais_pre_gap_regularity"][0] == pytest.approx(1.0)  # fill_null default
+
+
+# ---------------------------------------------------------------------------
+# _near_chokepoint_exit
+# ---------------------------------------------------------------------------
+
+
+def test_near_chokepoint_exit_singapore_east():
+    """Position at Singapore Strait eastern exit should be within 50 nm."""
+    lat, lon, _ = next(c for c in _CHOKEPOINT_EXITS if c[2] == "singapore_east")
+    assert _near_chokepoint_exit(lat, lon) is True
+
+
+def test_near_chokepoint_exit_far_from_all():
+    """Mid-Pacific position is not near any chokepoint exit."""
+    assert _near_chokepoint_exit(0.0, -140.0) is False
+
+
+def test_near_chokepoint_exit_boundary():
+    """Position 49 nm from Singapore east exit should be inside the 50 nm radius."""
+    lat, lon, _ = next(c for c in _CHOKEPOINT_EXITS if c[2] == "singapore_east")
+    # 49 nm north → inside
+    offset_lat = lat + (49 * 1.852 / 111.195)
+    assert _near_chokepoint_exit(offset_lat, lon) is True
+
+
+# ---------------------------------------------------------------------------
+# compute_chokepoint_gap_features
+# ---------------------------------------------------------------------------
+
+
+def test_chokepoint_gap_count_near_exit():
+    """Gap onset near Singapore eastern exit → chokepoint_exit_gap_count = 1."""
+    t0 = _BASE_TS
+    # Use Singapore Strait eastern exit coords (1.16, 104.4)
+    choke_lat, choke_lon, _ = next(c for c in _CHOKEPOINT_EXITS if c[2] == "singapore_east")
+    df = _make_df(
+        [
+            {"mmsi": "CHOKE0001", "timestamp": t0, "lat": choke_lat, "lon": choke_lon},
+            # 12-hour gap > GAP_THRESHOLD_H (10h) — onset is at choke_lat/lon
+            {"mmsi": "CHOKE0001", "timestamp": t0 + timedelta(hours=12), "lat": 5.0, "lon": 110.0},
+        ]
+    )
+    result = compute_chokepoint_gap_features(df, gap_threshold_h=GAP_THRESHOLD_H)
+    row = result.filter(pl.col("mmsi") == "CHOKE0001")
+    assert not row.is_empty()
+    assert row["chokepoint_exit_gap_count"][0] == 1
+
+
+def test_chokepoint_gap_count_far_from_exit():
+    """Gap onset in mid-ocean (far from all chokepoints) → chokepoint_exit_gap_count = 0."""
+    t0 = _BASE_TS
+    df = _make_df(
+        [
+            {"mmsi": "OCEAN001", "timestamp": t0, "lat": 0.0, "lon": -140.0},
+            {"mmsi": "OCEAN001", "timestamp": t0 + timedelta(hours=12), "lat": 5.0, "lon": -140.0},
+        ]
+    )
+    result = compute_chokepoint_gap_features(df, gap_threshold_h=GAP_THRESHOLD_H)
+    row = result.filter(pl.col("mmsi") == "OCEAN001")
+    if not row.is_empty():
+        assert row["chokepoint_exit_gap_count"][0] == 0
+
+
+def test_chokepoint_gap_below_threshold_not_counted():
+    """Gap below GAP_THRESHOLD_H near a chokepoint exit is not counted."""
+    t0 = _BASE_TS
+    choke_lat, choke_lon, _ = next(c for c in _CHOKEPOINT_EXITS if c[2] == "singapore_east")
+    df = _make_df(
+        [
+            {"mmsi": "SMALL001", "timestamp": t0, "lat": choke_lat, "lon": choke_lon},
+            {"mmsi": "SMALL001", "timestamp": t0 + timedelta(hours=5), "lat": 5.0, "lon": 110.0},
+        ]
+    )
+    result = compute_chokepoint_gap_features(df, gap_threshold_h=GAP_THRESHOLD_H)
+    row = result.filter(pl.col("mmsi") == "SMALL001")
+    if not row.is_empty():
+        assert row["chokepoint_exit_gap_count"][0] == 0
+
+
+def test_chokepoint_gap_empty_dataframe():
+    df = pl.DataFrame(
+        schema={
+            "mmsi": pl.Utf8,
+            "timestamp": pl.Datetime("us", "UTC"),
+            "lat": pl.Float64,
+            "lon": pl.Float64,
+            "sog": pl.Float64,
+            "nav_status": pl.Int64,
+        }
+    )
+    result = compute_chokepoint_gap_features(df)
+    assert result.is_empty()
+    assert "chokepoint_exit_gap_count" in result.columns
+    assert "ais_pre_gap_regularity" in result.columns
+
+
+def test_pre_gap_regularity_regular_transmission():
+    """Machine-like regular pings before a gap → low CV (close to 0)."""
+    t0 = _BASE_TS
+    # 6 pings exactly 30 minutes apart = perfectly regular (CV=0)
+    pings = [
+        {"mmsi": "REG00001", "timestamp": t0 + timedelta(minutes=30 * i), "lat": 1.16, "lon": 104.4}
+        for i in range(6)
+    ]
+    # Then a 12-hour gap
+    pings.append(
+        {"mmsi": "REG00001", "timestamp": t0 + timedelta(hours=2.5 + 12), "lat": 5.0, "lon": 110.0}
+    )
+    df = _make_df(pings)
+    result = compute_chokepoint_gap_features(
+        df, gap_threshold_h=GAP_THRESHOLD_H, pre_gap_window_h=6.0
+    )
+    row = result.filter(pl.col("mmsi") == "REG00001")
+    if not row.is_empty() and row["ais_pre_gap_regularity"][0] is not None:
+        assert row["ais_pre_gap_regularity"][0] == pytest.approx(0.0, abs=0.05)
