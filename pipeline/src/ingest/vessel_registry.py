@@ -365,6 +365,77 @@ def build_graph_tables(
 
 
 # ---------------------------------------------------------------------------
+# Equasis vessel reference (type / build_year / scrapped) — DuckDB upsert
+# ---------------------------------------------------------------------------
+
+_EQUASIS_REF_COLS = {"imo", "vessel_type", "build_year", "scrapped"}
+
+
+def upsert_equasis_vessel_ref(db_path: str, equasis_csv: str) -> int:
+    """Parse Equasis CSV and upsert vessel_type / build_year / scrapped into
+    the ``equasis_vessel_ref`` DuckDB table.
+
+    Columns read from the CSV (all optional — missing values are skipped):
+        imo, vessel_type (int AIS code), build_year (int), scrapped (0/1/true/false)
+
+    Returns the number of rows upserted.
+    """
+    rows: list[dict] = []
+    with open(equasis_csv, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            imo = (row.get("imo") or "").strip()
+            if not imo:
+                continue
+            vessel_type_raw = (row.get("vessel_type") or "").strip()
+            build_year_raw = (row.get("build_year") or "").strip()
+            scrapped_raw = (row.get("scrapped") or "").strip().lower()
+
+            vessel_type = int(vessel_type_raw) if vessel_type_raw.isdigit() else None
+            build_year = int(build_year_raw) if build_year_raw.isdigit() else None
+            scrapped = scrapped_raw in ("1", "true", "yes")
+
+            if vessel_type is None and build_year is None and not scrapped:
+                continue
+            rows.append(
+                {
+                    "imo": imo,
+                    "vessel_type": vessel_type,
+                    "build_year": build_year,
+                    "scrapped": scrapped,
+                }
+            )
+
+    if not rows:
+        return 0
+
+    _ref = pl.DataFrame(
+        rows,
+        schema={
+            "imo": pl.Utf8,
+            "vessel_type": pl.Int8,
+            "build_year": pl.Int16,
+            "scrapped": pl.Boolean,
+        },
+    )
+
+    con = duckdb.connect(db_path)
+    try:
+        con.execute("""
+            INSERT INTO equasis_vessel_ref (imo, vessel_type, build_year, scrapped)
+            SELECT imo, vessel_type, build_year, scrapped FROM _ref
+            ON CONFLICT (imo) DO UPDATE SET
+                vessel_type = COALESCE(excluded.vessel_type, equasis_vessel_ref.vessel_type),
+                build_year  = COALESCE(excluded.build_year,  equasis_vessel_ref.build_year),
+                scrapped    = excluded.scrapped
+        """)
+    finally:
+        con.close()
+
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -375,6 +446,10 @@ if __name__ == "__main__":
         "--equasis-csv", default=None, help="Path to Equasis ownership chain CSV export"
     )
     args = parser.parse_args()
+
+    if args.equasis_csv:
+        n = upsert_equasis_vessel_ref(args.db, args.equasis_csv)
+        print(f"Equasis vessel ref: {n} rows upserted")
 
     print("Building ownership graph tables …")
     tables = build_graph_tables(args.db, equasis_csv=args.equasis_csv)

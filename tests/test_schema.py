@@ -11,6 +11,7 @@ def test_all_tables_created(tmp_db):
         "ais_positions",
         "vessel_meta",
         "sanctions_entities",
+        "equasis_vessel_ref",
         "trade_flow",
         "vessel_features",
         "analyst_briefs",

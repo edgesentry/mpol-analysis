@@ -89,6 +89,14 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS equasis_vessel_ref (
+                imo         VARCHAR PRIMARY KEY,
+                vessel_type TINYINT,
+                build_year  SMALLINT,
+                scrapped    BOOLEAN DEFAULT FALSE
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS trade_flow (
                 reporter        VARCHAR NOT NULL,
                 partner         VARCHAR NOT NULL,
@@ -242,6 +250,22 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
         con.execute("""
             ALTER TABLE vessel_features
             ADD COLUMN IF NOT EXISTS sanctions_list_count INTEGER DEFAULT 0
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS imo_type_mismatch BOOLEAN DEFAULT FALSE
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS imo_scrapped_flag BOOLEAN DEFAULT FALSE
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS chokepoint_exit_gap_count INTEGER DEFAULT 0
+        """)
+        con.execute("""
+            ALTER TABLE vessel_features
+            ADD COLUMN IF NOT EXISTS ais_pre_gap_regularity FLOAT DEFAULT 1.0
         """)
     finally:
         con.close()

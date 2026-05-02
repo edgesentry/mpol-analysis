@@ -61,7 +61,14 @@ The Isolation Forest assigns each vessel a continuous anomaly score in [0, 1]. I
 
 ### Features used
 
-All 19 features from `vessel_features`.
+All 25 features from `vessel_features` (see `ANOMALY_FEATURE_COLUMNS` in `src/score/anomaly.py`), including the four features added in arktrace#543/#544:
+
+| New feature | Added | Signal |
+|---|---|---|
+| `chokepoint_exit_gap_count` | #543 | AIS dark onset at strait exit (AIS compliance weaponization) |
+| `ais_pre_gap_regularity` | #543 | Machine-like pre-gap transmission regularity |
+| `imo_type_mismatch` | #544 | AIS vessel type ≠ Equasis registered type for same IMO |
+| `imo_scrapped_flag` | #544 | IMO belongs to a scrapped/deleted vessel |
 
 ### Training set selection
 

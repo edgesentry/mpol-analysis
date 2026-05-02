@@ -41,6 +41,10 @@ ANOMALY_FEATURE_COLUMNS = [
     "unmatched_sar_detections_30d",
     "eo_dark_count_30d",
     "eo_ais_mismatch_ratio",
+    "imo_type_mismatch",
+    "imo_scrapped_flag",
+    "chokepoint_exit_gap_count",
+    "ais_pre_gap_regularity",
 ]
 
 

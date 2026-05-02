@@ -2,8 +2,8 @@ import json
 
 import duckdb
 
-from pipeline.src.score.anomaly import load_feature_frame, score_anomalies
-from pipeline.src.score.composite import compute_composite_scores
+from pipeline.src.score.anomaly import ANOMALY_FEATURE_COLUMNS, load_feature_frame, score_anomalies
+from pipeline.src.score.composite import FEATURE_VALUE_COLUMNS, compute_composite_scores
 from pipeline.src.score.mpol_baseline import build_mpol_baseline
 from pipeline.src.score.watchlist import build_candidate_watchlist, write_candidate_watchlist
 
@@ -161,3 +161,83 @@ def test_composite_and_watchlist_output(tmp_db, tmp_path):
     output_path = tmp_path / "candidate_watchlist.parquet"
     write_candidate_watchlist(watchlist, str(output_path))
     assert output_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# IMO spoofing + chokepoint features wired into scoring
+# ---------------------------------------------------------------------------
+
+
+def test_imo_type_mismatch_in_anomaly_feature_columns():
+    """imo_type_mismatch must be a covariate in the anomaly model."""
+    assert "imo_type_mismatch" in ANOMALY_FEATURE_COLUMNS
+
+
+def test_imo_scrapped_flag_in_anomaly_feature_columns():
+    """imo_scrapped_flag must be a covariate in the anomaly model."""
+    assert "imo_scrapped_flag" in ANOMALY_FEATURE_COLUMNS
+
+
+def test_chokepoint_features_in_anomaly_feature_columns():
+    """chokepoint_exit_gap_count and ais_pre_gap_regularity must feed the anomaly model."""
+    assert "chokepoint_exit_gap_count" in ANOMALY_FEATURE_COLUMNS
+    assert "ais_pre_gap_regularity" in ANOMALY_FEATURE_COLUMNS
+
+
+def test_new_features_in_feature_value_columns():
+    """All four new features must appear in SHAP signal attribution."""
+    for col in (
+        "imo_type_mismatch",
+        "imo_scrapped_flag",
+        "chokepoint_exit_gap_count",
+        "ais_pre_gap_regularity",
+    ):
+        assert col in FEATURE_VALUE_COLUMNS, f"{col} missing from FEATURE_VALUE_COLUMNS"
+
+
+def test_imo_type_mismatch_raises_behavioral_score(tmp_db):
+    """A vessel with imo_type_mismatch=True scores higher than an identical vessel with False."""
+    con = duckdb.connect(tmp_db)
+    try:
+        con.execute(
+            """
+            INSERT INTO vessel_meta (mmsi, imo, name, flag, ship_type) VALUES
+                ('800000001', 'IMO8000001', 'SPOOF_VESSEL', 'PA', 70),
+                ('800000002', 'IMO8000002', 'CLEAN_VESSEL', 'PA', 80)
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) VALUES
+                ('800000001', '2026-03-01 00:00:00+00', 1.0, 103.0, 5.0, 0, 70),
+                ('800000002', '2026-03-01 00:00:00+00', 1.0, 103.0, 5.0, 0, 80)
+            """
+        )
+        # Identical features except imo_type_mismatch
+        con.execute(
+            """
+            INSERT INTO vessel_features (
+                mmsi, ais_gap_count_30d, ais_gap_max_hours, position_jump_count,
+                sts_candidate_count, port_call_ratio, loitering_hours_30d,
+                flag_changes_2y, name_changes_2y, owner_changes_2y,
+                high_risk_flag_ratio, ownership_depth, sanctions_distance,
+                cluster_sanctions_ratio, shared_manager_risk, shared_address_centrality,
+                sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value,
+                sanctions_list_count, imo_type_mismatch, imo_scrapped_flag
+            ) VALUES
+                ('800000001', 2, 5.0, 0, 0, 0.5, 2.0, 0, 0, 0, 0.0, 1, 5, 0.0, 5, 0, 0, 0.0, 0.0, 0, TRUE,  FALSE),
+                ('800000002', 2, 5.0, 0, 0, 0.5, 2.0, 0, 0, 0, 0.0, 1, 5, 0.0, 5, 0, 0, 0.0, 0.0, 0, FALSE, FALSE)
+            """
+        )
+    finally:
+        con.close()
+
+    features = load_feature_frame(tmp_db)
+    baseline = build_mpol_baseline(tmp_db)
+    anomaly_df, _, _ = score_anomalies(features, baseline)
+
+    spoof = anomaly_df.filter(features["mmsi"] == "800000001")["behavioral_deviation_score"][0]
+    clean = anomaly_df.filter(features["mmsi"] == "800000002")["behavioral_deviation_score"][0]
+    assert spoof >= clean, (
+        f"imo_type_mismatch vessel ({spoof:.4f}) should score >= clean vessel ({clean:.4f})"
+    )

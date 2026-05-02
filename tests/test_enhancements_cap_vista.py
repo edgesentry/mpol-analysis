@@ -14,7 +14,7 @@ import duckdb
 import polars as pl
 import pytest
 
-from pipeline.src.score.anomaly import fit_isolation_forest
+from pipeline.src.score.anomaly import ANOMALY_FEATURE_COLUMNS, fit_isolation_forest
 from pipeline.src.score.composite import (
     GeoEvent,
     _GeoCorridorBbox,
@@ -38,30 +38,6 @@ BEHAVIOR_COLUMNS = [
     "sts_candidate_count",
     "port_call_ratio",
     "loitering_hours_30d",
-]
-
-ANOMALY_FEATURE_COLUMNS = [
-    "ais_gap_count_30d",
-    "ais_gap_max_hours",
-    "position_jump_count",
-    "sts_candidate_count",
-    "port_call_ratio",
-    "loitering_hours_30d",
-    "flag_changes_2y",
-    "name_changes_2y",
-    "owner_changes_2y",
-    "high_risk_flag_ratio",
-    "ownership_depth",
-    "sanctions_distance",
-    "cluster_sanctions_ratio",
-    "shared_manager_risk",
-    "shared_address_centrality",
-    "sts_hub_degree",
-    "route_cargo_mismatch",
-    "declared_vs_estimated_cargo_value",
-    "unmatched_sar_detections_30d",
-    "eo_dark_count_30d",
-    "eo_ais_mismatch_ratio",
 ]
 
 

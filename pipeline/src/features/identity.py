@@ -177,6 +177,106 @@ def _compute_high_risk_flag_ratio(tables: dict) -> pl.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# IMO identity spoofing features
+# ---------------------------------------------------------------------------
+
+
+# AIS ship_type → broad category (ITU-R M.1371 Annex 8 Table 22)
+# Only categories that matter for cross-reference; anything else → 0 (unknown).
+def _ship_type_category(ship_type: int | None) -> int:
+    if ship_type is None:
+        return 0
+    if ship_type == 30:
+        return 1  # fishing
+    if 31 <= ship_type <= 57:
+        return 2  # service (tug, pilot, SAR, etc.)
+    if 60 <= ship_type <= 69:
+        return 3  # passenger
+    if 70 <= ship_type <= 79:
+        return 4  # cargo
+    if 80 <= ship_type <= 89:
+        return 5  # tanker
+    return 0  # unknown / other
+
+
+def compute_imo_mismatch_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
+    """imo_type_mismatch and imo_scrapped_flag per MMSI.
+
+    Joins vessel_meta (AIS-reported ship_type + imo) against equasis_vessel_ref
+    (registered vessel_type and scrapped status from Equasis CSV).
+
+    imo_type_mismatch — True when the AIS-reported ship type category (cargo,
+    tanker, passenger, fishing …) differs from the category registered for the
+    same IMO number in Equasis.  A 2005-built VLCC (Equasis: tanker) cannot be
+    a 2018-built chemical tanker (AIS: cargo).
+
+    imo_scrapped_flag — True when the vessel's IMO number is marked as scrapped
+    or deleted in the Equasis reference data.
+
+    Returns a DataFrame with (mmsi, imo_type_mismatch, imo_scrapped_flag).
+    If equasis_vessel_ref is empty, both features are False for all vessels.
+    """
+    _empty_schema = {
+        "mmsi": pl.Utf8,
+        "imo_type_mismatch": pl.Boolean,
+        "imo_scrapped_flag": pl.Boolean,
+    }
+
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        meta = con.execute(
+            "SELECT mmsi, COALESCE(imo,'') AS imo, ship_type "
+            "FROM vessel_meta WHERE mmsi IS NOT NULL"
+        ).pl()
+        ref_count = con.execute("SELECT COUNT(*) FROM equasis_vessel_ref").fetchone()[0]
+        if ref_count == 0:
+            if meta.is_empty():
+                return pl.DataFrame(schema=_empty_schema)
+            return meta.select("mmsi").with_columns(
+                [
+                    pl.lit(False).alias("imo_type_mismatch"),
+                    pl.lit(False).alias("imo_scrapped_flag"),
+                ]
+            )
+        ref = con.execute("SELECT imo, vessel_type, scrapped FROM equasis_vessel_ref").pl()
+    finally:
+        con.close()
+
+    if meta.is_empty():
+        return pl.DataFrame(schema=_empty_schema)
+
+    joined = meta.filter(pl.col("imo") != "").join(ref, on="imo", how="left")
+
+    rows = []
+    for row in joined.iter_rows(named=True):
+        ais_cat = _ship_type_category(row["ship_type"])
+        eq_cat = _ship_type_category(row.get("vessel_type"))
+        mismatch = ais_cat != 0 and eq_cat != 0 and ais_cat != eq_cat
+        scrapped = bool(row.get("scrapped") or False)
+        rows.append(
+            {
+                "mmsi": row["mmsi"],
+                "imo_type_mismatch": mismatch,
+                "imo_scrapped_flag": scrapped,
+            }
+        )
+
+    if not rows:
+        return pl.DataFrame(schema=_empty_schema)
+
+    result = pl.DataFrame(rows, schema=_empty_schema)
+
+    # Vessels with no IMO in vessel_meta get False defaults
+    all_mmsi = meta.select("mmsi")
+    return all_mmsi.join(result, on="mmsi", how="left").with_columns(
+        [
+            pl.col("imo_type_mismatch").fill_null(False),
+            pl.col("imo_scrapped_flag").fill_null(False),
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -189,6 +289,7 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     owner_df = _compute_owner_changes(tables)
     depth_df = _compute_ownership_depth(tables)
     hrisk_df = _compute_high_risk_flag_ratio(tables)
+    imo_df = compute_imo_mismatch_features(db_path)
 
     # flag_changes_2y: hardcoded to 0 — historical flag-state records are not yet
     # ingested. This is an intentional deferral, not a broken feature.
@@ -218,6 +319,7 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
         .join(depth_df.lazy(), on="mmsi", how="left")
         .join(hrisk_df.lazy(), on="mmsi", how="left")
         .join(flag_df.lazy(), on="mmsi", how="left")
+        .join(imo_df.lazy(), on="mmsi", how="left")
         .with_columns(
             [
                 pl.col("flag_changes_2y").fill_null(0).cast(pl.Int32),
@@ -225,6 +327,8 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
                 pl.col("owner_changes_2y").fill_null(0).cast(pl.Int32),
                 pl.col("high_risk_flag_ratio").fill_null(0.0).cast(pl.Float32),
                 pl.col("ownership_depth").fill_null(0).cast(pl.Int32),
+                pl.col("imo_type_mismatch").fill_null(False),
+                pl.col("imo_scrapped_flag").fill_null(False),
             ]
         )
         .collect()
