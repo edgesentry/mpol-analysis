@@ -337,7 +337,8 @@ export default function App() {
             scoreHistory={scoreHistory}
           />
           {selectedMmsi && (() => {
-            const v = vessels.find((v) => v.mmsi === selectedMmsi);
+            const v = vessels.find((v) => v.mmsi === selectedMmsi)
+              ?? statelessVessels.find((v) => v.mmsi === selectedMmsi);
             return v ? (
               <VesselDetail
                 vessel={v}
