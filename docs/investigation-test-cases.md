@@ -307,6 +307,23 @@ in the app to see this vessel in the watchlist.
 
 ---
 
+## Source investigation
+
+### Al Jazeera — 2026-04-30
+
+**[Tracking the shadow fleet: How Iran evaded the US naval blockade in Hormuz](https://www.aljazeera.com/economy/2026/4/30/tracking-the-shadow-fleet-how-iran-evaded-the-us-naval-blockade-in-hormuz)**
+
+Investigative report published 30 April 2026. Key findings that triggered this watchlist cross-reference:
+
+- Named vessels **Flora, Genoa, Skywave, and Pola** as Iran-linked tankers active in the Strait of Hormuz, deliberately disabling or jamming AIS signals to hide identities and destinations
+- Documented widespread AIS manipulation and use of fake flags (landlocked nation registries including Botswana, San Marino, Comoros) to obscure ownership
+- Operating firms primarily based in Iran (15.7%), China (13%), Greece (11%), UAE (9.7%)
+- At least 26 ships from Iran's shadow fleet circumvented the US naval blockade since it was imposed
+
+**Cross-reference result:** No direct name match found for Flora/Genoa/Skywave/Pola in the arktrace watchlist — shadow fleet vessels change names frequently. MMSI/IMO cross-reference is required. The vessels in this test case document (PIONEER 92, ANHONA, DOBRYNYA, SCF ENTERPRISE) were identified via sanctions_distance=0 scoring, not name search.
+
+---
+
 ## References
 
 - [Local LLM setup](local-llm-setup.md) — start llama-server before running investigations
