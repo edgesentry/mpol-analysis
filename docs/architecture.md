@@ -154,7 +154,7 @@
 
 ### DuckDB (`data/processed/mpol.duckdb`)
 
-DuckDB is the primary analytical store. It runs in-process with no server and queries Parquet files directly. Multi-region deployments use separate DuckDB files per region (e.g. `data/processed/europe.duckdb`) — every script accepts a `--db` flag to target the correct file. See [regional-playbooks.md](regional-playbooks.md) for per-region paths and bbox values.
+DuckDB is the primary analytical store. It runs in-process with no server and queries Parquet files directly. Multi-region deployments use separate DuckDB files per region (e.g. `data/processed/europe.duckdb`) — every script accepts a `--db` flag to target the correct file. See [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region paths and bbox values.
 
 **Parquet persistence:** all pipeline output files (watchlist, causal effects, validation metrics) are written by `src/storage/config.py`. When `S3_BUCKET` is set, output goes to `s3://<bucket>/processed/<filename>` via MinIO or any S3-compatible store; otherwise it writes to `data/processed/<filename>` on the local filesystem. No code changes are required to switch between the two modes.
 
@@ -244,7 +244,7 @@ uv run python scripts/sync_r2.py pull-demo
 uv run python scripts/sync_r2.py pull-sanctions-db
 ```
 
-No credentials required. See [r2-data-layout.md](r2-data-layout.md) for the full
+No credentials required. See [r2-data-layout.md](https://edgesentry.github.io/indago/r2-data-layout/) for the full
 bucket layout, actor responsibilities, and credential model.
 
 ---
@@ -349,9 +349,9 @@ confidence = w_anomaly × anomaly_score
            + w_identity × identity_volatility_score
 ```
 
-Standalone `composite.py` defaults: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`. The pipeline (`scripts/run_pipeline.py`) applies region-specific presets before C3 auto-calibration overrides `w_graph` — see [regional-playbooks.md](regional-playbooks.md) for per-region values. All three weights are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
+Standalone `composite.py` defaults: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`. The pipeline (`scripts/run_pipeline.py`) applies region-specific presets before C3 auto-calibration overrides `w_graph` — see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region values. All three weights are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
 
-Per-region weight tuning recommendations are in [regional-playbooks.md](regional-playbooks.md).
+Per-region weight tuning recommendations are in [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/).
 
 ### Explainability (SHAP)
 

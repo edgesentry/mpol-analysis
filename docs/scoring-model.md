@@ -234,7 +234,7 @@ The Difference-in-Differences model identifies vessels whose AIS gap frequency *
 
 `src/analysis/causal.py` surfaces vessels that share no known sanctions list overlap but exhibit the same evasion-consistent behaviour as confirmed shadow fleet vessels. These are candidates *before* any designation has occurred — they appear on the watchlist as a leading indicator, not a lagging one.
 
-The detector clusters evasion behaviour signatures (gap patterns, STS contact degree, identity volatility) and flags statistical outliers that are structurally similar to confirmed positives. In backtesting, designated vessels appeared in the unknown-unknown cluster an average of **60–90 days before their OFAC listing date**. See [docs/causal-analysis.md](causal-analysis.md) for the full methodology.
+The detector clusters evasion behaviour signatures (gap patterns, STS contact degree, identity volatility) and flags statistical outliers that are structurally similar to confirmed positives. In backtesting, designated vessels appeared in the unknown-unknown cluster an average of **60–90 days before their OFAC listing date**. See [docs/causal-analysis.md](https://edgesentry.github.io/indago/causal-analysis/) for the full methodology.
 
 ### 3. Backtracking — network propagation of next likely designations
 
@@ -244,7 +244,7 @@ The backtracking loop (`scripts/run_backtracking.py`) propagates confirmed label
 2. Uplifts `graph_risk_score` for all connected undesignated entities proportionally to their graph distance
 3. Surfaces a ranked list of "next likely designations" — entities that share ownership infrastructure with confirmed shadow fleet operators
 
-This is a network-propagation prediction: it identifies who is most likely to be designated next, given a confirmed seed, before any regulatory action occurs. See [docs/backtracking-runbook.md](backtracking-runbook.md) for operation instructions.
+This is a network-propagation prediction: it identifies who is most likely to be designated next, given a confirmed seed, before any regulatory action occurs. See [docs/backtracking-runbook.md](https://edgesentry.github.io/indago/backtracking-runbook/) for operation instructions.
 
 ### Summary
 

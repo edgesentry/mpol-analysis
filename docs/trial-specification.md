@@ -65,7 +65,7 @@ The pipeline runs fully in-process — no external database server is required. 
 | LiDAR (Tier 2) | Livox Mid-360 (~$1k) or Ouster OS0-32 (~$3k) |
 | Thermal camera (Tier 3) | FLIR Boson+ |
 
-See [docs/field-investigation.md](field-investigation.md) for the full Phase B sensor stack and hardware cost breakdown.
+See [docs/field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) for the full Phase B sensor stack and hardware cost breakdown.
 
 ---
 
@@ -93,7 +93,7 @@ Run held-out evaluation against OFAC-listed vessels that appear in the Singapore
 | Recall@200 | ≥ 0.40 | Fraction of known OFAC-listed vessels recovered in top 200 |
 | AUROC | ≥ 0.75 | Area under ROC curve across full scored population |
 
-Compare against naïve AIS-gap-only baseline to demonstrate additive value of the ownership graph and trade flow layers. See [docs/evaluation-metrics.md](evaluation-metrics.md) for full metric definitions and current measured baselines (Precision@50 = 0.62 on Singapore run).
+Compare against naïve AIS-gap-only baseline to demonstrate additive value of the ownership graph and trade flow layers. See [docs/evaluation-metrics.md](https://edgesentry.github.io/indago/evaluation-metrics/) for full metric definitions and current measured baselines (Precision@50 = 0.62 on Singapore run).
 
 ### Weeks 3–7 — Live monitoring
 
@@ -122,7 +122,7 @@ Compare against naïve AIS-gap-only baseline to demonstrate additive value of th
 | Re-score cycle | < 60 s | Time for incremental score update after new AIS batch |
 | Pipeline cold-start | < 45 min | Time to run full pipeline on 6-month historical dataset (Singapore region) |
 
-The Precision@50 target of 0.60 represents a **6× lift** over the ~0.10 base rate of sanctioned vessels in the monitored population. The 0.62 figure measured on the Singapore pipeline run already meets this target. See [docs/evaluation-metrics.md](evaluation-metrics.md) for full validation methodology.
+The Precision@50 target of 0.60 represents a **6× lift** over the ~0.10 base rate of sanctioned vessels in the monitored population. The 0.62 figure measured on the Singapore pipeline run already meets this target. See [docs/evaluation-metrics.md](https://edgesentry.github.io/indago/evaluation-metrics/) for full validation methodology.
 
 ---
 
@@ -130,6 +130,6 @@ The Precision@50 target of 0.60 represents a **6× lift** over the ~0.10 base ra
 
 - [docs/architecture.md](architecture.md) — system design and storage layer
 - [docs/deployment.md](deployment.md) — Docker and bare-metal setup instructions
-- [docs/evaluation-metrics.md](evaluation-metrics.md) — metric definitions and validated baselines
-- [docs/field-investigation.md](field-investigation.md) — Phase B patrol vessel sensor stack
-- [docs/regional-playbooks.md](regional-playbooks.md) — per-region AIS bbox and weight tuning
+- [docs/evaluation-metrics.md](https://edgesentry.github.io/indago/evaluation-metrics/) — metric definitions and validated baselines
+- [docs/field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) — Phase B patrol vessel sensor stack
+- [docs/regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) — per-region AIS bbox and weight tuning

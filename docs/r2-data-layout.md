@@ -136,7 +136,7 @@ App owner                     CI (data-publish)              App user
 | Upload GDELT Lance store (after re-ingestion only) | `sync_r2.py push-gdelt` | `arktrace-public` |
 | Upload demo bundle (after local pipeline run) | `sync_r2.py push-demo` | `arktrace-public` |
 
-Custom feeds are CSV files dropped in `_inputs/custom_feeds/`. Files ending in `_sample` or `.gitkeep` are never uploaded. See [pipeline-operations.md](pipeline-operations.md#custom-feed-drop-ins) for the full file format reference.
+Custom feeds are CSV files dropped in `_inputs/custom_feeds/`. Files ending in `_sample` or `.gitkeep` are never uploaded. See [pipeline-operations.md](https://edgesentry.github.io/indago/pipeline-operations/#custom-feed-drop-ins) for the full file format reference.
 
 ### CI: what it reads and writes
 

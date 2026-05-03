@@ -19,7 +19,7 @@ The pipeline types in this document refer to backend execution jobs (batch, sche
 	- Human review and investigation workflow in the dashboard (filter, inspect vessel detail, submit tier/handoff decisions).
 	- Consume pipeline outputs and write review feedback, but do not replace core ingestion/scoring/evaluation pipeline execution.
 
-For implementation-level commands and flags, see [Pipeline Operations](pipeline-operations.md).
+For implementation-level commands and flags, see [Pipeline Operations](https://edgesentry.github.io/indago/pipeline-operations/).
 
 ## Pipeline Types At A Glance
 
@@ -219,7 +219,7 @@ Convert newly confirmed vessel labels into forward-looking detection power witho
 - At least one precursor signal detected for vessels with sufficient AIS history
 - Propagated entities are traceable to a specific confirmed seed via `source_mmsi` + `evidence_type`
 
-See [Backtracking Runbook](backtracking-runbook.md) for full CLI reference and demo scenario.
+See [Backtracking Runbook](https://edgesentry.github.io/indago/backtracking-runbook/) for full CLI reference and demo scenario.
 
 ---
 
@@ -301,7 +301,7 @@ Each generation zip contains, per region:
 - Metrics email is sent (or gracefully skipped if SMTP secrets absent).
 - No region DuckDB or watchlist parquet is missing from the zip.
 
-See [r2-data-layout.md](r2-data-layout.md) for the full bucket layout, actor responsibilities, and credential model.
+See [r2-data-layout.md](https://edgesentry.github.io/indago/r2-data-layout/) for the full bucket layout, actor responsibilities, and credential model.
 
 ---
 

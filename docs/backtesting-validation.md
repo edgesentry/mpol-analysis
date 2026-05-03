@@ -279,7 +279,7 @@ Output includes:
 
 Do **not** merge this slice with public-label metrics. Run both and compare — divergence between the two slices signals novel evasion patterns not yet captured by public lists.
 
-Full governance policy (leakage rules, review cadence, versioning): [`docs/prelabel-governance.md`](prelabel-governance.md).
+Full governance policy (leakage rules, review cadence, versioning): [`docs/prelabel-governance.md`](https://edgesentry.github.io/indago/prelabel-governance/).
 
 ---
 

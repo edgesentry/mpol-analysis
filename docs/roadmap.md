@@ -14,7 +14,7 @@
 - End-to-end local test guide (`docs/local-e2e-test.md`)
 - Interactive Pipeline CLI (`scripts/run_pipeline.py`) — interactive CLI with region presets (Singapore, Japan Sea, Middle East, Europe, US Gulf) and retry mechanics.
 
-**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](regional-playbooks.md) for other regions) with no duplicate MMSI/timestamp rows.
+**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for other regions) with no duplicate MMSI/timestamp rows.
 
 ---
 

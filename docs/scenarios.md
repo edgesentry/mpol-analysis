@@ -13,7 +13,7 @@ At the start of each watch, a duty officer at the port maritime security centre 
    - Ranked table on the right shows top candidates with confidence score and top signals
 
 2. **Filter by area or vessel type**
-   - Officer filters to vessels currently within 50nm of the relevant chokepoint (Singapore Strait for Persona 1, Strait of Hormuz for Persona 5, Baltic exits for Persona 4 — see [regional-playbooks.md](regional-playbooks.md))
+   - Officer filters to vessels currently within 50nm of the relevant chokepoint (Singapore Strait for Persona 1, Strait of Hormuz for Persona 5, Baltic exits for Persona 4 — see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/))
    - Narrows to tankers and bulk carriers (highest STS transfer risk)
 
 3. **Inspect a candidate**
@@ -113,7 +113,7 @@ The screening pipeline has identified a Priority 1 candidate. A patrol vessel is
    - edgesentry-app displays the target on chart with live AIS overlay
 
 3. **Physical investigation proceeds**
-   - See [plan-field-investigation.md](field-investigation.md) for the full workflow implemented in edgesentry-rs / edgesentry-app
+   - See [plan-field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) for the full workflow implemented in edgesentry-rs / edgesentry-app
 
 4. **Evidence report flows back**
    - Signed `AuditRecord` from edgesentry-audit is received at the shore VDES station

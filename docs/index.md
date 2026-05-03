@@ -43,7 +43,7 @@ High-scoring vessels are exported as a task file for the patrol vessel. The offi
 
 | Capability | What to expect |
 |---|---|
-| **Pre-designation lead time** | 60–90 days before OFAC listing (backtested via DiD on historical sanction announcements). See [docs/scoring-model.md](scoring-model.md). |
+| **Pre-designation lead time** | 60–90 days before OFAC listing (backtested via DiD on historical sanction announcements). See [docs/scoring-model.md](https://edgesentry.github.io/indago/scoring-model/). |
 | **Unknown-unknown detection** | Causal signatures surface vessels with no sanctions link whose behaviour pattern matches confirmed evaders — catching threats before they appear on any list. |
 | **Detection rate** | Precision@50 target ≥ 0.60: at least 30 of the top-50 ranked candidates are confirmed OFAC-listed vessels. AUROC and Recall@200 are also tracked. |
 | **EO fusion (dark vessel detection)** | GFW Vessel Presence API fused at the screening layer: `eo_dark_count_30d` and `eo_ais_mismatch_ratio` identify vessels visible from space with no AIS — confirming deliberate transponder switch-off vs. AIS receiver gaps. |
@@ -87,7 +87,21 @@ The model ranks candidates — humans decide what to do. No automated decision t
 - "Confirmed" requires at least two independent high-credibility sources, or one official designation with a verified vessel identifier (MMSI/IMO match).
 - Every review decision is recorded with a rationale, evidence references, and reviewer identity.
 
-Full policy: [`docs/triage-governance.md`](triage-governance.md).
+Full policy: [`docs/triage-governance.md`](https://edgesentry.github.io/indago/triage-governance/).
+
+---
+
+## Data layer
+
+The OSINT ingestion pipeline, feature engineering, scoring model, and operational runbooks live in **[indago](https://github.com/edgesentry/indago)** — the shared data foundation for the edgesentry stack.
+
+| indago docs | |
+|---|---|
+| Feature engineering (all 27 features) | [indago: Feature Engineering](https://edgesentry.github.io/indago/feature-engineering/) |
+| Scoring model (HDBSCAN, IsolationForest, composite) | [indago: Scoring Model](https://edgesentry.github.io/indago/scoring-model/) |
+| Pipeline operations & regional playbooks | [indago: Pipeline Operations](https://edgesentry.github.io/indago/pipeline-operations/) |
+| R2 data layout & bucket architecture | [indago: R2 Data Layout](https://edgesentry.github.io/indago/r2-data-layout/) |
+| Backtesting & validation methodology | [indago: Backtesting Validation](https://edgesentry.github.io/indago/backtesting-validation/) |
 
 ---
 
@@ -95,17 +109,17 @@ Full policy: [`docs/triage-governance.md`](triage-governance.md).
 
 | To understand… | Read |
 |---|---|
-| P@50 thresholds (0.60 contractual gate vs 0.68 demonstrated ceiling) | [`docs/precision-improvement-plan.md`](precision-improvement-plan.md) |
-| Detection signals and scoring formula | [`docs/scoring-model.md`](scoring-model.md) |
-| All 19 features and what each detects | [`docs/feature-engineering.md`](feature-engineering.md) |
-| Causal reasoning and unknown-unknown detection | [`docs/causal-analysis.md`](causal-analysis.md) |
-| Physical vessel investigation (Phase B) | [`docs/field-investigation.md`](field-investigation.md) |
-| Human oversight, evidence policy, tier taxonomy | [`docs/triage-governance.md`](triage-governance.md) |
-| Validation metrics and backtesting methodology | [`docs/backtesting-validation.md`](backtesting-validation.md) |
+| P@50 thresholds (0.60 contractual gate vs 0.68 demonstrated ceiling) | [`docs/precision-improvement-plan.md`](https://edgesentry.github.io/indago/precision-improvement-plan/) |
+| Detection signals and scoring formula | [`docs/scoring-model.md`](https://edgesentry.github.io/indago/scoring-model/) |
+| All 19 features and what each detects | [`docs/feature-engineering.md`](https://edgesentry.github.io/indago/feature-engineering/) |
+| Causal reasoning and unknown-unknown detection | [`docs/causal-analysis.md`](https://edgesentry.github.io/indago/causal-analysis/) |
+| Physical vessel investigation (Phase B) | [`docs/field-investigation.md`](https://edgesentry.github.io/indago/field-investigation/) |
+| Human oversight, evidence policy, tier taxonomy | [`docs/triage-governance.md`](https://edgesentry.github.io/indago/triage-governance/) |
+| Validation metrics and backtesting methodology | [`docs/backtesting-validation.md`](https://edgesentry.github.io/indago/backtesting-validation/) |
 | Three operational scenarios (duty officer, analyst, patrol) | [`docs/scenarios.md`](scenarios.md) |
 | Full roadmap (Phase A and Phase B) | [`docs/roadmap.md`](roadmap.md) |
 | Deployment (local, Docker, cloud VM) | [`docs/deployment.md`](deployment.md) |
 | Tech stack and algorithm details | [`docs/technical-solution.md`](technical-solution.md) |
-| Pipeline operations reference | [`docs/pipeline-operations.md`](pipeline-operations.md) |
-| Regional configuration (Singapore, Japan Sea, etc.) | [`docs/regional-playbooks.md`](regional-playbooks.md) |
-| Study guide (Domain, Math, LLM, Tech) | [`docs/study-guide.md`](study-guide.md) |
+| Pipeline operations reference | [`docs/pipeline-operations.md`](https://edgesentry.github.io/indago/pipeline-operations/) |
+| Regional configuration (Singapore, Japan Sea, etc.) | [`docs/regional-playbooks.md`](https://edgesentry.github.io/indago/regional-playbooks/) |
+| Study guide (Domain, Math, LLM, Tech) | [`docs/study-guide.md`](https://edgesentry.github.io/indago/study-guide/) |

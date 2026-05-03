@@ -19,7 +19,7 @@ These are separate numbers with separate purposes. The 0.68 figure appearing in 
 
 Precision@50 is the primary evaluation metric for arktrace: of the top 50 vessels ranked by the model, what fraction are confirmed sanctioned vessels? The contractual acceptance gate is **≥ 0.60**. The demonstrated technical ceiling on multi-region public data is **0.68** — achieved by the current pipeline and enforced as a CI regression gate to prevent backslides.
 
-The 0.62 baseline was measured on a full Singapore pipeline run with a properly populated AIS dataset. See [evaluation-metrics.md](evaluation-metrics.md) for the full reproduction steps.
+The 0.62 baseline was measured on a full Singapore pipeline run with a properly populated AIS dataset. See [evaluation-metrics.md](https://edgesentry.github.io/indago/evaluation-metrics/) for the full reproduction steps.
 
 ---
 

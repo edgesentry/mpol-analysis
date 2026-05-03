@@ -151,7 +151,7 @@ S3_BUCKET=arktrace-public
 ```
 
 The same token is used for both the public and private buckets.  See
-[R2 data layout](r2-data-layout.md#private-bucket--arktrace-private-capvista)
+[R2 data layout](https://edgesentry.github.io/indago/r2-data-layout/#private-bucket--arktrace-private-capvista)
 for the full credential model.
 
 ---
@@ -162,4 +162,4 @@ The `data-publish.yml` workflow pushes the demo bundle automatically after
 every weekly pipeline run (Monday 02:00 UTC) and after each successful
 public-backtest-integration run.
 
-See also: [r2-data-layout.md](r2-data-layout.md) for the full R2 bucket structure.
+See also: [r2-data-layout.md](https://edgesentry.github.io/indago/r2-data-layout/) for the full R2 bucket structure.

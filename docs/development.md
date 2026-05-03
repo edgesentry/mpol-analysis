@@ -41,11 +41,11 @@ pyproject.toml
 - **Architecture and feature design:** [`docs/architecture.md`](architecture.md)
 - **Tech stack and data sources:** [`docs/technical-solution.md`](technical-solution.md)
 - **Implementation steps (A1–A5):** [`docs/roadmap.md`](roadmap.md)
-- **Regional deployment playbooks:** [`docs/regional-playbooks.md`](regional-playbooks.md)
-- **Field investigation design (edgesentry OSS):** [`docs/field-investigation.md`](field-investigation.md)
-- **Human-in-the-loop triage governance:** [`docs/triage-governance.md`](triage-governance.md)
-- **Backtesting and feedback evaluation:** [`docs/backtesting-validation.md`](backtesting-validation.md)
-- **Delayed-label intelligence loop:** [`docs/backtracking-runbook.md`](backtracking-runbook.md)
+- **Regional deployment playbooks:** [`docs/regional-playbooks.md`](https://edgesentry.github.io/indago/regional-playbooks/)
+- **Field investigation design (edgesentry OSS):** [`docs/field-investigation.md`](https://edgesentry.github.io/indago/field-investigation/)
+- **Human-in-the-loop triage governance:** [`docs/triage-governance.md`](https://edgesentry.github.io/indago/triage-governance/)
+- **Backtesting and feedback evaluation:** [`docs/backtesting-validation.md`](https://edgesentry.github.io/indago/backtesting-validation/)
+- **Delayed-label intelligence loop:** [`docs/backtracking-runbook.md`](https://edgesentry.github.io/indago/backtracking-runbook/)
 
 ## Procedures
 
@@ -59,7 +59,7 @@ uv run python scripts/run_pipeline.py --region singapore --non-interactive
 uv run python scripts/run_pipeline.py --region japan --non-interactive
 ```
 
-Available regions: `singapore`, `japan`, `middleeast`, `europe`, `persiangulf`, `gulfofguinea`, `gulfofaden`, `gulfofmexico`, `blacksea`. See [`regional-playbooks.md`](regional-playbooks.md) for per-region parameter details.
+Available regions: `singapore`, `japan`, `middleeast`, `europe`, `persiangulf`, `gulfofguinea`, `gulfofaden`, `gulfofmexico`, `blacksea`. See [`regional-playbooks.md`](https://edgesentry.github.io/indago/regional-playbooks/) for per-region parameter details.
 
 Alternatively, run each step manually:
 
@@ -98,7 +98,7 @@ The dev server fetches Parquet files from Cloudflare R2 (same as production). No
 bash scripts/run_operations_shell.sh
 ```
 
-Covers Full Screening, Review-Feedback Evaluation, Historical Backtesting, and Demo/Smoke. See [`pipeline-operations.md`](pipeline-operations.md).
+Covers Full Screening, Review-Feedback Evaluation, Historical Backtesting, and Demo/Smoke. See [`pipeline-operations.md`](https://edgesentry.github.io/indago/pipeline-operations/).
 
 ### Run the delayed-label intelligence loop (backtracking)
 
@@ -110,7 +110,7 @@ uv run python scripts/run_backtracking.py --db data/processed/mpol.duckdb
 uv run python scripts/run_backtracking.py --since 2026-04-01T00:00:00Z
 ```
 
-See [`backtracking-runbook.md`](backtracking-runbook.md) for full options and output format.
+See [`backtracking-runbook.md`](https://edgesentry.github.io/indago/backtracking-runbook/) for full options and output format.
 
 ### Run tests
 
@@ -135,4 +135,4 @@ cd app && npx eslint src/
 
 ## Out of Scope
 
-Do not implement physical vessel inspection, edge sensor measurement, or VDES communication in this repo. Those belong in edgesentry-rs / edgesentry-app. If you need to reference those requirements, see [`field-investigation.md`](field-investigation.md).
+Do not implement physical vessel inspection, edge sensor measurement, or VDES communication in this repo. Those belong in edgesentry-rs / edgesentry-app. If you need to reference those requirements, see [`field-investigation.md`](https://edgesentry.github.io/indago/field-investigation/).

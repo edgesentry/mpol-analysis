@@ -28,7 +28,7 @@ A key requirement of the challenge is that the solution must have a "low computa
 
 Understanding the "Annex A" submission requirements is critical. We frame Arktrace as a **TRL 6 baseline** system that is ready for a 7-week trial in the Singapore Strait. Every feature we build must map back to the specific "Shadow Fleet" behaviors named in the Cap Vista solicitation.
 
-- **Internal Docs:** [docs/trial-specification.md](trial-specification.md).
+- **Internal Docs:** [docs/trial-specification.md](https://edgesentry.github.io/indago/trial-specification/).
 - **Internal Source:** `../arktrace-commercial/inputs/challenge-statements.md`.
 
 ### Day 3: Tactical Edge Vision & Architecture
@@ -53,7 +53,7 @@ A unique feature of Arktrace is the ingestion of **GDELT (Global Database of Eve
 
 Ingestion in Arktrace is designed to be **Source-Agnostic**. Whether the data comes from a live satellite feed, a CSV drop, or a legacy database, it is normalized into a standard schema in our analytical store. This ensures that the rest of the pipeline can function identically regardless of where the data originated.
 
-- **Internal Docs:** [docs/pipeline-operations.md](pipeline-operations.md).
+- **Internal Docs:** [docs/pipeline-operations.md](https://edgesentry.github.io/indago/pipeline-operations/).
 - **External Docs:** [GDELT Project](https://www.gdeltproject.org/), [aisstream.io API](https://aisstream.io/documentation).
 - **Internal Source:** `src/ingest/`, `src/ingest/gdelt.py`, `src/ingest/sanctions.py`.
 
@@ -66,7 +66,7 @@ We also use DuckDB to manage our **Analytical Store** (`mpol.duckdb`). This file
 
 For engineers, mastering the Arktrace ingestion layer means understanding how to use DuckDB's SQL extensions for time-series and geospatial data. We rely heavily on window functions and spatial joins to detect Ship-to-Ship (STS) candidates—identifying pairs of vessels that loitered in close proximity for several hours far from any port.
 
-- **Internal Docs:** [docs/pipeline-operations.md](pipeline-operations.md).
+- **Internal Docs:** [docs/pipeline-operations.md](https://edgesentry.github.io/indago/pipeline-operations/).
 - **External Docs:** [DuckDB Documentation](https://duckdb.org/docs/).
 - **Internal Source:** `src/api/db.py`, `src/ingest/ais_csv.py`, `src/ingest/ais_stream.py`.
 
@@ -79,7 +79,7 @@ We also calculate "AIS Gaps" (Dark periods). A gap is simply a period where a ve
 
 To handle this at scale, we use **Polars**, a lightning-fast DataFrame library written in Rust. Traditional tools like Pandas can be slow and memory-intensive when processing millions of records. Polars uses "Lazy Evaluation," meaning it builds an optimized plan for all your calculations and executes them in parallel across every CPU core, making it the perfect engine for our edge architecture.
 
-- **Internal Docs:** [docs/feature-engineering.md](feature-engineering.md).
+- **Internal Docs:** [docs/feature-engineering.md](https://edgesentry.github.io/indago/feature-engineering/).
 - **External Docs:** [Polars: User Guide](https://docs.pola.rs/user-guide/index.html).
 - **Internal Source:** `src/features/movement.py`, `src/features/sts.py`.
 
@@ -92,7 +92,7 @@ We also incorporate **Trade Flow Data** from sources like UN Comtrade. By correl
 
 The final output of Week 1 is the **Feature Matrix**. This is a flattened table where each row represents a vessel and each column represents one of our 19 signals. This matrix is the "fuel" for the more advanced Data Science and Math models we will study in Week 2.
 
-- **Internal Docs:** [docs/feature-engineering.md](feature-engineering.md).
+- **Internal Docs:** [docs/feature-engineering.md](https://edgesentry.github.io/indago/feature-engineering/).
 - **External Docs:** [UN Comtrade Database](https://comtradeplus.un.org/).
 - **Internal Source:** `src/features/identity.py`, `src/features/trade_mismatch.py`.
 
@@ -109,7 +109,7 @@ The primary signal here is `sanctions_distance`. This is a BFS (Breadth-First Se
 
 For a self-learner, the key is understanding how we use **Lance Graph** to store millions of nodes and edges as columnar files on disk. This allows us to run graph-wide "Backtracking" (`scripts/run_backtracking.py`)—once a vessel is confirmed as an evader by a patrol team, we instantly re-score every other vessel in its corporate network to surface the next set of likely threats.
 
-- **Internal Docs:** [docs/scoring-model.md](scoring-model.md) (Graph section).
+- **Internal Docs:** [docs/scoring-model.md](https://edgesentry.github.io/indago/scoring-model/) (Graph section).
 - **External Docs:** [LanceDB Documentation](https://lancedb.github.io/lancedb/).
 - **Internal Source:** `src/features/ownership_graph.py`, `src/graph/store.py`.
 
@@ -122,7 +122,7 @@ Unlike traditional K-Means clustering, HDBSCAN doesn't require us to specify the
 
 For the developer, the key is understanding how we use the `HDBSCAN` implementation from `scikit-learn` to process our 19-dimensional feature matrix. The resulting "Cluster ID" is not just a label; it is a reference point that allows us to say: "This vessel is not acting like a normal tanker in the Singapore Strait."
 
-- **Internal Docs:** [docs/scoring-model.md](scoring-model.md) (Algorithms section).
+- **Internal Docs:** [docs/scoring-model.md](https://edgesentry.github.io/indago/scoring-model/) (Algorithms section).
 - **External Docs:** [HDBSCAN: How it works](https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html).
 - **Internal Source:** `src/score/composite.py`.
 
@@ -135,7 +135,7 @@ Isolation Forest is perfect for our edge architecture because it is computationa
 
 For the learner, the key parameter to learn is "contamination"—this is our estimate of how many vessels in the fleet are truly anomalous. We calibrate this parameter against our historical validation sets to ensure we are finding genuine threats without overwhelming analysts with false positives.
 
-- **Internal Docs:** [docs/scoring-model.md](scoring-model.md) (Algorithms section).
+- **Internal Docs:** [docs/scoring-model.md](https://edgesentry.github.io/indago/scoring-model/) (Algorithms section).
 - **External Docs:** [Scikit-Learn: Isolation Forest](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html).
 - **Internal Source:** `src/score/anomaly.py`, `src/score/composite.py`.
 
@@ -161,7 +161,7 @@ This approach is incredibly effective at filtering out **Geopolitical Noise**. F
 
 For a learner, the most important concept is the **Counterfactual**. We use the Control group to estimate what would have happened to the Treated group if the sanctions hadn't occurred. The "Difference" between that counterfactual and the actual observed behavior is our **Causal Score**. This is how we find "Unknown-Unknowns"—vessels with no sanctions list entry who are acting exactly like confirmed evaders.
 
-- **Internal Docs:** [docs/causal-analysis.md](causal-analysis.md), [docs/backtesting-validation.md](backtesting-validation.md).
+- **Internal Docs:** [docs/causal-analysis.md](https://edgesentry.github.io/indago/causal-analysis/), [docs/backtesting-validation.md](https://edgesentry.github.io/indago/backtesting-validation/).
 - **External Docs:** [Causal Inference: The Mixtape (DiD)](https://mixtape.scunning.com/09-difference_in_differences).
 - **Internal Source:** `src/score/causal_sanction.py`.
 
@@ -187,7 +187,7 @@ We also use **Recall@200** and **AUROC**. Recall tells us what percentage of *al
 
 For a developer, learning to run the validation suite (`src/score/validate.py`) is critical. Any change you make to a feature or an algorithm must be tested against these metrics. If a "cleanup" of the code causes Precision@50 to drop, we know we've introduced a regression. Validation is the "Check" in our "Plan-Do-Check-Act" cycle.
 
-- **Internal Docs:** [docs/backtesting-validation.md](backtesting-validation.md), [docs/evaluation-metrics.md](evaluation-metrics.md).
+- **Internal Docs:** [docs/backtesting-validation.md](https://edgesentry.github.io/indago/backtesting-validation/), [docs/evaluation-metrics.md](https://edgesentry.github.io/indago/evaluation-metrics/).
 - **External Docs:** [Precision-Recall Curves (scikit-learn)](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html).
 - **Internal Source:** `src/score/validate.py`, `src/score/backtest.py`.
 
@@ -256,7 +256,7 @@ We also use `uv` for fast, reproducible dependency management. The `pyproject.to
 
 For learners, studying `scripts/run_pipeline.py` is the best way to see how all the modules you've studied interact. You'll see how data flows from the `src/ingest/` modules into the `src/features/` modules and finally into the `src/score/` modules to produce the final output.
 
-- **Internal Docs:** [docs/pipeline-catalog.md](pipeline-catalog.md), [docs/pipeline-operations.md](pipeline-operations.md).
+- **Internal Docs:** [docs/pipeline-catalog.md](https://edgesentry.github.io/indago/pipeline-catalog/), [docs/pipeline-operations.md](https://edgesentry.github.io/indago/pipeline-operations/).
 - **Internal Source:** `scripts/run_pipeline.py`, `pyproject.toml`, `uv.lock`.
 
 ### Day 20: Local E2E Testing & Troubleshooting

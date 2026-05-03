@@ -55,7 +55,7 @@ Phase B runs on the patrol vessel or UAV ground station. No internet connectivit
 | Tier 2 — LiDAR hull scan | Livox Mid-360 + NVIDIA Jetson Orin 8 GB | ~$4,000–$9,000 |
 | Tier 3 — Thermal / multispectral | FLIR Boson+ + hyperspectral imager | ~$13,000–$33,000 |
 
-**Recommended starting configuration:** Tier 1 + Tier 2 per patrol vessel (~$8,000–$10,000 total hardware). Tier 3 as optional UAV escalation. See [docs/field-investigation.md](field-investigation.md) for full sensor stack detail.
+**Recommended starting configuration:** Tier 1 + Tier 2 per patrol vessel (~$8,000–$10,000 total hardware). Tier 3 as optional UAV escalation. See [docs/field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) for full sensor stack detail.
 
 ### Ongoing cost per vessel
 
@@ -91,7 +91,7 @@ Scaling cost is driven by three factors:
 
 Storage growth rate: ~20 GB/month per regional AIS stream. At 5 regions: ~100 GB/month, or ~$2.30/month on S3-standard.
 
-**Multi-region scaling strategy:** one DuckDB file per region (e.g. `data/processed/europe.duckdb`); shared Lance Graph for ownership data (global). Each region's pipeline run is independent and can execute in parallel on separate VMs or cores. See [docs/regional-playbooks.md](regional-playbooks.md) for per-region configuration.
+**Multi-region scaling strategy:** one DuckDB file per region (e.g. `data/processed/europe.duckdb`); shared Lance Graph for ownership data (global). Each region's pipeline run is independent and can execute in parallel on separate VMs or cores. See [docs/regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region configuration.
 
 ---
 
@@ -113,6 +113,6 @@ Following successful PoC completion, ongoing engineering and operations transiti
 ## Related Documents
 
 - [docs/deployment.md](deployment.md) — infrastructure setup and Docker Compose configuration
-- [docs/field-investigation.md](field-investigation.md) — Phase B hardware tiers and sensor stack
-- [docs/trial-specification.md](trial-specification.md) — trial demonstration strategy and platform requirements
-- [docs/regional-playbooks.md](regional-playbooks.md) — per-region AIS bbox, DuckDB paths, and weight tuning
+- [docs/field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) — Phase B hardware tiers and sensor stack
+- [docs/trial-specification.md](https://edgesentry.github.io/indago/trial-specification/) — trial demonstration strategy and platform requirements
+- [docs/regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) — per-region AIS bbox, DuckDB paths, and weight tuning

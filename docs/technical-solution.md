@@ -37,7 +37,7 @@ ANALYST DASHBOARD  →  PATROL DISPATCH BRIEF
 | AIS behaviour signals | `src/features/` | Input substrate for the causal model; not the primary discriminator |
 | Sanctions screening | `src/data/sanctions.py` | Input substrate; frames the event timeline for DiD windows |
 
-The 60–90 day pre-designation lead time (backtested — see [docs/scoring-model.md](scoring-model.md)) is a direct result of the causal model detecting evasion *responses* before those vessels accumulate enough evidence for a formal OFAC designation.
+The 60–90 day pre-designation lead time (backtested — see [docs/scoring-model.md](https://edgesentry.github.io/indago/scoring-model/)) is a direct result of the causal model detecting evasion *responses* before those vessels accumulate enough evidence for a formal OFAC designation.
 
 ---
 
@@ -61,7 +61,7 @@ These five features are the **evidentiary substrate** that feeds the C3 DiD caus
 
 ### Geographic Scope
 
-The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to water depth of 200 m below mean sea level."* arktrace's default Singapore / Malacca Strait bounding box (`−5°N 92°E → 22°N 122°E`) covers this area. A **200 m bathymetric depth mask** (GEBCO) is applied during STS candidate detection: co-locations in water shallower than 200 m are excluded, removing false positives from port anchorages and shallow straits (the Malacca Strait narrows to ~25 m in some sections). Illicit STS transfers occur in international open water, which is uniformly deep. See [docs/regional-playbooks.md](regional-playbooks.md) for bbox details.
+The challenge specifies *"major shipping lanes up to 1,600 nm from Singapore to water depth of 200 m below mean sea level."* arktrace's default Singapore / Malacca Strait bounding box (`−5°N 92°E → 22°N 122°E`) covers this area. A **200 m bathymetric depth mask** (GEBCO) is applied during STS candidate detection: co-locations in water shallower than 200 m are excluded, removing false positives from port anchorages and shallow straits (the Malacca Strait narrows to ~25 m in some sections). Illicit STS transfers occur in international open water, which is uniformly deep. See [docs/regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for bbox details.
 
 ---
 
@@ -150,12 +150,12 @@ The full stack runs on a single machine — a field laptop, a shipboard server, 
 | [Marine Cadastre](https://marinecadastre.gov/ais/) | Historical US waters AIS, 2015–present | CSV / Parquet | Free download |
 | [AIS Hub](https://www.aishub.net) | Near-real-time aggregated AIS | NMEA / JSON | Free tier available |
 
-aisstream.io supports all regions via the `--bbox lat_min lon_min lat_max lon_max` flag. The default bbox is the Singapore / Malacca Strait (`−5 92 22 122`). For other regions, pass `--bbox` with the appropriate coordinates and `--db` to write to a region-specific DuckDB file. Marine Cadastre is used only for US coastal regions (Gulf of Mexico, US West Coast). For non-US historical backfill (Japan Sea, Europe, Middle East), use AISHub or MarineTraffic CSV exports loaded via `load_csv_to_duckdb()` with a custom bbox. See [regional-playbooks.md](regional-playbooks.md) for per-region configuration.
+aisstream.io supports all regions via the `--bbox lat_min lon_min lat_max lon_max` flag. The default bbox is the Singapore / Malacca Strait (`−5 92 22 122`). For other regions, pass `--bbox` with the appropriate coordinates and `--db` to write to a region-specific DuckDB file. Marine Cadastre is used only for US coastal regions (Gulf of Mexico, US West Coast). For non-US historical backfill (Japan Sea, Europe, Middle East), use AISHub or MarineTraffic CSV exports loaded via `load_csv_to_duckdb()` with a custom bbox. See [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region configuration.
 
 **S-AIS / provider-agnostic ingestion:** arktrace is AIS-provider agnostic. Any Satellite AIS (S-AIS) provider (Spire Maritime, exactEarth, ORBCOMM, etc.) can substitute or supplement aisstream.io without code changes. Two ingestion paths are supported:
 
 - **NMEA feed:** pipe raw NMEA sentences to `src/ingest/ais_stream.py` — sentences are decoded and written to the same DuckDB schema as the WebSocket path.
-- **CSV export:** place any S-AIS CSV export in `_inputs/custom_feeds/` with a `.columnmap.json` sidecar mapping provider column names to the arktrace schema. The auto-detector picks it up on the next pipeline run (`step_custom_feeds`). See [pipeline-operations.md](pipeline-operations.md#custom-feed-drop-ins) for the full drop-in interface.
+- **CSV export:** place any S-AIS CSV export in `_inputs/custom_feeds/` with a `.columnmap.json` sidecar mapping provider column names to the arktrace schema. The auto-detector picks it up on the next pipeline run (`step_custom_feeds`). See [pipeline-operations.md](https://edgesentry.github.io/indago/pipeline-operations/#custom-feed-drop-ins) for the full drop-in interface.
 
 Switching providers or adding a secondary S-AIS feed requires no architectural changes — only a column mapping file.
 
@@ -501,7 +501,7 @@ Once Phase A identifies a high-confidence candidate, Phase B deploys tiered elec
 | Tier 2 | LiDAR (Livox Mid-360 / Ouster OS0-32) | Hull shape deviation, waterline / draught, 3D point cloud |
 | Tier 3 | FLIR Boson+ thermal + hyperspectral | Engine heat signature, night operation, cargo type proxy |
 
-Phase B sensor output feeds the `edgesentry-app` evidence bundle — GPS-tagged, Ed25519-signed, BLAKE3 hash-chained — and is transmitted to the Port Operations Centre via VDES. See [docs/field-investigation.md](field-investigation.md) for full hardware specifications and cost breakdown.
+Phase B sensor output feeds the `edgesentry-app` evidence bundle — GPS-tagged, Ed25519-signed, BLAKE3 hash-chained — and is transmitted to the Port Operations Centre via VDES. See [docs/field-investigation.md](https://edgesentry.github.io/indago/field-investigation/) for full hardware specifications and cost breakdown.
 
 ### Roadmap — commercial satellite SAR integration
 

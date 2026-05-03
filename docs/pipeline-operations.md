@@ -2,7 +2,7 @@
 
 How to run the arktrace MPOL screening pipeline for each supported region, configure parameters, and interpret outputs.
 
-If you need an operations-level summary of pipeline types (purpose, run timing, expected results), see [Pipeline Catalog (Operations View)](pipeline-catalog.md).
+If you need an operations-level summary of pipeline types (purpose, run timing, expected results), see [Pipeline Catalog (Operations View)](https://edgesentry.github.io/indago/pipeline-catalog/).
 
 ## Quick start
 
@@ -47,7 +47,7 @@ uv run python scripts/run_backtracking.py
 uv run python scripts/run_backtracking.py --since 2026-04-01T00:00:00Z
 ```
 
-See [Backtracking Runbook](backtracking-runbook.md) for full options, output format, and demo scenario.
+See [Backtracking Runbook](https://edgesentry.github.io/indago/backtracking-runbook/) for full options, output format, and demo scenario.
 
 ---
 
@@ -206,7 +206,7 @@ uv run python scripts/sync_r2.py push-custom-feeds
 ```
 
 Files ending with `_sample` and `.gitkeep` are always skipped by
-`push-custom-feeds`.  See [R2 data layout](r2-data-layout.md#private-bucket--arktrace-private-capvista)
+`push-custom-feeds`.  See [R2 data layout](https://edgesentry.github.io/indago/r2-data-layout/#private-bucket--arktrace-private-capvista)
 for the full credential and bucket model.
 
 ### Run standalone

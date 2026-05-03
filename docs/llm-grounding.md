@@ -91,4 +91,4 @@ No SHAP signal values, ownership paths, or ATT coefficients are included in the 
 
 ## Verifiability
 
-Every claim in an analyst brief can be verified against the displayed SHAP panel and vessel detail row. The brief is clearly labelled "Analyst brief" and visually separated from the deterministic SHAP attribution and ATT outputs. Analysts are instructed in the [SOP](sop.md) to treat the brief as a synthesis aid, not a primary evidence source.
+Every claim in an analyst brief can be verified against the displayed SHAP panel and vessel detail row. The brief is clearly labelled "Analyst brief" and visually separated from the deterministic SHAP attribution and ATT outputs. Analysts are instructed in the [SOP](https://edgesentry.github.io/indago/sop/) to treat the brief as a synthesis aid, not a primary evidence source.
