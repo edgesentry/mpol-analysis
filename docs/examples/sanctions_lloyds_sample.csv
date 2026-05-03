@@ -1,6 +1,0 @@
-name,list_source,mmsi,imo,flag,type
-GOLDEN STAR SHIPPING CO,lloyds-watchlist,123456789,9876543,KHM,vessel
-PACIFIC BRIDGE TRADING LTD,lloyds-watchlist,,,PAN,entity
-HORIZON MARITIME HOLDINGS,lloyds-watchlist,567891234,1234567,TZA,vessel
-CRANE GLOBAL LOGISTICS INC,lloyds-watchlist,,,,entity
-ASIA MERCHANT LINES,lloyds-watchlist,776655443,8765432,BLZ,vessel
