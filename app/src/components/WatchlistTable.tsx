@@ -172,22 +172,30 @@ export default function WatchlistTable({
   const [statelessExpanded, setStatelessExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  const matchesSearch = (v: VesselRow, q: string) =>
+    v.vessel_name?.toLowerCase().includes(q) ||
+    v.mmsi?.includes(q) ||
+    v.imo?.toLowerCase().includes(q) ||
+    v.flag?.toLowerCase().includes(q);
+
   const filtered = vessels.filter((v) => {
-    if (search) {
-      const q = search.toLowerCase();
-      const match =
-        v.vessel_name?.toLowerCase().includes(q) ||
-        v.mmsi?.includes(q) ||
-        v.imo?.toLowerCase().includes(q) ||
-        v.flag?.toLowerCase().includes(q);
-      if (!match) return false;
-    }
+    if (search && !matchesSearch(v, search.toLowerCase())) return false;
     if (handoffFilter !== "all") {
       const state = reviewStates?.get(v.mmsi)?.handoff_state ?? "queued_review";
       if (state !== handoffFilter) return false;
     }
     return true;
   });
+
+  const filteredStateless = search
+    ? statelessVessels.filter((v) => matchesSearch(v, search.toLowerCase()))
+    : statelessVessels;
+
+  // Auto-expand stateless section when search matches a stateless vessel
+  useEffect(() => {
+    if (search && filteredStateless.length > 0) setStatelessExpanded(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filteredStateless.length]);
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -276,7 +284,7 @@ export default function WatchlistTable({
       </div>
 
       {/* Stateless MMSI section — collapsible, pinned above ranked list */}
-      {statelessVessels.length > 0 && (
+      {(search ? filteredStateless.length > 0 : statelessVessels.length > 0) && (
         <div style={{ borderBottom: "1px solid #2d3748", flexShrink: 0 }}>
           <div
             onClick={() => setStatelessExpanded((v) => !v)}
@@ -299,14 +307,14 @@ export default function WatchlistTable({
             <span style={{ color: "#718096", fontWeight: 400 }}>
               {statelessExpanded
                 ? "— ITU-unallocated MID · not visible on MarineTraffic"
-                : `— ${statelessVessels.length} vessels · click to expand`}
+                : `— ${search ? filteredStateless.length : statelessVessels.length} vessels · click to expand`}
             </span>
           </div>
           {statelessExpanded && (
             <div style={{ maxHeight: "30vh", overflowY: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
                 <tbody>
-                  {statelessVessels.map((v) => (
+                  {filteredStateless.map((v) => (
                     <StatelessRow
                       key={v.mmsi}
                       v={v}
