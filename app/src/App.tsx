@@ -310,7 +310,7 @@ export default function App() {
         onSync={() => doSync()}
       />
 
-      {/* Main content: sidebar + map */}
+      {/* Main content: sidebar + right column (map + detail) */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
         {/* Sidebar */}
         <div
@@ -336,6 +336,15 @@ export default function App() {
             exportRegion={selectedRegions.join("_") || "all"}
             scoreHistory={scoreHistory}
           />
+        </div>
+
+        {/* Right column: map on top, detail below */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+          <VesselMap
+            vessels={vessels}
+            selectedMmsi={selectedMmsi}
+            onSelect={setSelectedMmsi}
+          />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi)
               ?? statelessVessels.find((v) => v.mmsi === selectedMmsi);
@@ -356,13 +365,6 @@ export default function App() {
             ) : null;
           })()}
         </div>
-
-        {/* Map */}
-        <VesselMap
-          vessels={vessels}
-          selectedMmsi={selectedMmsi}
-          onSelect={setSelectedMmsi}
-        />
       </div>
 
       {/* Alert drawer */}
