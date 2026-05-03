@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk } from "./lib/duckdb";
 import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
 import { initBriefCache } from "./lib/briefCache";
+import { initInvestigationStore } from "./lib/investigationStore";
 import type { DecisionTier, HandoffState } from "./lib/reviews";
 import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
@@ -77,6 +78,7 @@ export default function App() {
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
+        await initInvestigationStore(conn);
         const email = isPrivateModeEnabled(cfg) ? await checkPrivateAuth(cfg) : null;
         if (!cancelled) setUserEmail(email);
         // Skip auto-sync if the region picker is waiting for user input.

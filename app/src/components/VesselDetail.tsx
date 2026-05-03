@@ -15,6 +15,7 @@ import {
 } from "../lib/humanise";
 import ReviewPanel from "./ReviewPanel";
 import DispatchModal from "./DispatchModal";
+import InvestigationPanel from "./InvestigationPanel";
 
 interface Props {
   vessel: VesselRow;
@@ -208,6 +209,7 @@ function shadowSignalColor(att: number, significant: boolean): string {
 export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: Props) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [investigateOpen, setInvestigateOpen] = useState(false);
   const [brief, setBrief] = useState<string>("");
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
   const [causal, setCausal] = useState<CausalEffectRow | null | undefined>(undefined);
@@ -352,6 +354,22 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
             aria-label="Open dispatch brief"
           >
             Dispatch
+          </button>
+          <button
+            onClick={() => setInvestigateOpen((o) => !o)}
+            style={{
+              background: investigateOpen ? "#1a4731" : "none",
+              border: "1px solid #2d3748",
+              borderRadius: 4,
+              color: investigateOpen ? "#68d391" : "#718096",
+              cursor: "pointer",
+              fontSize: "0.68rem",
+              fontWeight: 600,
+              padding: "0.15rem 0.5rem",
+            }}
+            aria-label="Toggle OSINT investigation panel"
+          >
+            Investigate
           </button>
           <button
             onClick={() => setReviewOpen((o) => !o)}
@@ -564,6 +582,11 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
 
       {/* SHAP bar chart */}
       <ShapBarChart raw={vessel.top_signals} />
+
+      {/* OSINT investigation panel */}
+      {investigateOpen && (
+        <InvestigationPanel vessel={vessel} conn={conn} />
+      )}
 
       {/* Review panel */}
       {reviewOpen && conn && (
