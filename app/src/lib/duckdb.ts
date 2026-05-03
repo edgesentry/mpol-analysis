@@ -302,8 +302,25 @@ export async function queryStatelessVessels(
       AND LEFT(mmsi, 3) NOT IN (${allocatedList})
     ORDER BY confidence DESC
   `;
-  const result = await conn.query(sql);
-  return result.toArray().map((row) => row.toJSON() as VesselRow);
+  // Debug: check total rows in watchlist.parquet
+  try {
+    const total = await conn.query("SELECT COUNT(*) as n, COUNT(CASE WHEN LEFT(mmsi,3)='400' THEN 1 END) as mid400 FROM read_parquet('watchlist.parquet')");
+    const t = total.toArray()[0].toJSON() as { n: number; mid400: number };
+    console.log("[queryStatelessVessels] watchlist total rows:", t.n, "MID-400 rows:", t.mid400);
+  } catch (e) {
+    console.error("[queryStatelessVessels] count check failed:", e);
+  }
+
+  let result;
+  try {
+    result = await conn.query(sql);
+  } catch (err) {
+    console.error("[queryStatelessVessels] query failed:", err);
+    return [];
+  }
+  const rows = result.toArray().map((row) => row.toJSON() as VesselRow);
+  console.log("[queryStatelessVessels] found", rows.length, "stateless vessels", rows.map(r => r.mmsi));
+  return rows;
 }
 
 /** Derive available regions from the watchlist. */
