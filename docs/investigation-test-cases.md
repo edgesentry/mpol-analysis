@@ -4,9 +4,90 @@ Vessel profiles for manual testing of the in-app OSINT investigation workflow.
 Each entry covers a confirmed sanctioned vessel or stateless-MMSI candidate from
 the live top-50 watchlist (snapshot: 2026-05-03).
 
-To test: open the arktrace app, select the vessel by MMSI, click **Investigate**,
-and follow the 5-step panel. Use the expected findings below to validate LLM output
-at each step.
+---
+
+## How the investigation workflow fits together
+
+```
+indago (data pipeline)
+    │
+    ├─ Ingests AIS stream (positions, gaps, STS events)
+    ├─ Computes behavioural features per vessel
+    │    ais_gap_count_30d, sts_candidate_count,
+    │    chokepoint_exit_gap_count, ais_pre_gap_regularity,
+    │    imo_type_mismatch, imo_scrapped_flag, …
+    ├─ Scores with anomaly detection + composite model → confidence [0,1]
+    ├─ Cross-references OpenSanctions DB → sanctions_distance
+    ├─ Detects ITU-unallocated MMSIs → stateless_mmsi flag
+    └─ Publishes candidate_watchlist.parquet → maridb-public R2
+                │
+                ▼ (push.py copies to arktrace-public)
+arktrace (analyst app)
+    │
+    ├─ Pulls watchlist from arktrace-public R2 → registers in DuckDB-WASM
+    ├─ Renders vessels on map + ranked table (confidence-sorted)
+    ├─ Analyst selects vessel → detail panel opens
+    │    · Confidence badge, SHAP signal bars, analyst brief (LLM)
+    │    · "Investigate" button opens the 5-step OSINT panel:
+    │
+    │   Step 1 — Triage
+    │     Local LLM reads vessel data from DuckDB, identifies
+    │     top 3 evasion indicators (bounded prompt, ≤10 words each)
+    │
+    │   Step 2 — OSINT links
+    │     Pre-built MarineTraffic / VesselFinder / OFAC URLs
+    │     generated from MMSI and IMO
+    │
+    │   Step 3 — Analyst notes
+    │     Analyst opens links, pastes findings into text area
+    │
+    │   Step 4 — Synthesis
+    │     Local LLM combines vessel data + analyst notes →
+    │     2-sentence threat assessment
+    │
+    │   Step 5 — Briefing
+    │     Local LLM drafts 3-sentence DSTA/MPA briefing
+    │     Analyst edits → Approve → saved to DuckDB (OPFS)
+    │     "Copy as Markdown" → paste into GitHub Issue (audit trail)
+    │
+    └─ Session persists across reloads (DuckDB OPFS-backed)
+```
+
+### What indago provides
+
+| indago output | How arktrace uses it |
+|---|---|
+| `confidence` score | Ranks vessels in the watchlist; drives triage priority |
+| `sanctions_distance` | Flags vessels with ownership proximity to sanctioned entities |
+| `top_signals` (SHAP) | Displayed as signal bars; passed to LLM as investigation context |
+| `ais_gap_count_30d` | Key evasion indicator surfaced in triage step |
+| `sts_candidate_count` | STS event count surfaced in triage step |
+| Stateless MMSI flag | Surfaced as high-confidence evasion signal in triage |
+| `candidate_watchlist.parquet` | The entire ranked vessel list the analyst works from |
+
+### What the analyst does
+
+1. **Open arktrace app** — watchlist loads from R2 into DuckDB-WASM automatically
+2. **Review top candidates** — sorted by confidence, filtered by region
+3. **Select a vessel** — click any row to open the detail panel
+4. **Click Investigate** — opens the 5-step OSINT panel
+5. **Step 1** — click "Run triage", read the LLM's 3 evasion indicators
+6. **Step 2** — open the OSINT links (MarineTraffic, VesselFinder, OFAC) in new tabs
+7. **Step 3** — paste relevant findings from those pages into the notes field
+8. **Step 4** — click "Synthesise →", review the 2-sentence threat assessment
+9. **Step 5** — click "Draft briefing →", edit if needed, click "Approve"
+10. **Copy as Markdown** — paste into a GitHub Issue for team audit trail
+
+The local LLM (Qwen2.5-7B via llama-server) runs on the same machine as the
+browser — no data leaves the device. Start it with `bash scripts/run_llama.sh`
+before opening the app.
+
+---
+
+## Test cases
+
+Vessel profiles for manual testing. Use the expected findings to validate LLM
+output at each step.
 
 ---
 
