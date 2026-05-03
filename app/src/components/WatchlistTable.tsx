@@ -169,6 +169,7 @@ export default function WatchlistTable({
 }: Props) {
   const [search, setSearch] = useState("");
   const [hovered, setHovered] = useState<string | null>(null);
+  const [statelessExpanded, setStatelessExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = vessels.filter((v) => {
@@ -274,36 +275,49 @@ export default function WatchlistTable({
         </select>
       </div>
 
-      {/* Stateless MMSI section — pinned above ranked list */}
+      {/* Stateless MMSI section — collapsible, pinned above ranked list */}
       {statelessVessels.length > 0 && (
         <div style={{ borderBottom: "1px solid #2d3748", flexShrink: 0 }}>
-          <div style={{
-            padding: "0.25rem 0.75rem",
-            fontSize: "0.6rem",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "#f6ad55",
-            background: "#1a1200",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.4rem",
-          }}>
-            <span>⚠ Stateless MMSI</span>
-            <span style={{ color: "#718096", fontWeight: 400 }}>— ITU-unallocated MID · not visible on MarineTraffic / VesselFinder</span>
+          <div
+            onClick={() => setStatelessExpanded((v) => !v)}
+            style={{
+              padding: "0.25rem 0.75rem",
+              fontSize: "0.6rem",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "#f6ad55",
+              background: "#1a1200",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <span>{statelessExpanded ? "▾" : "▸"} ⚠ Stateless MMSI</span>
+            <span style={{ color: "#718096", fontWeight: 400 }}>
+              {statelessExpanded
+                ? "— ITU-unallocated MID · not visible on MarineTraffic"
+                : `— ${statelessVessels.length} vessels · click to expand`}
+            </span>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
-            <tbody>
-              {statelessVessels.map((v) => (
-                <StatelessRow
-                  key={v.mmsi}
-                  v={v}
-                  isSelected={selectedMmsi === v.mmsi}
-                  onSelect={onSelect}
-                />
-              ))}
-            </tbody>
-          </table>
+          {statelessExpanded && (
+            <div style={{ maxHeight: "30vh", overflowY: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
+                <tbody>
+                  {statelessVessels.map((v) => (
+                    <StatelessRow
+                      key={v.mmsi}
+                      v={v}
+                      isSelected={selectedMmsi === v.mmsi}
+                      onSelect={onSelect}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
