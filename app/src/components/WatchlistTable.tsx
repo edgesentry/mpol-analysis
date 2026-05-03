@@ -6,6 +6,7 @@ import type { DecisionTier, HandoffState } from "../lib/reviews";
 
 interface Props {
   vessels: VesselRow[];
+  statelessVessels?: VesselRow[];
   selectedMmsi: string | null;
   onSelect: (mmsi: string) => void;
   reviewStates?: Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>;
@@ -109,8 +110,54 @@ function TierBadge({
   );
 }
 
+function StatelessRow({
+  v,
+  isSelected,
+  onSelect,
+}: {
+  v: VesselRow;
+  isSelected: boolean;
+  onSelect: (mmsi: string) => void;
+}) {
+  const mid = v.mmsi.slice(0, 3);
+  return (
+    <tr
+      onClick={() => onSelect(v.mmsi)}
+      style={{
+        height: ROW_HEIGHT,
+        cursor: "pointer",
+        background: isSelected ? "#1e3a5a" : "#1a1200",
+        borderBottom: "1px solid #2d2800",
+        borderLeft: "3px solid #f6ad55",
+      }}
+      onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#2a2000"; }}
+      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#1a1200"; }}
+    >
+      <td style={{ padding: "0.35rem 0.5rem", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          title={`MMSI ${v.mmsi} — MID ${mid} unallocated (ITU)`}>
+        <span style={{ fontFamily: "ui-monospace,monospace", color: "#f6ad55", fontSize: "0.7rem" }}>
+          ⚠ {v.mmsi}
+        </span>
+      </td>
+      <td style={{ padding: "0.35rem 0.5rem", color: "#718096", fontFamily: "ui-monospace,monospace", fontSize: "0.65rem" }}>
+        MID {mid}
+      </td>
+      <td style={{ padding: "0.35rem 0.5rem", color: "#a0aec0" }}>
+        {v.vessel_type || "—"}
+      </td>
+      <td style={{ padding: "0.35rem 0.5rem", fontWeight: 700, color: "#f6ad55" }}>
+        {v.confidence.toFixed(3)}
+      </td>
+      <td style={{ padding: "0.35rem 0.5rem", color: "#718096", fontSize: "0.65rem" }}>
+        {v.last_seen ? v.last_seen.slice(0, 10) : "—"}
+      </td>
+    </tr>
+  );
+}
+
 export default function WatchlistTable({
   vessels,
+  statelessVessels = [],
   selectedMmsi,
   onSelect,
   reviewStates,
@@ -226,6 +273,39 @@ export default function WatchlistTable({
           ))}
         </select>
       </div>
+
+      {/* Stateless MMSI section — pinned above ranked list */}
+      {statelessVessels.length > 0 && (
+        <div style={{ borderBottom: "1px solid #2d3748", flexShrink: 0 }}>
+          <div style={{
+            padding: "0.25rem 0.75rem",
+            fontSize: "0.6rem",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "#f6ad55",
+            background: "#1a1200",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+          }}>
+            <span>⚠ Stateless MMSI</span>
+            <span style={{ color: "#718096", fontWeight: 400 }}>— ITU-unallocated MID · not visible on MarineTraffic / VesselFinder</span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
+            <tbody>
+              {statelessVessels.map((v) => (
+                <StatelessRow
+                  key={v.mmsi}
+                  v={v}
+                  isSelected={selectedMmsi === v.mmsi}
+                  onSelect={onSelect}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Virtual table */}
       <div

@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk } from "./lib/duckdb";
+import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk, queryStatelessVessels } from "./lib/duckdb";
 import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
 import { initBriefCache } from "./lib/briefCache";
 import { initInvestigationStore } from "./lib/investigationStore";
@@ -41,6 +41,7 @@ export default function App() {
   const [initError, setInitError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ phase: "idle" });
   const [vessels, setVessels] = useState<VesselRow[]>([]);
+  const [statelessVessels, setStatelessVessels] = useState<VesselRow[]>([]);
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
   const [, setRegions] = useState<string[]>([]);
   // Persist region list in localStorage; default to Singapore on first visit.
@@ -117,17 +118,19 @@ export default function App() {
   const refreshQuery = useCallback(async () => {
     const conn = connRef.current;
     if (!conn) return;
-    const [vs, m, rs, sh] = await Promise.all([
+    const [vs, m, rs, sh, sl] = await Promise.all([
       queryWatchlist(conn, { minConfidence, regions: selectedRegions.length > 0 ? selectedRegions : undefined }),
       queryMetrics(conn),
       queryRegions(conn),
       queryScoreHistoryBulk(conn),
+      queryStatelessVessels(conn),
     ]);
     setScoreHistory(sh);
     const updatedAlerts = diffAndAppend(prevVesselsRef.current, vs);
     prevVesselsRef.current = vs;
     setAlerts(updatedAlerts);
     setVessels(vs);
+    setStatelessVessels(sl);
     setMetrics(m);
     setRegions(rs);
     const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
@@ -323,6 +326,7 @@ export default function App() {
         >
           <WatchlistTable
             vessels={vessels}
+            statelessVessels={statelessVessels}
             selectedMmsi={selectedMmsi}
             onSelect={setSelectedMmsi}
             reviewStates={reviewStates}
