@@ -35,7 +35,7 @@ Arctic crude exports.
 
 | Source | Link |
 |---|---|
-| MarineTraffic (MMSI) | [273449240](https://www.marinetraffic.com/en/ais/details/ships/mmsi:273449240) |
+| MarineTraffic | [DOBRYNYA](https://www.marinetraffic.com/en/ais/details/ships/shipid:350731) |
 | VesselFinder | [273449240](https://www.vesselfinder.com/?mmsi=273449240) |
 | OFAC SDN search | [Rosnefteflot](https://sanctionssearch.ofac.treas.gov/?searchText=Rosnefteflot) |
 
