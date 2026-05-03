@@ -31,13 +31,16 @@ consistent with deliberate identity suppression. Sanctioned as part of the Janua
 2025 OFAC action targeting Rosneft's shadow tanker fleet supporting Sakhalin and
 Arctic crude exports.
 
-**OSINT sources to check:**
-- MarineTraffic: search MMSI 273449240 — expect AIS gaps and last position in
-  Baltic or Arctic waters
-- OFAC SDN: search "Rosnefteflot" — multiple vessels in the same fleet designated
-  in the same action
+**OSINT links:**
+
+| Source | Link |
+|---|---|
+| MarineTraffic (MMSI) | [273449240](https://www.marinetraffic.com/en/ais/details/ships/mmsi:273449240) |
+| VesselFinder | [273449240](https://www.vesselfinder.com/?mmsi=273449240) |
+| OFAC SDN search | [Rosnefteflot](https://sanctionssearch.ofac.treas.gov/?searchText=Rosnefteflot) |
 
 **Expected triage output (Step 1):**
+
 1. Highest confidence score in watchlist (0.674)
 2. Russia flag — OFAC Jan 2025 direct designation
 3. No IMO — identity suppression indicator
@@ -67,13 +70,18 @@ Co. (US-sanctioned) via a UAE-based shell company. Classic identity layering:
 Iranian product → UAE management → Belize flag. The operator's network position
 would have scored suspicious before the October 2024 OFAC designation.
 
-**OSINT sources to check:**
-- MarineTraffic IMO 9354521 — last known position and recent port calls
-- OFAC SDN: search "Harry Victor Ship Management" — operator listing with vessel
-  associations
-- VesselFinder MMSI 312171000 — cross-check flag and name history
+**OSINT links:**
+
+| Source | Link |
+|---|---|
+| MarineTraffic (MMSI) | [312171000](https://www.marinetraffic.com/en/ais/details/ships/mmsi:312171000) |
+| MarineTraffic (IMO) | [9354521](https://www.marinetraffic.com/en/ais/details/ships/imo:9354521) |
+| VesselFinder | [312171000](https://www.vesselfinder.com/?mmsi=312171000) |
+| OFAC SDN search | [Harry Victor Ship Management](https://sanctionssearch.ofac.treas.gov/?searchText=Harry+Victor+Ship+Management) |
+| OFAC SDN search | [ANHONA](https://sanctionssearch.ofac.treas.gov/?searchText=ANHONA) |
 
 **Expected triage output (Step 1):**
+
 1. Belize flag — open registry used for Iranian crude identity layering
 2. IMO 9354521 — operator designated OFAC Oct 2024
 3. Tanker type consistent with petrochemical transport
@@ -103,13 +111,17 @@ targeting Sovcomflot — Russia's state shipping company managing the Sakhalin-2
 export terminal. No IMO registered. AIS gap behaviour consistent with dark voyages
 on the Russia–Asia LNG route.
 
-**OSINT sources to check:**
-- MarineTraffic MMSI 273312060 — track history and last known position
-- OFAC SDN: search "Sovcomflot" or "SCF Enterprise" — part of a fleet-level
-  designation covering multiple Sakhalin-2 vessels
-- Reuters/Bloomberg: "Sovcomflot sanctions 2025" — reporting on the Jan 2025 action
+**OSINT links:**
+
+| Source | Link |
+|---|---|
+| MarineTraffic (MMSI) | [273312060](https://www.marinetraffic.com/en/ais/details/ships/mmsi:273312060) |
+| VesselFinder | [273312060](https://www.vesselfinder.com/?mmsi=273312060) |
+| OFAC SDN search | [SCF Enterprise](https://sanctionssearch.ofac.treas.gov/?searchText=SCF+Enterprise) |
+| OFAC SDN search | [Sovcomflot](https://sanctionssearch.ofac.treas.gov/?searchText=Sovcomflot) |
 
 **Expected triage output (Step 1):**
+
 1. Russia flag — Sovcomflot / Sakhalin-2 OFAC Jan 2025
 2. No IMO — identity suppression, same pattern as DOBRYNYA
 3. AIS gap behaviour consistent with dark transit
@@ -141,13 +153,18 @@ crude provenance before delivery to Chinese buyers. Directly matches the pattern
 described in the Al Jazeera April 30 2026 investigation into Singapore-area STS
 networks.
 
-**OSINT sources to check:**
-- MarineTraffic IMO 9340934 — vessel history, operator, recent port calls
-- OFAC SDN: search "Logos Marine" — Singapore operator designation
-- Al Jazeera (April 30 2026): "Iran crude Singapore EOPL" — investigative reporting
-  that matches this vessel's operator profile
+**OSINT links:**
+
+| Source | Link |
+|---|---|
+| MarineTraffic (MMSI) | [457133000](https://www.marinetraffic.com/en/ais/details/ships/mmsi:457133000) |
+| MarineTraffic (IMO) | [9340934](https://www.marinetraffic.com/en/ais/details/ships/imo:9340934) |
+| VesselFinder | [457133000](https://www.vesselfinder.com/?mmsi=457133000) |
+| OFAC SDN search | [Logos Marine](https://sanctionssearch.ofac.treas.gov/?searchText=Logos+Marine) |
+| OFAC SDN search | [PIONEER 92](https://sanctionssearch.ofac.treas.gov/?searchText=PIONEER+92) |
 
 **Expected triage output (Step 1):**
+
 1. Mongolia flag — open registry used for Iranian STS support vessels
 2. Operator Logos Marine designated OFAC EO 13902
 3. Tug type — consistent with STS coordination role at EOPL
@@ -166,11 +183,15 @@ legitimate vessel can hold these identifiers — they are a documented shadow fl
 evasion technique. No OSINT lookup will return a vessel record; the signal itself
 is the finding.
 
-| MMSI | MID | Confidence | Expected triage output |
-|---|---|---|---|
-| 400789012 | 400 | 0.606 | ITU unallocated MID 400 — no legitimate vessel can hold this identifier |
-| 400123456 | 400 | 0.599 | As above |
-| 400345678 | 400 | 0.591 | As above |
+| MMSI | MID | Confidence | MarineTraffic | VesselFinder |
+|---|---|---|---|---|
+| 400789012 | 400 | 0.606 | [link](https://www.marinetraffic.com/en/ais/details/ships/mmsi:400789012) | [link](https://www.vesselfinder.com/?mmsi=400789012) |
+| 400123456 | 400 | 0.599 | [link](https://www.marinetraffic.com/en/ais/details/ships/mmsi:400123456) | [link](https://www.vesselfinder.com/?mmsi=400123456) |
+| 400345678 | 400 | 0.591 | [link](https://www.marinetraffic.com/en/ais/details/ships/mmsi:400345678) | [link](https://www.vesselfinder.com/?mmsi=400345678) |
+
+**Expected result:** MarineTraffic and VesselFinder will return no vessel record —
+this confirms the MMSI is unallocated. The absence of a record is itself evidence
+of evasion.
 
 **Expected synthesis for any stateless MMSI:**
 This vessel broadcasts an ITU-unallocated MMSI (MID 400), a tactic used by shadow
@@ -194,6 +215,14 @@ last known position.
 
 **Note:** Below the default confidence filter (0.4). Set minimum confidence to 0.3
 in the app to see this vessel in the watchlist.
+
+**OSINT links:**
+
+| Source | Link |
+|---|---|
+| MarineTraffic (MMSI) | [248000368](https://www.marinetraffic.com/en/ais/details/ships/mmsi:248000368) |
+| VesselFinder | [248000368](https://www.vesselfinder.com/?mmsi=248000368) |
+| OFAC SDN search | [MARIE DE LOURDES](https://sanctionssearch.ofac.treas.gov/?searchText=MARIE+DE+LOURDES) |
 
 ---
 
