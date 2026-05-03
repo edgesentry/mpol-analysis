@@ -310,7 +310,7 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         padding: "0.75rem 1rem",
         flexShrink: 0,
         overflowY: "auto",
-        maxHeight: "65vh",
+        maxHeight: "40vh",
       }}
     >
       {/* Title row */}

@@ -232,11 +232,28 @@ export async function syncAndLoad(
 
   // ── 2. Download missing / stale files ───────────────────────────────────
   // Filter by region: skip files tagged for a different region than requested.
-  // Files with no region tag are always included (they contain all regions).
-  const wantedFiles = (regions
+  // Files with no region tag contain all regions and are always included.
+  //
+  // De-duplicate by register_as: when multiple files share the same target name
+  // (e.g. all watchlists register as "watchlist.parquet"), keep only one.
+  // Priority: prefer the no-region (candidate/global) file; if no such file
+  // exists, prefer the file whose region matches the first requested region.
+  const regionFiltered = (regions
     ? manifest.files.filter((f) => !f.region || regions.includes(f.region))
     : manifest.files
   ).filter((f) => !f.private || privateAuth);
+
+  const seenNames = new Map<string, ManifestFile>();
+  for (const f of regionFiltered) {
+    const existing = seenNames.get(f.register_as);
+    if (!existing) {
+      seenNames.set(f.register_as, f);
+    } else {
+      // Prefer the no-region (global) file over a region-specific one.
+      if (!f.region && existing.region) seenNames.set(f.register_as, f);
+    }
+  }
+  const wantedFiles = [...seenNames.values()];
 
   const opfsOk = await isOpfsAvailable();
   // When OPFS is unavailable (e.g. Safari Private), hold downloaded buffers in

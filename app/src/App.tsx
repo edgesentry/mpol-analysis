@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk } from "./lib/duckdb";
+import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk, queryStatelessVessels } from "./lib/duckdb";
 import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
 import { initBriefCache } from "./lib/briefCache";
 import { initInvestigationStore } from "./lib/investigationStore";
@@ -41,6 +41,7 @@ export default function App() {
   const [initError, setInitError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ phase: "idle" });
   const [vessels, setVessels] = useState<VesselRow[]>([]);
+  const [statelessVessels, setStatelessVessels] = useState<VesselRow[]>([]);
   const [metrics, setMetrics] = useState<MetricsRow | null>(null);
   const [, setRegions] = useState<string[]>([]);
   // Persist region list in localStorage; default to Singapore on first visit.
@@ -117,17 +118,19 @@ export default function App() {
   const refreshQuery = useCallback(async () => {
     const conn = connRef.current;
     if (!conn) return;
-    const [vs, m, rs, sh] = await Promise.all([
+    const [vs, m, rs, sh, sl] = await Promise.all([
       queryWatchlist(conn, { minConfidence, regions: selectedRegions.length > 0 ? selectedRegions : undefined }),
       queryMetrics(conn),
       queryRegions(conn),
       queryScoreHistoryBulk(conn),
+      queryStatelessVessels(conn),
     ]);
     setScoreHistory(sh);
     const updatedAlerts = diffAndAppend(prevVesselsRef.current, vs);
     prevVesselsRef.current = vs;
     setAlerts(updatedAlerts);
     setVessels(vs);
+    setStatelessVessels(sl);
     setMetrics(m);
     setRegions(rs);
     const states = await getBulkReviewStates(conn, vs.map((v) => v.mmsi));
@@ -307,7 +310,7 @@ export default function App() {
         onSync={() => doSync()}
       />
 
-      {/* Main content: sidebar + map */}
+      {/* Main content: sidebar + right column (map + detail) */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
         {/* Sidebar */}
         <div
@@ -323,6 +326,7 @@ export default function App() {
         >
           <WatchlistTable
             vessels={vessels}
+            statelessVessels={statelessVessels}
             selectedMmsi={selectedMmsi}
             onSelect={setSelectedMmsi}
             reviewStates={reviewStates}
@@ -332,8 +336,18 @@ export default function App() {
             exportRegion={selectedRegions.join("_") || "all"}
             scoreHistory={scoreHistory}
           />
+        </div>
+
+        {/* Right column: map on top, detail below */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+          <VesselMap
+            vessels={vessels}
+            selectedMmsi={selectedMmsi}
+            onSelect={setSelectedMmsi}
+          />
           {selectedMmsi && (() => {
-            const v = vessels.find((v) => v.mmsi === selectedMmsi);
+            const v = vessels.find((v) => v.mmsi === selectedMmsi)
+              ?? statelessVessels.find((v) => v.mmsi === selectedMmsi);
             return v ? (
               <VesselDetail
                 vessel={v}
@@ -351,13 +365,6 @@ export default function App() {
             ) : null;
           })()}
         </div>
-
-        {/* Map */}
-        <VesselMap
-          vessels={vessels}
-          selectedMmsi={selectedMmsi}
-          onSelect={setSelectedMmsi}
-        />
       </div>
 
       {/* Alert drawer */}
