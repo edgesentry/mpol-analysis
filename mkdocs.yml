@@ -39,6 +39,7 @@ nav:
     - Local E2E Test: local-e2e-test.md
     - Local LLM Setup: local-llm-setup.md
     - LLM Grounding: llm-grounding.md
+    - Investigation Test Cases: investigation-test-cases.md
     - Demo Data: demo-data.md
     - Custom Feed Integration: custom-feeds.md
   - Operations:
