@@ -1,8 +1,9 @@
 name: Merge reviews
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
+  # Disabled — re-enable schedule once review intake is open (see arktrace#547)
+  # schedule:
+  #   - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions: {}
