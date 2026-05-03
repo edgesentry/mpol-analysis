@@ -5,7 +5,7 @@
     {
       "key": "fixtures/watchlist.parquet",
       "url": "/fixtures/watchlist.parquet",
-      "size_bytes": 7836,
+      "size_bytes": 7989,
       "table": "watchlist",
       "register_as": "watchlist.parquet"
     },
