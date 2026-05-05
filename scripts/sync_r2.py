@@ -1428,7 +1428,9 @@ def cmd_push_ducklake_private(args: argparse.Namespace) -> int:
 _AIS_DBS_R2_PREFIX = "ais-dbs/"  # private bucket sub-prefix for raw AIS DB backups
 _GFW_EO_R2_PREFIX = "gfw-eo/"  # private bucket sub-prefix for pre-fetched GFW EO parquets
 _GEBCO_MASKS_R2_PREFIX = "gebco-masks/"  # private bucket sub-prefix for GEBCO depth masks
-_AIS_DB_MIN_SIZE_BYTES = 1_048_576  # skip placeholder DBs smaller than 1 MB (DuckDB >=1.x empty schema ~274 KB)
+_AIS_DB_MIN_SIZE_BYTES = (
+    1_048_576  # skip placeholder DBs smaller than 1 MB (DuckDB >=1.x empty schema ~274 KB)
+)
 
 
 def _ais_db_candidates(data_dir: Path, regions: list[str] | None) -> list[Path]:
