@@ -11,7 +11,7 @@
 - Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag and `--bbox` argument.
 - aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
 - Lance Graph storage module (`src/graph/store.py`)
-- End-to-end local test guide (`docs/local-e2e-test.md`)
+- End-to-end local test guide (`docs/.agents/skills/arktrace-run-tests/SKILL.md`)
 - Interactive Pipeline CLI (`scripts/run_pipeline.py`) — interactive CLI with region presets (Singapore, Japan Sea, Middle East, Europe, US Gulf) and retry mechanics.
 
 **Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for other regions) with no duplicate MMSI/timestamp rows.

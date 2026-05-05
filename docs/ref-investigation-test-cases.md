@@ -326,6 +326,6 @@ Investigative report published 30 April 2026. Key findings that triggered this w
 
 ## References
 
-- [Local LLM setup](local-llm-setup.md) — start llama-server before running investigations
-- [LLM grounding policy](llm-grounding.md) — what the LLM may and may not claim
+- [Local LLM setup](/arktrace-llm-setup skill) — start llama-server before running investigations
+- [LLM grounding policy](ref-llm-grounding.md) — what the LLM may and may not claim
 - [indago OSINT workflow](https://edgesentry.github.io/indago/osint-workflow-design/) — automated workflow (Case B)

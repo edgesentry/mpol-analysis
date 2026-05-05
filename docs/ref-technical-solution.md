@@ -1,5 +1,7 @@
 # Technical Solution
 
+> **Debugging note:** Before investigating a score anomaly in this repo, confirm which layer is the source. AIS feature values (gap counts, STS proximity, loitering hours) are computed in **indago** (`pipelines/features/`). Physics primitives (distance, TTC, zone membership) are computed in **edgesentry-rs** (`crates/edgesentry-compute/`). Only composite scoring, SHAP attribution, and the causal DiD model live in this repo. See the External dependency map in `AGENTS.md`.
+
 ## Primary Innovation
 
 arktrace is a **Causal Inference Engine for Shadow Fleet Prediction**. The primary technical contribution is the C3 Causal Sanction-Response model (`src/score/causal_sanction.py`) and the unknown-unknown detector (`src/analysis/causal.py`).
