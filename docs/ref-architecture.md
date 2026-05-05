@@ -117,7 +117,7 @@
                            ▼  handoff
 ┌─────────────────────────────────────────────────────────────────┐
 │  PHYSICAL INVESTIGATION  (edgesentry-app / edgesentry-rs)       │
-│  (out of scope for this repo — see roadmap.md)                  │
+│  (out of scope for this repo — see docs/roadmap/)                  │
 │                                                                 │
 │  Data handoff: arktrace writes candidate_watchlist.parquet      │
 │  → eds parse maritime --source candidate_watchlist.parquet      │
@@ -349,7 +349,7 @@ confidence = w_anomaly × anomaly_score
            + w_identity × identity_volatility_score
 ```
 
-Standalone `composite.py` defaults: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`. The pipeline (`scripts/run_pipeline.py`) applies region-specific presets before C3 auto-calibration overrides `w_graph` — see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region values. All three weights are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
+Standalone `composite.py` defaults: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`. The pipeline (`scripts/run_pipeline.py`) applies region-specific presets before C3 auto-calibration overrides `w_graph` — see [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/) for per-region values. All three weights are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap](roadmap/index.md) Phase C, C3).
 
 Per-region weight tuning recommendations are in [regional-playbooks.md](https://edgesentry.github.io/indago/regional-playbooks/).
 
@@ -383,4 +383,4 @@ Recommended local model: **Qwen2.5-7B-Instruct-GGUF (Q4_K_M)** via llama-server 
 
 **No cloud dependency:** inference runs entirely on-device by default. The LLM has no tool access, no function calling, and no internet connectivity during inference. Context is injected via the context window only.
 
-See [docs/local-llm-setup.md](local-llm-setup.md) for model recommendations, hardware requirements, and setup instructions.
+See `/arktrace-llm-setup` skill for model recommendations, hardware requirements, and setup instructions.

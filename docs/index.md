@@ -117,8 +117,8 @@ The OSINT ingestion pipeline, feature engineering, scoring model, and operationa
 | Human oversight, evidence policy, tier taxonomy | [`docs/triage-governance.md`](https://edgesentry.github.io/indago/triage-governance/) |
 | Validation metrics and backtesting methodology | [`docs/backtesting-validation.md`](https://edgesentry.github.io/indago/backtesting-validation/) |
 | Three operational scenarios (duty officer, analyst, patrol) | [`docs/feature-scenarios.md`](feature-scenarios.md) |
-| Full roadmap (Phase A and Phase B) | [`docs/roadmap.md`](roadmap.md) |
-| Deployment (local, Docker, cloud VM) | [`docs/deployment.md`](deployment.md) |
+| Full roadmap (Phase A and Phase B) | [`docs/roadmap/index.md`](roadmap/index.md) |
+| Deployment (local, Docker, cloud VM) | [`.agents/skills/arktrace-deploy`](https://github.com/edgesentry/arktrace/tree/main/.agents/skills/arktrace-deploy) |
 | Tech stack and algorithm details | [`docs/ref-technical-solution.md`](ref-technical-solution.md) |
 | Pipeline operations reference | [`docs/pipeline-operations.md`](https://edgesentry.github.io/indago/pipeline-operations/) |
 | Regional configuration (Singapore, Japan Sea, etc.) | [`docs/regional-playbooks.md`](https://edgesentry.github.io/indago/regional-playbooks/) |
