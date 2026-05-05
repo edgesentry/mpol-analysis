@@ -1,5 +1,7 @@
 # Roadmap
 
-| Document | Scope |
-|---|---|
-| [core-pipeline.md](core-pipeline.md) | Phase A–C screening pipeline milestones (A1–A5 implementation status) |
+| Phase | Description | Status |
+|---|---|---|
+| [Phase A: Candidate Screening](core-pipeline.md) | AIS ingestion → feature engineering → scoring pipeline → watchlist | ✅ Complete |
+| Phase B: Physical Investigation | LiDAR/camera integration — implemented in edgesentry-rs | 🔲 Planned |
+| Phase C: Global Expansion | Multi-region fleet tracking, flag-state analysis, OSINT integration | 🔲 Research |
